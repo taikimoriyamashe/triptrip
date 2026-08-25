@@ -1,0 +1,9 @@
+{
+  "fa_targets": {"lks": null, "mny": null, "pd": null, "total": null},
+  "kyoten_conv_target": null,
+  "yomi": {
+    "comparable": false,
+    "note": "社内売上ヨミ(オンライン)は財務会計と定義が異なるため参考値。T1検証(2026-08-25): 確定3ヶ月(2026-05〜07)の月初時点ヨミはオンラインFA実績比 +2.6〜+3.8% の一貫過大(05: +3.8% / 06: +2.6% / 07: +3.2%、7月中旬時点では+3.6%)で±3%以内に収まらず comparable=false を維持。"
+  },
+  "note": "fa_targets は月次の目標FA(円)。null=未設定(UIは前月実績を基準線として表示)。"
+}

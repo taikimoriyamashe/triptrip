@@ -28,6 +28,8 @@ _default_raw = _arg_path("--raw-dir", Path(_os.environ["RAW_DIR"]) if _os.enviro
 RAW_DIR = _default_raw
 # 出力先。--out で上書き可(既定: このファイルと同階層の data/latest.json)
 OUT_PATH = _arg_path("--out", Path(__file__).resolve().parent / "data" / "latest.json")
+# targets.json(人が編集するリポジトリ内ファイル)。--targets で上書き可 [v1.2]
+TARGETS_PATH = _arg_path("--targets", Path(__file__).resolve().parent / "data" / "targets.json")
 
 QUERIES = [
     "q1_official_monthly",
@@ -36,7 +38,18 @@ QUERIES = [
     "q4_lks_channel_booked",
     "q5_conv_profile",
     "q6_conv_actuals",
+    "q7_conv_plan",
+    "q8_yomi",
 ]
+
+# targets.json 不在時の契約既定値 [v1.2]
+DEFAULT_TARGETS = {
+    "fa_targets": {"lks": None, "mny": None, "pd": None, "total": None},
+    "kyoten_conv_target": None,
+    "yomi": {"comparable": False,
+             "note": "社内売上ヨミ(オンライン)は財務会計と定義が異なる可能性があるため参考値"},
+    "note": "fa_targets は月次の目標FA(円)。null=未設定(UIは前月実績を基準線として表示)。",
+}
 
 INT_TYPES = {"INTEGER", "INT64"}
 FLOAT_TYPES = {"FLOAT", "FLOAT64", "NUMERIC", "BIGNUMERIC"}
@@ -69,8 +82,9 @@ def parse_result(raw):
     return rows
 
 
-# q5(前月プロファイル前提)とq6(当月成約)は月初1日に0行になり得る正規の状態 → 警告のみ
-MAY_BE_EMPTY = {"q5_conv_profile", "q6_conv_actuals"}
+# q5(前月プロファイル前提)とq6(当月成約)は月初1日に0行になり得る正規の状態 → 警告のみ。
+# q7/q8(社内計画・ヨミ)は補助データ: 0行や取得失敗(rawファイル不在)でも既存6本の計算は成立する → 警告のみ [v1.2]
+MAY_BE_EMPTY = {"q5_conv_profile", "q6_conv_actuals", "q7_conv_plan", "q8_yomi"}
 
 
 def main():
@@ -86,6 +100,8 @@ def main():
     # (例: raw を前日23時台に取得 → build を翌月00:15 に実行、のすり抜けを防ぐ)
     for name in QUERIES:
         p = RAW_DIR / f"{name}.json"
+        if not p.exists() and name in MAY_BE_EMPTY:
+            continue  # 補助クエリの取得失敗は読み込み時に警告して空扱い [v1.2]
         mtime_jst = datetime.fromtimestamp(p.stat().st_mtime, jst)
         if (mtime_jst.year, mtime_jst.month) != (now.year, now.month):
             print(f"ABORT: {p.name} was fetched at JST {mtime_jst.isoformat(timespec='seconds')} "
@@ -99,16 +115,30 @@ def main():
     queries = {}
     bytes_processed = {}
     for name in QUERIES:
-        raw = json.loads((RAW_DIR / f"{name}.json").read_text(encoding="utf-8"))
+        p = RAW_DIR / f"{name}.json"
+        if not p.exists() and name in MAY_BE_EMPTY:
+            print(f"WARNING: {p.name} missing (fetch failed?) — treating {name} as 0 rows")
+            queries[name] = {"rows": []}
+            bytes_processed[name] = 0
+            continue
+        raw = json.loads(p.read_text(encoding="utf-8"))
         assert raw.get("jobComplete") is True, f"{name}: job not complete"
         queries[name] = {"rows": parse_result(raw)}
         bytes_processed[name] = int(raw["totalBytesProcessed"])
+
+    # targets.json を注入 [v1.2](不在時は契約既定値で警告)
+    if TARGETS_PATH.exists():
+        targets = json.loads(TARGETS_PATH.read_text(encoding="utf-8"))
+    else:
+        targets = DEFAULT_TARGETS
+        print(f"WARNING: {TARGETS_PATH} not found — injecting contract default targets")
 
     snapshot = {
         "generated_at": now.isoformat(timespec="seconds"),
         "basis_date": basis_date,
         "target_month": target_month,
         "queries": queries,
+        "targets": targets,
         "meta": {"bytes_processed": bytes_processed},
     }
 
@@ -126,17 +156,19 @@ def main():
         "q4_lks_channel_booked": ["channel", "n_users", "booked_fa"],
         "q5_conv_profile": ["channel", "dom", "n_conv", "fa_per_conv"],
         "q6_conv_actuals": ["channel", "dom", "n_all", "n_valid", "booked_fa_valid"],
+        "q7_conv_plan": ["month", "plan_regular", "plan_sutara", "src_regular", "src_sutara", "as_of"],
+        "q8_yomi": ["month", "yomi_total", "as_of"],
     }
     for name, cols in expected_cols.items():
         rows = queries[name]["rows"]
         if not rows:
             if name in MAY_BE_EMPTY:
-                print(f"WARNING: {name} returned 0 rows (normal on the 1st of the month) — skipping column check")
+                print(f"WARNING: {name} returned 0 rows — skipping column check")
                 continue
             raise AssertionError(f"{name}: no rows")
         for row in rows:
             assert list(row.keys()) == cols, f"{name}: columns {list(row.keys())} != contract {cols}"
-    print("column contract: OK (all 6 queries)")
+    print("column contract: OK (all 8 queries)")
 
     # ---- invariants ----
     q1 = queries["q1_official_monthly"]["rows"]
@@ -145,6 +177,8 @@ def main():
     q4 = queries["q4_lks_channel_booked"]["rows"]
     q5 = queries["q5_conv_profile"]["rows"]
     q6 = queries["q6_conv_actuals"]["rows"]
+    q7 = queries["q7_conv_plan"]["rows"]
+    q8 = queries["q8_yomi"]["rows"]
 
     cur = next(r for r in q1 if r["year_month"] == target_month)
     # 前月は basis_date から動的算出(ハードコード除去)
@@ -205,6 +239,21 @@ def main():
     cond6 = mc["fa_per_day_cur"] in (None, 0, 0.0)
     print(f"[6] multicreator fa_per_day_cur={mc['fa_per_day_cur']!r} -> {'OK' if cond6 else 'FAIL'}")
     ok &= cond6
+
+    # 7. q7 の前月「実績」行 ≒ q5 のオンライン valid 成約実績(±1%) [v1.2]
+    #    (前月行が'ヨミ'のまま・q7空・q5空のときは判定不能なので SKIP)
+    q5_online_n = sum(r["n_conv"] for r in q5 if r["channel"] == "オンライン")
+    prow7 = next((r for r in q7 if r["month"] == prev_month), None)
+    if (prow7 and prow7["src_regular"] == "実績" and prow7["src_sutara"] == "実績"
+            and prow7["plan_regular"] is not None and prow7["plan_sutara"] is not None
+            and q5_online_n > 0):
+        plan_n = prow7["plan_regular"] + prow7["plan_sutara"]
+        d7 = abs(plan_n - q5_online_n) / q5_online_n * 100
+        cond7 = d7 <= 1
+        print(f"[7] q7 {prev_month} actuals {plan_n:.0f} vs q5 online n_conv {q5_online_n} diff={d7:.2f}% -> {'OK' if cond7 else 'FAIL'}")
+        ok &= cond7
+    else:
+        print(f"[7] q7 prev-month ({prev_month}) actuals vs q5 online -> SKIP (row missing, src!='実績', or q5 empty)")
 
     # ---- summary numbers for the report ----
     print("\n-- summary --")
@@ -270,6 +319,22 @@ def main():
     pending_low = p1 + p2 + p3
     print(f"pending_low={pending_low:,.0f} central={pending_low + 0.5 * p4:,.0f} high={pending_low + p4:,.0f}")
     print(f"landing central(LKS) = {cur['lks'] + pending_low + 0.5 * p4:,.0f}")
+    # q7/q8 と目標差分(参考表示) [v1.2]
+    for r in q7:
+        print(f"q7 {r['month']}: plan_regular={fmt(r['plan_regular'], ',.0f')} plan_sutara={fmt(r['plan_sutara'], ',.0f')} "
+              f"src={r['src_regular']}/{r['src_sutara']} as_of={r['as_of']}")
+    for r in q8:
+        print(f"q8 {r['month']}: yomi_total={fmt(r['yomi_total'], ',.0f')} as_of={r['as_of']} "
+              f"(comparable={targets.get('yomi', {}).get('comparable')})")
+    crow7 = next((r for r in q7 if r["month"] == target_month), None)
+    if crow7 and crow7["plan_regular"] is not None and crow7["plan_sutara"] is not None:
+        plan_cur = crow7["plan_regular"] + crow7["plan_sutara"]
+        actual_cur = sum(r["n_valid"] for r in q6 if r["channel"] == "オンライン")
+        remaining = last_dom - basis_dom + 1
+        need_pace = max(0.0, plan_cur - actual_cur) / max(1, remaining)
+        pace_landing = actual_cur + paces["オンライン"] * remaining
+        print(f"conv target(online): plan={plan_cur:.0f} actual_valid={actual_cur} remaining_days={remaining} "
+              f"need_pace={need_pace:.1f}/day pace_landing={pace_landing:.0f}")
     print(f"bytes_processed: {bytes_processed}")
 
     print("\nALL INVARIANTS:", "OK" if ok else "FAILED")

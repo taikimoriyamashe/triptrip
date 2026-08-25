@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-25T14:55:48+09:00",
+  "generated_at": "2026-08-25T19:16:36+09:00",
   "basis_date": "2026-08-25",
   "target_month": "2026-08",
   "queries": {
@@ -162,7 +162,7 @@
         {
           "plan_name": "スタンダードプラン",
           "payment_type": "一括",
-          "fa_per_day_cur": 453.2720817220492,
+          "fa_per_day_cur": 453.27601492435133,
           "fa_per_day_prev": 473.6688170616428,
           "n_window": 430,
           "window_days": 1681,
@@ -241,8 +241,8 @@
       "rows": [
         {
           "channel": "オンライン",
-          "n_users": 32601,
-          "booked_fa": 322474485
+          "n_users": 32596,
+          "booked_fa": 322452468
         },
         {
           "channel": "拠点",
@@ -256,8 +256,8 @@
         },
         {
           "channel": "成約記録なし",
-          "n_users": 883,
-          "booked_fa": 64707
+          "n_users": 888,
+          "booked_fa": 86724
         }
       ]
     },
@@ -780,22 +780,22 @@
           "channel": "オンライン",
           "dom": 18,
           "n_all": 37,
-          "n_valid": 35,
-          "booked_fa_valid": 329407
+          "n_valid": 34,
+          "booked_fa_valid": 318189
         },
         {
           "channel": "オンライン",
           "dom": 19,
           "n_all": 39,
-          "n_valid": 34,
+          "n_valid": 33,
           "booked_fa_valid": 274994
         },
         {
           "channel": "オンライン",
           "dom": 20,
           "n_all": 37,
-          "n_valid": 30,
-          "booked_fa_valid": 198830
+          "n_valid": 29,
+          "booked_fa_valid": 188031
         },
         {
           "channel": "オンライン",
@@ -808,7 +808,7 @@
           "channel": "オンライン",
           "dom": 22,
           "n_all": 39,
-          "n_valid": 38,
+          "n_valid": 36,
           "booked_fa_valid": 347858
         },
         {
@@ -822,14 +822,14 @@
           "channel": "オンライン",
           "dom": 24,
           "n_all": 44,
-          "n_valid": 43,
+          "n_valid": 42,
           "booked_fa_valid": 104549
         },
         {
           "channel": "オンライン",
           "dom": 25,
-          "n_all": 5,
-          "n_valid": 5,
+          "n_all": 27,
+          "n_valid": 27,
           "booked_fa_valid": 0
         },
         {
@@ -845,6 +845,13 @@
           "n_all": 1,
           "n_valid": 1,
           "booked_fa_valid": 6931
+        },
+        {
+          "channel": "分類不能",
+          "dom": 25,
+          "n_all": 1,
+          "n_valid": 1,
+          "booked_fa_valid": 0
         },
         {
           "channel": "拠点",
@@ -1017,21 +1024,84 @@
         {
           "channel": "拠点",
           "dom": 25,
-          "n_all": 1,
-          "n_valid": 1,
+          "n_all": 3,
+          "n_valid": 3,
           "booked_fa_valid": 0
+        }
+      ]
+    },
+    "q7_conv_plan": {
+      "rows": [
+        {
+          "month": "2026-07",
+          "plan_regular": 637.0,
+          "plan_sutara": 172.0,
+          "src_regular": "実績",
+          "src_sutara": "実績",
+          "as_of": "2026-08-25"
+        },
+        {
+          "month": "2026-08",
+          "plan_regular": 639.0,
+          "plan_sutara": 207.0,
+          "src_regular": "ヨミ",
+          "src_sutara": "ヨミ",
+          "as_of": "2026-08-25"
+        },
+        {
+          "month": "2026-09",
+          "plan_regular": 677.0,
+          "plan_sutara": 191.0,
+          "src_regular": "ヨミ",
+          "src_sutara": "ヨミ",
+          "as_of": "2026-08-25"
+        }
+      ]
+    },
+    "q8_yomi": {
+      "rows": [
+        {
+          "month": "2026-08",
+          "yomi_total": 342266659.4989925,
+          "as_of": "2026-08-25"
+        },
+        {
+          "month": "2026-09",
+          "yomi_total": 331042371.03698397,
+          "as_of": "2026-08-25"
+        },
+        {
+          "month": "2026-10",
+          "yomi_total": 344793286.1624259,
+          "as_of": "2026-08-25"
         }
       ]
     }
   },
+  "targets": {
+    "fa_targets": {
+      "lks": null,
+      "mny": null,
+      "pd": null,
+      "total": null
+    },
+    "kyoten_conv_target": null,
+    "yomi": {
+      "comparable": false,
+      "note": "社内売上ヨミ(オンライン)は財務会計と定義が異なるため参考値。T1検証(2026-08-25): 確定3ヶ月(2026-05〜07)の月初時点ヨミはオンラインFA実績比 +2.6〜+3.8% の一貫過大(05: +3.8% / 06: +2.6% / 07: +3.2%、7月中旬時点では+3.6%)で±3%以内に収まらず comparable=false を維持。"
+    },
+    "note": "fa_targets は月次の目標FA(円)。null=未設定(UIは前月実績を基準線として表示)。"
+  },
   "meta": {
     "bytes_processed": {
       "q1_official_monthly": 3234,
-      "q2_lks_pending": 938783240,
-      "q3_mny_pd_pending": 1410948788,
-      "q4_lks_channel_booked": 861674913,
-      "q5_conv_profile": 861674913,
-      "q6_conv_actuals": 861674913
+      "q2_lks_pending": 938801872,
+      "q3_mny_pd_pending": 1410966995,
+      "q4_lks_channel_booked": 861675478,
+      "q5_conv_profile": 861675478,
+      "q6_conv_actuals": 861675478,
+      "q7_conv_plan": 13580,
+      "q8_yomi": 3136
     }
   }
 }
