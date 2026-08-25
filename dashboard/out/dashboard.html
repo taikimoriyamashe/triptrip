@@ -238,7 +238,8 @@ li { margin-bottom: .3em; }
 
 /* ------------------------------ サマリーカード ------------------------------ */
 .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
-@media (max-width: 860px) { .cards { grid-template-columns: 1fr; } }
+.cards-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 860px) { .cards, .cards-2 { grid-template-columns: 1fr; } }
 .svc {
   background: var(--surface); border: 1px solid var(--rule); border-radius: 4px;
   padding: 15px 16px 13px; box-shadow: var(--shadow);
@@ -553,7 +554,7 @@ dl { margin: 0; }
   </section>
 
   <!-- ================= MNY / プロデ ================= -->
-  <div class="cards" style="grid-template-columns: repeat(2, minmax(0,1fr))" id="cards-2">
+  <div class="cards cards-2" id="cards-2">
     <section class="card" style="margin-top:0" aria-labelledby="h-mny">
       <div class="sec-h"><h2 id="h-mny">SHEmoney — 詳細</h2></div>
       <div class="tablewrap">
