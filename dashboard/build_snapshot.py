@@ -13,7 +13,14 @@ import sys
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-RAW_DIR = Path("/tmp/claude-0/-home-user-triptrip/ba0c624f-4401-5154-a133-43c04e86e8f6/scratchpad/raw")
+# 生レスポンスの置き場。引数 --raw-dir か環境変数 RAW_DIR で指定(既定: このファイルと同階層の raw/)
+import os as _os
+_default_raw = Path(__file__).resolve().parent / "raw"
+if "--raw-dir" in sys.argv:
+    _default_raw = Path(sys.argv[sys.argv.index("--raw-dir") + 1])
+elif _os.environ.get("RAW_DIR"):
+    _default_raw = Path(_os.environ["RAW_DIR"])
+RAW_DIR = _default_raw
 OUT_PATH = Path("/home/user/triptrip/dashboard/data/latest.json")
 
 QUERIES = [

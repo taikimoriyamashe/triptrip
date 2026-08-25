@@ -109,8 +109,8 @@ sql/q6_conv_actuals.sql ─────┘         │ /*__DATA__*/ プレース
 5. `out/dashboard.html` の内容でArtifactを再公開する(同一URLへの再デプロイ)。
 6. (日次Routineの場合)次回実行時刻まで待機する。
 
-- 公開URL: {{ARTIFACT_URL}}
-- 更新Routine: {{TRIGGER_INFO}}
+- 公開URL: https://claude.ai/code/artifact/35c78380-ed5b-4438-8c85-4f928347034f
+- 更新Routine: 「財務売上着地モニター 日次更新」(trig_01SQQKgGtHEYaLjLrWRGpe4d、毎日 08:05 JST に元のClaudeセッションを起こして再取得・再公開)。※起こされたセッションでBigQueryコネクタが使えない場合は再ベイクをスキップする縮退設計(その場合もページを開けばライブ再計算される)。停止はclaude.aiのルーチン管理画面から可能。
 
 ### 人間が手動で行う場合
 
@@ -118,7 +118,7 @@ sql/q6_conv_actuals.sql ─────┘         │ /*__DATA__*/ プレース
 2. 各クエリの生のBigQuery RESTレスポンスを保存する(`raw/q1_official_monthly.json` 等)。
 3. `python build_snapshot.py` を実行して `data/latest.json` を生成する(データ契約の不変条件チェックも同時に実行される)。**JST深夜0時台(00:00〜00:10)の実行は避けること**(月境界レース回避のガードにより中断される)。
 4. `python build.py` を実行して `out/dashboard.html` を生成する。
-5. `out/dashboard.html` の内容を、既存のArtifact URL({{ARTIFACT_URL}})に再公開する、または当該URLを管理しているClaudeセッションに更新を依頼する。
+5. `out/dashboard.html` の内容を、既存のArtifact URL(https://claude.ai/code/artifact/35c78380-ed5b-4438-8c85-4f928347034f)に再公開する、または当該URLを管理しているClaudeセッションに更新を依頼する。
 
 ## 検証(test.js と不変条件)
 

@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-25T11:26:21+09:00",
+  "generated_at": "2026-08-25T12:23:16+09:00",
   "basis_date": "2026-08-25",
   "target_month": "2026-08",
   "queries": {
@@ -182,7 +182,7 @@
         {
           "plan_name": "レギュラープラン",
           "payment_type": "一括",
-          "fa_per_day_cur": 1136.3324555628703,
+          "fa_per_day_cur": 1136.5324302713889,
           "fa_per_day_prev": 1313.8776966509113,
           "n_window": 30,
           "window_days": 125,
@@ -241,7 +241,7 @@
       "rows": [
         {
           "channel": "オンライン",
-          "n_users": 32600,
+          "n_users": 32601,
           "booked_fa": 322474485
         },
         {
@@ -251,7 +251,7 @@
         },
         {
           "channel": "分類不能",
-          "n_users": 11291,
+          "n_users": 11290,
           "booked_fa": 7742523
         },
         {
@@ -828,8 +828,8 @@
         {
           "channel": "オンライン",
           "dom": 25,
-          "n_all": 1,
-          "n_valid": 1,
+          "n_all": 5,
+          "n_valid": 5,
           "booked_fa_valid": 0
         },
         {
@@ -1013,6 +1013,13 @@
           "n_all": 5,
           "n_valid": 5,
           "booked_fa_valid": 8877
+        },
+        {
+          "channel": "拠点",
+          "dom": 25,
+          "n_all": 1,
+          "n_valid": 1,
+          "booked_fa_valid": 0
         }
       ]
     }
@@ -1020,11 +1027,11 @@
   "meta": {
     "bytes_processed": {
       "q1_official_monthly": 3234,
-      "q2_lks_pending": 938782121,
-      "q3_mny_pd_pending": 1410947703,
-      "q4_lks_channel_booked": 861674797,
-      "q5_conv_profile": 861674797,
-      "q6_conv_actuals": 861674797
+      "q2_lks_pending": 938783240,
+      "q3_mny_pd_pending": 1410948788,
+      "q4_lks_channel_booked": 861674913,
+      "q5_conv_profile": 861674913,
+      "q6_conv_actuals": 861674913
     }
   }
 }

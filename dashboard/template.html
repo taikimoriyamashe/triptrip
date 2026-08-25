@@ -24,7 +24,7 @@
   /* 文字 */
   --ink:         #10151a;
   --ink-2:       #454f58;
-  --ink-3:       #606a74;   /* 軸・補助ラベル（.note/.hint 用に AA 4.5:1 を確保: surface 5.26 / plane 4.60 / surface-2 4.86） */
+  --ink-3:       #5c6670;   /* 軸・補助ラベル（AA 4.5:1 を hover 面含む全5面で確保: 最悪 4.60） */
   --ink-inverse: #f6f8f9;   /* 反転ボタンの文字 */
 
   /* 罫 */
@@ -535,7 +535,7 @@ dl { margin: 0; }
       <span class="note">3面はそれぞれ独立の縦軸。金額規模が2桁違うため重ねない。</span>
     </div>
     <div class="callout info" style="margin-bottom:12px">
-      <div class="h"><span class="ic">●</span>当月より右は「予測」ではない</div>
+      <div class="h"><span class="ic" aria-hidden="true">●</span>当月より右は「予測」ではない</div>
       区切り線より右の月は、<b>その時点ですでに計上済みの前受分</b>（一括払いの按分など）。まだ発生していない
       更新・新規成約は含まれないので、月が先になるほど小さく見える。今後の実績で積み上がっていく値であり、
       減少トレンドの予測ではない。SHEmoney の一部の月がマイナスなのは、返金・取消の戻し計上によるもの。
@@ -561,7 +561,7 @@ dl { margin: 0; }
         <table id="tbl-mny"><tbody></tbody></table>
       </div>
       <div class="callout info" style="margin-top:12px">
-        <div class="h"><span class="ic">●</span>新規成約分は未算入</div>
+        <div class="h"><span class="ic" aria-hidden="true">●</span>新規成約分は未算入</div>
         新規成約による当月FAは僅少のため、MNY の見込みには ③（今後の成約）を含めていない。
         計上済み + ①更新残 + ④滞納/処理ラグ × 織り込み率 で構成される。
       </div>
@@ -573,7 +573,7 @@ dl { margin: 0; }
         <table id="tbl-pd"><tbody></tbody></table>
       </div>
       <div class="callout" style="margin-top:12px" id="pd-caveat">
-        <div class="h"><span class="ic">▲</span>残計上を直接算出できない</div>
+        <div class="h"><span class="ic" aria-hidden="true">▲</span>残計上を直接算出できない</div>
         multicreator は marts の monthly_accounting にFAが載らない<b>別パイプライン</b>のため、
         1日単価から残計上を算出できない。全件一括払いのため当月分は<b>実質すでに計上済み</b>と扱い、
         low = central = 計上済み としている。
@@ -587,7 +587,7 @@ dl { margin: 0; }
     <div class="sec-h"><h2 id="h-def">前提・定義・手法</h2></div>
     <dl class="defs" id="defs"></dl>
     <div style="margin-top:14px" class="callout">
-      <div class="h"><span class="ic">▲</span>読むときの注意</div>
+      <div class="h"><span class="ic" aria-hidden="true">▲</span>読むときの注意</div>
       <ul style="margin-top:6px">
         <li><b>バッチ更新ズレ:</b> 公式FAテーブルはバッチ更新のため、スプレッドシートの認識値と数万〜数十万円ずれることがある（8/20 の実例で差 ¥68,287）。</li>
         <li><b>単価は基準日依存:</b> 課金更新の1日単価は基準日を後ろへずらすほど上がる（月初計上の一括分が early 側に積み上がるため）。毎回の再計算が前提で、過去に出した数値をそのまま使い回さない。</li>
