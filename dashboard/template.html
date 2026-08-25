@@ -213,6 +213,9 @@ li { margin-bottom: .3em; }
 .chip.is-crit .dot { background: var(--critical); }
 .chip.is-info    { background: var(--info-bg);     border-color: transparent; color: var(--ink-2); }
 .chip.is-info .dot { background: var(--measure); }
+/* 入力の却下・目標の不整合など、その場で出す注意の行（長文になるので折り返す） */
+.warnrow { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
+.warnrow .chip { white-space: normal; }
 
 .btn {
   appearance: none; border: 1px solid var(--rule-strong); border-radius: 3px;
@@ -283,11 +286,11 @@ li { margin-bottom: .3em; }
 .bullet-host { margin-top: 14px; }
 
 /* ------------------------------ 成約進捗 ------------------------------ */
-.convgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 18px 26px; }
+.convgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); gap: 18px 26px; }
 .convblk .top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin-bottom: 2px; }
 .convblk .top h3 { font-size: 13.5px; }
 .convblk .top .spacer { flex: 1 1 auto; }
-.convblk .facts { margin-top: 10px; display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 8px 12px; }
+.convblk .facts { margin-top: 10px; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(92px, 100%), 1fr)); gap: 8px 12px; }
 .convblk .fact .k { font-size: 11px; color: var(--ink-3); display: block; }
 .convblk .fact .v { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .convblk .fact .v small { font-size: 11px; font-weight: 400; color: var(--ink-3); margin-left: 2px; }
@@ -337,6 +340,18 @@ td.n, th.n { font-variant-numeric: tabular-nums; }
 .smallmult .panel h3 { font-size: 12.5px; margin-bottom: 1px; }
 .smallmult .panel .axisnote { font-size: 11px; color: var(--ink-3); margin-bottom: 6px; }
 
+/* ------------------------------ 通期シミュレーション ------------------------------ */
+.fy-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr)); gap: 18px; }
+.fy-charts .panel { min-width: 0; }
+.fy-charts .panel h3 { font-size: 12.5px; margin-bottom: 1px; }
+.fy-charts .panel .axisnote { font-size: 11px; color: var(--ink-3); margin-bottom: 6px; }
+#tbl-fy input[type="number"] {
+  font-size: 13px; padding: 2px 6px; text-align: right; max-width: 110px; min-width: 74px;
+}
+#tbl-fy tr.is-current > td { background: var(--surface-2); }
+#tbl-fy tr.is-future > td { color: var(--ink-2); }
+#tbl-fy td.ovr { color: var(--ink); font-weight: 600; }
+
 #tip {
   position: fixed; z-index: 40; pointer-events: none; opacity: 0;
   transform: translate(-50%, -100%);
@@ -352,7 +367,7 @@ td.n, th.n { font-variant-numeric: tabular-nums; }
 #tip .r .s { color: var(--ink-2); }
 
 /* ------------------------------ シナリオ入力 ------------------------------ */
-.scen { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; align-items: end; }
+.scen { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr)); gap: 14px; align-items: end; }
 .field label { display: block; font-size: 12px; color: var(--ink-2); margin-bottom: 4px; }
 .field .hint { font-size: 11px; color: var(--ink-3); margin-top: 3px; }
 input[type="number"] {
@@ -400,7 +415,7 @@ pre {
   line-height: 1.6; color: var(--ink-2); tab-size: 2;
 }
 
-.defs { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px,1fr)); gap: 6px 28px; }
+.defs { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 6px 28px; }
 .defs .d { padding: 8px 0; border-bottom: 1px solid var(--rule); }
 .defs .d dt { font-weight: 600; font-size: 12.5px; margin-bottom: 2px; }
 .defs .d dd { margin: 0; font-size: 12.5px; color: var(--ink-2); }
@@ -488,6 +503,7 @@ dl { margin: 0; }
             <div class="hint">リポジトリの targets.json の値に戻ります</div>
           </div>
         </div>
+        <div id="tg-warn" class="warnrow" hidden></div>
         <div id="yomi-box" style="margin-top:12px"></div>
       </div>
     </details>
@@ -639,6 +655,115 @@ dl { margin: 0; }
     </details>
   </section>
 
+  <!-- ================= 通期達成シミュレーション ================= -->
+  <section class="card" id="sec-fy" aria-labelledby="h-fy" hidden>
+    <div class="sec-h">
+      <h2 id="h-fy">通期達成シミュレーション（<span id="fy-label">年度</span>）</h2>
+      <span class="spacer"></span>
+      <span class="note" id="fy-head-note"></span>
+    </div>
+
+    <div class="callout" style="margin-bottom:12px">
+      <div class="h"><span class="ic" aria-hidden="true">▲</span>将来月は粗い推定 — 当月モデルとは精度が別物</div>
+      将来月の SHElikes は「社内売上ヨミ（オンライン） ÷ バイアス補正 ÷ オンライン構成比」で置いた推定で、
+      当月の ①〜④ を積み上げた着地モデルとは<b>精度が違う</b>。SHEmoney・プロデは直近3確定月の平均を既定にしている。
+      いずれも「すでに計上済みの前受分」を下限（フロア）として使う。
+      <div id="fy-caveat-dyn" style="margin-top:6px"></div>
+    </div>
+
+    <p class="lede" id="fy-lede"></p>
+    <div class="hero-cmp" id="fy-cmp"></div>
+    <div class="hero-sub" id="fy-sub"></div>
+
+    <div class="fy-charts">
+      <div class="panel">
+        <h3>月次の着地（実績 → 当月 → 将来推定）</h3>
+        <div class="axisnote">縦軸: 百万円／3サービス合計。横軸: 4月〜翌3月。</div>
+        <div class="chart" id="chart-fy-monthly"></div>
+      </div>
+      <div class="panel">
+        <h3>累積（通期目標に届くか）</h3>
+        <div class="axisnote">縦軸: 百万円の累計。将来は帯が low–high。</div>
+        <div class="chart" id="chart-fy-cum"></div>
+      </div>
+    </div>
+    <div class="legend" id="legend-fy"></div>
+
+    <details id="dt-fy-targets">
+      <summary><span id="dt-fy-targets-label">通期目標を設定する</span></summary>
+      <div class="body">
+        <p class="hint" id="fy-targets-scope"></p>
+        <div class="scen">
+          <div class="field">
+            <label for="fy-total">通期 合計の目標（百万円）</label>
+            <input type="number" id="fy-total" min="0" step="1" inputmode="decimal">
+            <div class="hint" id="fy-total-src"></div>
+          </div>
+          <div class="field">
+            <label for="fy-lks">通期 SHElikes（百万円）</label>
+            <input type="number" id="fy-lks" min="0" step="1" inputmode="decimal">
+            <div class="hint" id="fy-lks-src"></div>
+          </div>
+          <div class="field">
+            <label for="fy-mny">通期 SHEmoney（百万円）</label>
+            <input type="number" id="fy-mny" min="0" step="1" inputmode="decimal">
+            <div class="hint" id="fy-mny-src"></div>
+          </div>
+          <div class="field">
+            <label for="fy-pd">通期 プロデ（百万円）</label>
+            <input type="number" id="fy-pd" min="0" step="1" inputmode="decimal">
+            <div class="hint" id="fy-pd-src"></div>
+          </div>
+        </div>
+        <div id="fy-warn" class="warnrow" hidden></div>
+      </div>
+    </details>
+
+    <details id="dt-fy-sim">
+      <summary><span id="dt-fy-sim-label">将来月の前提を調整する</span></summary>
+      <div class="body">
+        <p class="hint" id="fy-sim-scope"></p>
+        <div class="scen">
+          <div class="field">
+            <label for="in-fy-adj">SHElikes 将来月の一括調整（%）</label>
+            <input type="number" id="in-fy-adj" step="1" min="-100" max="200" inputmode="decimal">
+            <div class="hint" id="in-fy-adj-src"></div>
+          </div>
+          <div class="field">
+            <label for="in-fy-mny">SHEmoney 将来月の月次値（百万円）</label>
+            <input type="number" id="in-fy-mny" min="0" step="0.1" inputmode="decimal">
+            <div class="hint" id="in-fy-mny-src"></div>
+          </div>
+          <div class="field">
+            <label for="in-fy-pd">プロデ 将来月の月次値（百万円）</label>
+            <input type="number" id="in-fy-pd" min="0" step="0.1" inputmode="decimal">
+            <div class="hint" id="in-fy-pd-src"></div>
+          </div>
+          <div class="field">
+            <button class="btn" id="btn-fy-reset">調整を戻す</button>
+            <div class="hint">月別の上書きもまとめて消えます</div>
+          </div>
+        </div>
+      </div>
+    </details>
+
+    <div class="tablewrap" style="margin-top:14px">
+      <table id="tbl-fy">
+        <thead>
+          <tr>
+            <th>月</th><th>区分</th>
+            <th class="n">SHElikes（百万円）</th>
+            <th class="n">SHEmoney</th><th class="n">プロデ</th>
+            <th class="n">合計</th><th class="n">累積</th>
+            <th>根拠</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p class="hint" id="fy-table-note"></p>
+  </section>
+
   <!-- ================= MNY / プロデ ================= -->
   <div class="cards cards-2" id="cards-2">
     <section class="card" style="margin-top:0" aria-labelledby="h-mny">
@@ -767,6 +892,10 @@ dl { margin: 0; }
     opts: { paceOn: null, paceKyoten: null, lagWeight: L.DEFAULT_LAG_WEIGHT },
     targetOverride: null,
     targetSaved: true,
+    targetOrigin: {},       // 目標欄に入れた値の由来（例: ヨミ採用ボタン）
+    sim: { lksAdjPct: null, mnyMonthly: null, pdMonthly: null, perMonthLksOverride: {} },
+    simSaved: true,
+    fy: null,               // 直近の fySim 結果
     liveRows: {},           // key -> rows
     liveAt: {},             // key -> epoch ms
     status: {},             // key -> {state:'idle'|'loading'|'ok'|'error'|'nosql', err}
@@ -814,6 +943,16 @@ dl { margin: 0; }
   var yen = L.fmtYen;
   function m1(v, d) { if (v === null || v === undefined || !isFinite(v)) return "—"; return (v / 1e6).toFixed(d === undefined ? 1 : d); }
   function mRange(a, b, d) { return m1(a, d) + " – " + m1(b, d); }
+  /** 百万円・小数1桁・3桁区切り。通期など 4 桁以上になる場面で使う。 */
+  function m1g(v, d) {
+    if (v === null || v === undefined || !isFinite(v)) return "—";
+    var dd = d === undefined ? 1 : d;
+    var n = v / 1e6, neg = n < 0;
+    var s = Math.abs(n).toFixed(dd).split(".");
+    s[0] = s[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    return (neg ? "-" : "") + s.join(".");
+  }
+  function mRangeG(a, b, d) { return m1g(a, d) + " – " + m1g(b, d); }
   function pct(v, d) { return L.fmtPct(v, d); }
   function pctPlain(v, d) { if (v === null || !isFinite(v)) return "—"; return (v * 100).toFixed(d === undefined ? 1 : d) + "%"; }
 
@@ -1281,6 +1420,261 @@ dl { margin: 0; }
     host.appendChild(svg);
   }
 
+  /* ---- E. 通期シミュレーション: 月次（合計） ---- */
+  function chartFyMonthly(host, m) {
+    clear(host);
+    var fy = STATE.fy;
+    if (!fy || !fy.available) return;
+    var W = Math.max(280, host.clientWidth || 520);
+    var padL = 40, padR = 8, top = 14, plotH = 150, axisH = 32;
+    var H = top + plotH + axisH;
+    var n = fy.months.length || 1;
+    var innerW = Math.max(60, W - padL - padR);
+    var bandW = innerW / n;
+    var barW = Math.min(24, Math.max(5, bandW - 8));   // 24px 上限・面の隙間を残す
+
+    var maxV = 0;
+    fy.months.forEach(function (r) { maxV = Math.max(maxV, r.total.high, r.total.central); });
+    var ticks = niceTicks(maxV, 4);
+    var domainMax = ticks[ticks.length - 1] || 1;
+    function y(v) { return top + plotH - (v / domainMax) * plotH; }
+
+    var svg = sv("svg", { viewBox: "0 0 " + W + " " + H, role: "img" });
+    svg.setAttribute("aria-label", fy.fyLabel + "の月次着地（3サービス合計）。実績 " + fy.counts.actual +
+      " ヶ月、当月 " + m1g(fy.currentBand.total.central) + " 百万円、将来 " + fy.counts.future +
+      " ヶ月の推定を含む通期 " + m1g(fy.fyTotal.total.central) + " 百万円。");
+
+    ticks.forEach(function (t) {
+      svg.appendChild(sv("line", { x1: padL, x2: W - padR, y1: y(t), y2: y(t), stroke: cssVar("--grid"), "stroke-width": 1 }));
+      var lb = sv("text", { x: padL - 6, y: y(t) + 3.5, "text-anchor": "end", fill: cssVar("--ink-3"), "font-size": 10 });
+      lb.setAttribute("style", "font-variant-numeric:tabular-nums");
+      lb.textContent = m1g(t, 0);
+      svg.appendChild(lb);
+    });
+    svg.appendChild(sv("line", { x1: padL, x2: W - padR, y1: y(0), y2: y(0), stroke: cssVar("--baseline"), "stroke-width": 1 }));
+
+    fy.months.forEach(function (r, i) {
+      var cx = padL + bandW * i + bandW / 2;
+      var bx = cx - barW / 2;
+      var g = sv("g", {});
+      var solid = r.status === "actual" ? r.total.central : (r.bookedForward.lks + r.bookedForward.mny + r.bookedForward.pd);
+      solid = Math.min(solid, r.total.central);
+
+      // 推定・見込みぶん（淡い塗り）
+      if (r.total.central > solid) {
+        g.appendChild(sv("rect", {
+          x: bx, y: y(r.total.central), width: barW, height: Math.max(1.5, y(solid) - y(r.total.central)),
+          fill: cssVar("--measure-wash"), stroke: cssVar("--measure-soft"), "stroke-width": 1, rx: 2
+        }));
+      }
+      // 計上済み（実線）
+      if (solid > 0) {
+        g.appendChild(sv("rect", {
+          x: bx, y: y(solid), width: barW, height: Math.max(0.8, y(0) - y(solid)), rx: 2, fill: cssVar("--measure")
+        }));
+      }
+      // レンジ ひげ（当月・将来のヨミ月）
+      if (r.total.high > r.total.low + 1e-9) {
+        g.appendChild(sv("line", { x1: cx, x2: cx, y1: y(r.total.high), y2: y(r.total.low), stroke: cssVar("--ink-3"), "stroke-width": 1 }));
+        [r.total.high, r.total.low].forEach(function (v) {
+          g.appendChild(sv("line", { x1: cx - 3.5, x2: cx + 3.5, y1: y(v), y2: y(v), stroke: cssVar("--ink-3"), "stroke-width": 1 }));
+        });
+      }
+
+      var rows = [
+        { label: "区分", value: FY_STATUS[r.status].label },
+        { label: "SHElikes", value: m1g(r.lks.central) + " 百万円", color: cssVar("--measure") },
+        { label: "SHEmoney", value: m1g(r.mny.central) + " 百万円" },
+        { label: "プロデ", value: m1g(r.pd.central) + " 百万円" },
+        { label: "合計", value: m1g(r.total.central) + " 百万円" }
+      ];
+      if (r.total.high > r.total.low + 1e-9) rows.push({ label: "レンジ", value: mRangeG(r.total.low, r.total.high) });
+      rows.push({ label: "根拠", value: FY_BASIS[r.basis] || "" });
+      g.appendChild(sv("rect", { x: cx - bandW / 2, y: top, width: bandW, height: plotH, fill: "transparent" }));
+      attachTip(g, r.ym + "（" + r.label + "）", rows,
+        r.ym + " " + FY_STATUS[r.status].label + " 合計 " + m1g(r.total.central) + "百万円");
+      svg.appendChild(g);
+
+      // 狭い幅では 1 つおきにラベルを間引く（当月・年度端は必ず出す）
+      var showLabel = bandW >= 26 || r.status === "current" || i === 0 || i === fy.months.length - 1 || i % 2 === 0;
+      if (showLabel) {
+        var t2 = sv("text", {
+          x: cx, y: top + plotH + 14, "text-anchor": "middle",
+          fill: r.status === "current" ? cssVar("--ink") : cssVar("--ink-3"),
+          "font-size": 10, "font-weight": r.status === "current" ? 600 : 400
+        });
+        t2.setAttribute("style", "font-variant-numeric:tabular-nums");
+        t2.textContent = r.label;
+        svg.appendChild(t2);
+      }
+      if (r.status === "current") {
+        var mk = sv("text", { x: cx, y: top + plotH + 25, "text-anchor": "middle", fill: cssVar("--ink-3"), "font-size": 9.5 });
+        mk.textContent = "当月";
+        svg.appendChild(mk);
+      }
+      // 年またぎ（12月 → 1月）の区切り
+      if (r.month === 12 && i < fy.months.length - 1) {
+        var sx = padL + bandW * (i + 1);
+        svg.appendChild(sv("line", { x1: sx, x2: sx, y1: top, y2: top + plotH, stroke: cssVar("--rule-strong"), "stroke-width": 1 }));
+        var yl = sv("text", { x: sx + 3, y: top + 9, fill: cssVar("--ink-3"), "font-size": 9.5 });
+        yl.textContent = (fy.fyStartYear + 1) + "年";
+        svg.appendChild(yl);
+      }
+    });
+
+    makeRoving(svg);
+    host.appendChild(svg);
+  }
+
+  /* ---- F. 通期シミュレーション: 累積 ---- */
+  function chartFyCum(host, m) {
+    clear(host);
+    var fy = STATE.fy;
+    if (!fy || !fy.available) return;
+    var W = Math.max(280, host.clientWidth || 520);
+    var padL = 44, padR = 10, top = 14, plotH = 150, axisH = 32;
+    var H = top + plotH + axisH;
+    var n = fy.cumulative.length || 1;
+    var innerW = Math.max(60, W - padL - padR);
+    var step = n > 1 ? innerW / (n - 1) : 0;
+
+    var tgt = fy.goals.total.target;
+    var baseline = tgt !== null ? tgt : (fy.prevFy.available ? fy.prevFy.total : null);
+    var baselineName = tgt !== null ? "通期目標" : "前年度通期";
+    var maxV = Math.max(fy.fyTotal.total.high, baseline || 0);
+    var ticks = niceTicks(maxV, 4);
+    var domainMax = ticks[ticks.length - 1] || 1;
+    function x(i) { return padL + step * i; }
+    function y(v) { return top + plotH - (v / domainMax) * plotH; }
+
+    var svg = sv("svg", { viewBox: "0 0 " + W + " " + H, role: "img" });
+    svg.setAttribute("aria-label", fy.fyLabel + "の累積FA。年度末の見込み " + m1g(fy.fyTotal.total.central) +
+      " 百万円（レンジ " + mRangeG(fy.fyTotal.total.low, fy.fyTotal.total.high) + "）" +
+      (baseline !== null ? "、" + baselineName + " " + m1g(baseline) + " 百万円" : "") + "。");
+
+    ticks.forEach(function (t) {
+      svg.appendChild(sv("line", { x1: padL, x2: W - padR, y1: y(t), y2: y(t), stroke: cssVar("--grid"), "stroke-width": 1 }));
+      var lb = sv("text", { x: padL - 6, y: y(t) + 3.5, "text-anchor": "end", fill: cssVar("--ink-3"), "font-size": 10 });
+      lb.setAttribute("style", "font-variant-numeric:tabular-nums");
+      lb.textContent = m1g(t, 0);
+      svg.appendChild(lb);
+    });
+    svg.appendChild(sv("line", { x1: padL, x2: W - padR, y1: y(0), y2: y(0), stroke: cssVar("--baseline"), "stroke-width": 1 }));
+
+    // 不確実性の帯（当月以降）
+    var firstBand = -1;
+    for (var i0 = 0; i0 < fy.cumulative.length; i0++) {
+      if (fy.cumulative[i0].high > fy.cumulative[i0].low + 1e-9) { firstBand = i0; break; }
+    }
+    if (firstBand >= 0) {
+      var up = [], dn = [];
+      for (var b = firstBand; b < n; b++) {
+        up.push(x(b) + "," + y(fy.cumulative[b].high));
+        dn.unshift(x(b) + "," + y(fy.cumulative[b].low));
+      }
+      svg.appendChild(sv("polygon", { points: up.concat(dn).join(" "), fill: cssVar("--measure-wash"), stroke: "none" }));
+    }
+
+    // 基準線（通期目標 / 前年度通期）
+    if (baseline !== null && baseline > 0) {
+      var by = y(baseline);
+      svg.appendChild(sv("line", {
+        x1: padL, x2: W - padR, y1: by, y2: by,
+        stroke: (tgt !== null && fy.goals.total.diff && !fy.goals.total.diff.met) ? cssVar("--warning") : cssVar("--ink"),
+        "stroke-width": 2
+      }));
+      var bl = sv("text", { x: padL + 4, y: by - 5, fill: cssVar("--ink-2"), "font-size": 10.5, "font-weight": 500 });
+      bl.setAttribute("style", "font-variant-numeric:tabular-nums");
+      bl.textContent = baselineName + " " + m1g(baseline);
+      svg.appendChild(bl);
+    }
+
+    // 累積ライン（確定＝濃い / 将来＝淡い）
+    function polyline(from, to, color, width, dash) {
+      if (to <= from) return;
+      var pts = [];
+      for (var i = from; i <= to; i++) pts.push(x(i) + "," + y(fy.cumulative[i].central));
+      var a = { points: pts.join(" "), fill: "none", stroke: color, "stroke-width": width, "stroke-linejoin": "round" };
+      if (dash) a["stroke-dasharray"] = dash;
+      svg.appendChild(sv("polyline", a));
+    }
+    var curIdx = -1;
+    for (var ci2 = 0; ci2 < fy.months.length; ci2++) if (fy.months[ci2].status === "current") curIdx = ci2;
+    var solidTo = curIdx >= 0 ? curIdx : n - 1;
+    polyline(0, solidTo, cssVar("--measure"), 2, null);
+    polyline(solidTo, n - 1, cssVar("--measure-soft"), 2, "5 3");
+
+    // 点（マークは 8px 以上の当たり判定を透明 rect で確保）
+    fy.cumulative.forEach(function (c, i) {
+      var g = sv("g", {});
+      var isCur = fy.months[i].status === "current";
+      g.appendChild(sv("circle", {
+        cx: x(i), cy: y(c.central), r: isCur ? 4.5 : 3,
+        fill: fy.months[i].status === "future" ? cssVar("--surface") : cssVar("--measure"),
+        stroke: fy.months[i].status === "future" ? cssVar("--measure-soft") : cssVar("--surface"),
+        "stroke-width": 2
+      }));
+      var rows = [
+        { label: "累積", value: m1g(c.central) + " 百万円", color: cssVar("--measure") },
+        { label: "この月", value: m1g(fy.months[i].total.central) + " 百万円" },
+        { label: "区分", value: FY_STATUS[fy.months[i].status].label }
+      ];
+      if (c.high > c.low + 1e-9) rows.push({ label: "累積レンジ", value: mRangeG(c.low, c.high) });
+      if (baseline !== null && baseline > 0) rows.push({ label: baselineName + "まで", value: m1g(Math.max(0, baseline - c.central)) + " 百万円" });
+      g.appendChild(sv("rect", { x: x(i) - Math.max(12, step / 2), y: top, width: Math.max(24, step), height: plotH, fill: "transparent" }));
+      attachTip(g, fy.months[i].ym + "（" + fy.months[i].label + "）累積", rows,
+        fy.months[i].ym + " 累積 " + m1g(c.central) + "百万円");
+      svg.appendChild(g);
+    });
+
+    // x ラベル（3ヶ月ごと + 当月 + 年度末）
+    fy.months.forEach(function (r, i) {
+      if (!(r.status === "current" || i % 3 === 0 || i === n - 1)) return;
+      var t2 = sv("text", {
+        x: x(i), y: top + plotH + 14,
+        "text-anchor": i === 0 ? "start" : i === n - 1 ? "end" : "middle",
+        fill: r.status === "current" ? cssVar("--ink") : cssVar("--ink-3"),
+        "font-size": 10, "font-weight": r.status === "current" ? 600 : 400
+      });
+      t2.setAttribute("style", "font-variant-numeric:tabular-nums");
+      t2.textContent = r.label;
+      svg.appendChild(t2);
+    });
+
+    makeRoving(svg);
+    host.appendChild(svg);
+  }
+
+  function renderFyLegend() {
+    var lg = $("legend-fy"); clear(lg);
+    var fy = STATE.fy;
+    if (!fy || !fy.available) return;
+    var items = [
+      ["実績・計上済み（確定）", cssVar("--measure"), "swatch"],
+      ["当月の着地見込み / 将来月の推定", cssVar("--measure-wash"), "ghost"],
+      ["レンジ low–high", cssVar("--ink-3"), "line"],
+      ["累積の将来ぶん（破線）", cssVar("--measure-soft"), "dash"]
+    ];
+    if (fy.goals.total.target !== null) items.push(["通期目標", cssVar("--ink"), "rule"]);
+    else if (fy.prevFy.available) items.push(["前年度通期", cssVar("--ink"), "rule"]);
+    items.forEach(function (p) {
+      var it = el("span", "it");
+      var isLine = p[2] === "line" || p[2] === "rule" || p[2] === "dash";
+      var sw = el("span", isLine ? "linekey" : "swatch");
+      if (p[2] === "dash") {
+        sw.style.background = "none";
+        sw.style.borderTop = "2px dashed " + p[1];
+        sw.style.height = "0";
+      } else {
+        sw.style.background = p[1];
+      }
+      if (p[2] === "ghost") sw.style.border = "1px solid " + cssVar("--measure-soft");
+      it.appendChild(sw); it.appendChild(document.createTextNode(p[0]));
+      lg.appendChild(it);
+    });
+    kbdHint(lg);
+  }
+
   /* ---- D. 当月 日次の有効成約（ペース入力の根拠） ---- */
   function chartConv(host, m) {
     clear(host);
@@ -1380,12 +1774,25 @@ dl { margin: 0; }
     var fmt = o.fmt || function (v) { return String(Math.round(v)); };
 
     var maxCandidate = Math.max(o.value || 0, o.extend || 0, o.high || 0, o.marker || 0);
-    var max = maxCandidate > 0 ? maxCandidate * 1.08 : 1;
+    // 拡大表示では上端も詰めないと、左を寄せたぶんが右の空白に流れてしまう
+    var max = maxCandidate > 0 ? maxCandidate * (o.zoom ? 1.02 : 1.08) : 1;
+    /**
+     * FA は月内のほとんどが計上済みなので 0 起点だと常に約 92% 充填になり、
+     * 着地見込みと基準線の差が数 px しか出ない（R4 Minor-6）。
+     * zoom:true の呼び出しでは左端を min(実績, 基準線) × 0.98 まで寄せて差を見えるようにし、
+     * 「0 起点ではない」ことを軸の切れ目マークとラベルで明示する。
+     */
+    var xmin = 0;
+    if (o.zoom) {
+      var lo = Math.min(o.value || 0, (o.marker !== null && o.marker !== undefined && isFinite(o.marker) && o.marker > 0) ? o.marker : (o.value || 0));
+      if (lo > 0 && lo < max) xmin = lo * 0.98;
+    }
     var padR = 2;
-    function x(v) { return Math.max(0, Math.min(W - padR, (v / max) * (W - padR))); }
+    var span = (max - xmin) || 1;
+    function x(v) { return Math.max(0, Math.min(W - padR, ((v - xmin) / span) * (W - padR))); }
 
     var svg = sv("svg", { viewBox: "0 0 " + W + " " + H, role: "img" });
-    svg.setAttribute("aria-label", o.aria || "");
+    svg.setAttribute("aria-label", (o.aria || "") + (xmin > 0 ? "（横軸は " + fmt(xmin) + " から始まる拡大表示）" : ""));
 
     // トラック
     svg.appendChild(sv("rect", { x: 0, y: top, width: W - padR, height: barH, rx: 2, fill: cssVar("--surface-sunk") }));
@@ -1428,6 +1835,19 @@ dl { margin: 0; }
       }
     }
 
+    // 軸の切れ目（0 起点でないことを目で分かるようにする）
+    if (xmin > 0) {
+      var zz = sv("path", {
+        d: "M3," + (top + barH + 1) + " l4,-4 l-4,-4 l4,-4",
+        fill: "none", stroke: cssVar("--ink-3"), "stroke-width": 1.2
+      });
+      svg.appendChild(zz);
+      var zt = sv("text", { x: 11, y: top + barH + 15, fill: cssVar("--ink-3"), "font-size": 9.5 });
+      zt.setAttribute("style", "font-variant-numeric:tabular-nums");
+      zt.textContent = "軸は " + fmt(xmin) + " 起点";
+      svg.appendChild(zt);
+    }
+
     // 全体を1つの当たり判定に（値は必ずテキストでも出しているので補助）
     var g = sv("g", {});
     g.appendChild(sv("rect", { x: 0, y: top - 8, width: W - padR, height: barH + 18, fill: "transparent" }));
@@ -1436,10 +1856,18 @@ dl { margin: 0; }
     if (o.extendLabel) rows.push({ label: o.extendLabel, value: fmt(o.extend || 0), color: cssVar("--measure-soft") });
     if (o.low !== undefined && o.high !== undefined) rows.push({ label: "レンジ", value: fmt(o.low) + " – " + fmt(o.high) });
     if (o.marker) rows.push({ label: o.markerName || "基準", value: fmt(o.marker) });
+    if (xmin > 0) rows.push({ label: "横軸の起点", value: fmt(xmin) + "（0 起点ではない）" });
     attachTip(g, o.title || "", rows, o.aria || "");
+    // マークが 1 個しかないブレットはローヴィング tabindex の利益が無いので、
+    // makeRoving を呼ばずタブストップを 0 個にする（R4 Minor-7）。
+    // 注: tabindex を「外す」と Chromium は既定の可否判定に落ちてこの <g> を
+    // 順次移動の対象にしてしまう。attachTip が付ける tabindex="-1" を残すのが正解。
+    // 説明は svg ルートの role="img" + aria-label が持つ。
+    g.setAttribute("tabindex", "-1");
+    svg.setAttribute("focusable", "false");
+    svg.setAttribute("tabindex", "-1");
     svg.appendChild(g);
 
-    makeRoving(svg);
     host.appendChild(svg);
   }
 
@@ -1533,6 +1961,8 @@ dl { margin: 0; }
     return function (host) {
       drawBullet(host, {
         compact: compact !== false,
+        // FA は 9 割以上が計上済みなので 0 起点では差が見えない → 拡大表示（R4 Minor-6）
+        zoom: true,
         value: s.booked,
         valueLabel: "計上済み",
         extend: s.landing.central,
@@ -1709,10 +2139,11 @@ dl { margin: 0; }
     if (cp.hasPlan) {
       facts.appendChild(fact("達成率", cp.rate !== null ? pctPlain(cp.rate) : "—"));
       facts.appendChild(fact("残り", (cp.remaining !== null ? Math.round(cp.remaining).toLocaleString("ja-JP") : "—"),
-        " 件 / " + cp.remainingDays + "日"));
+        " 件 / " + (cp.noDaysLeft ? "残 0 日" : cp.remainingDays + "日")));
       facts.appendChild(fact("必要ペース",
-        cp.unreachable ? "算出不可" : cp.neededPace !== null ? cp.neededPace.toFixed(1) : "—",
-        cp.unreachable ? "" : " 件/日", cp.behind));
+        cp.noDaysLeft ? (cp.unreachable ? "残 0 日" : "達成済み")
+          : cp.neededPace !== null ? cp.neededPace.toFixed(1) : "—",
+        cp.noDaysLeft ? "" : " 件/日", cp.behind));
     }
     facts.appendChild(fact("現ペース", cp.pace.toFixed(1), " 件/日"));
     blk.appendChild(facts);
@@ -1770,7 +2201,8 @@ dl { margin: 0; }
     var b2 = convBlock(kyoten, m, { noPlanTip: "拠点の計画は BigQuery に無いため、上の「目標を設定する」から件数を入れてください。" });
     grid.appendChild(b2); convDrawers.push(b2.__draw);
 
-    $("conv-note").textContent = "残り " + m.meta.remainingDays + " 日（基準日 " + m.meta.basisDate + " を含む）"
+    // 実績には基準日当日ぶんが入っているため、進捗の残日数からは当日を除く（契約 v1.2.1）
+    $("conv-note").textContent = "残り " + m.conv.days + " 日（基準日 " + m.meta.basisDate + " の翌日から月末まで。当日ぶんは実績に計上済み）"
       + (online.hasPlan && online.src ? " ／ オンライン計画は q7（" + online.src + "）" : "");
   }
 
@@ -1794,7 +2226,53 @@ dl { margin: 0; }
     } catch (e) { return false; }
   }
 
-  var TG_FIELDS = [["tg-total", "total"], ["tg-lks", "lks"], ["tg-mny", "mny"], ["tg-pd", "pd"]];
+  /* 通期シミュレーションのつまみ（この端末のみ） */
+  var SIM_KEY = "fa-monitor-fysim-v1";
+  var SIM_EMPTY = { lksAdjPct: null, mnyMonthly: null, pdMonthly: null, perMonthLksOverride: {} };
+
+  function loadLocalSim() {
+    var out = { lksAdjPct: null, mnyMonthly: null, pdMonthly: null, perMonthLksOverride: {} };
+    try {
+      var raw = window.localStorage.getItem(SIM_KEY);
+      if (!raw) return out;
+      var o = JSON.parse(raw);
+      if (!o || typeof o !== "object") return out;
+      if (typeof o.lksAdjPct === "number" && isFinite(o.lksAdjPct)) out.lksAdjPct = o.lksAdjPct;
+      if (typeof o.mnyMonthly === "number" && isFinite(o.mnyMonthly)) out.mnyMonthly = o.mnyMonthly;
+      if (typeof o.pdMonthly === "number" && isFinite(o.pdMonthly)) out.pdMonthly = o.pdMonthly;
+      if (o.perMonthLksOverride && typeof o.perMonthLksOverride === "object") {
+        for (var k in o.perMonthLksOverride) {
+          if (!Object.prototype.hasOwnProperty.call(o.perMonthLksOverride, k)) continue;
+          var v = o.perMonthLksOverride[k];
+          if (typeof v === "number" && isFinite(v) && v >= 0) out.perMonthLksOverride[k] = v;
+        }
+      }
+    } catch (e) { /* プライベートウィンドウ等 */ }
+    return out;
+  }
+
+  function simIsEmpty(s) {
+    return s.lksAdjPct === null && s.mnyMonthly === null && s.pdMonthly === null &&
+      !Object.keys(s.perMonthLksOverride || {}).length;
+  }
+
+  function saveLocalSim() {
+    try {
+      if (simIsEmpty(STATE.sim)) window.localStorage.removeItem(SIM_KEY);
+      else window.localStorage.setItem(SIM_KEY, JSON.stringify(STATE.sim));
+      STATE.simSaved = true;
+    } catch (e) { STATE.simSaved = false; }
+  }
+
+  var TG_FIELDS = [
+    ["tg-total", "total", "合計の目標"], ["tg-lks", "lks", "SHElikes"],
+    ["tg-mny", "mny", "SHEmoney"], ["tg-pd", "pd", "プロデ"]
+  ];
+  var FY_FIELDS = [
+    ["fy-total", "total", "通期 合計の目標"], ["fy-lks", "lks", "通期 SHElikes"],
+    ["fy-mny", "mny", "通期 SHEmoney"], ["fy-pd", "pd", "通期 プロデ"]
+  ];
+  var ALL_TG_IDS = TG_FIELDS.concat(FY_FIELDS).map(function (f) { return f[0]; }).concat(["tg-kyoten"]);
 
   /** 円 → 入力欄の表示（百万円・小数1桁）に丸めた円。比較用。 */
   function toDisplayYen(v) {
@@ -1806,25 +2284,63 @@ dl { margin: 0; }
    * 全欄をそのまま保存すると、後で targets.json が更新されても
    * 古いローカル値が勝ち続けてしまうため。
    */
+  /** 目標入力の上限（百万円）。これを超える値は誤入力とみなして無視する（R4 Minor-2）。 */
+  var TG_MAX_M = 100000;        // 月次: 1,000 億円
+  var TG_MAX_FY_M = 1000000;    // 通期: 1 兆円
+
+  /** 上限超え・値が丸めて 0 になった欄。ヒント表示のために覚えておく。 */
+  var tgRejected = [];
+
+  /**
+   * 入力欄を読み、**repo（targets.json）と実際に違う値だけ**を上書きとして返す。
+   * 全欄をそのまま保存すると、後で targets.json が更新されても
+   * 古いローカル値が勝ち続けてしまうため。
+   */
   function readTargetInputs() {
     var base = L.normalizeTargets(APP.data && APP.data.targets, null);
-    var fa = {};
-    TG_FIELDS.forEach(function (f) {
-      var raw = String($(f[0]).value || "").trim();
-      if (raw === "") return;                       // 空欄は「上書きしない」＝ repo 値に従う
-      var v = parseFloat(raw);
-      if (!isFinite(v) || v <= 0) return;
-      var yenv = Math.round(v * 1e6);               // 百万円 → 円
-      if (toDisplayYen(base.fa[f[1]].value) === yenv) return;   // repo と同じなら保存しない
-      fa[f[1]] = yenv;
-    });
+    tgRejected = [];
+    function readGroup(fields, slotOf, maxM) {
+      var out = {};
+      fields.forEach(function (f) {
+        var inp = $(f[0]);
+        if (!inp) return;
+        var raw = String(inp.value || "").trim();
+        if (raw === "") return;                     // 空欄は「上書きしない」＝ repo 値に従う
+        var v = parseFloat(raw);
+        if (!isFinite(v) || v <= 0) return;
+        if (v > maxM) { tgRejected.push({ label: f[2], kind: "max", max: maxM }); return; }
+        var yenv = Math.round(v * 1e6);             // 百万円 → 円
+        if (!(yenv > 0)) { tgRejected.push({ label: f[2], kind: "tiny" }); return; }  // R4 Minor-1
+        if (toDisplayYen(slotOf(f[1]).value) === yenv) return;   // repo と同じなら保存しない
+        out[f[1]] = yenv;
+      });
+      return out;
+    }
+
     var out = {};
+    var fa = readGroup(TG_FIELDS, function (k) { return base.fa[k]; }, TG_MAX_M);
     if (Object.keys(fa).length) out.fa_targets = fa;
+    var fy = readGroup(FY_FIELDS, function (k) { return base.fy[k]; }, TG_MAX_FY_M);
+    if (Object.keys(fy).length) out.fy_targets = fy;
+
     var kraw = String($("tg-kyoten").value || "").trim();
     if (kraw !== "") {
       var kv = parseFloat(kraw);
-      if (isFinite(kv) && kv >= 0 && kv !== base.kyotenConvTarget.value) out.kyoten_conv_target = kv;
+      // 0 は「未設定」に丸める（契約 v1.2.1 / R4 Minor-5）
+      if (isFinite(kv) && kv > 0 && kv <= 100000 && kv !== base.kyotenConvTarget.value) out.kyoten_conv_target = kv;
+      else if (isFinite(kv) && kv > 100000) tgRejected.push({ label: "拠点の成約目標", kind: "max", max: 100000 });
     }
+
+    // 「ヨミ由来」の印は、その値が入っているあいだだけ持ち回る（R4 Minor-9）
+    var origin = {};
+    for (var ok2 in STATE.targetOrigin) {
+      if (!Object.prototype.hasOwnProperty.call(STATE.targetOrigin, ok2)) continue;
+      var rec = STATE.targetOrigin[ok2];
+      if (rec && out.fa_targets && toDisplayYen(out.fa_targets[ok2]) === toDisplayYen(rec.yen)) origin[ok2] = rec;
+    }
+    STATE.targetOrigin = origin;
+    if (Object.keys(origin).length) out.origin = origin;
+
     return Object.keys(out).length ? out : null;
   }
 
@@ -1841,13 +2357,25 @@ dl { margin: 0; }
       if (document.activeElement !== inp) {
         inp.value = slot.value === null ? "" : String(Math.round(slot.value / 1e5) / 10);
       }
-      $(f[0] + "-src").textContent = slot.value === null ? "未設定"
-        : "現在: " + m1(slot.value) + " 百万円" + targetSourceLabel(slot.source);
+      var srcEl = $(f[0] + "-src");
+      clear(srcEl);
+      srcEl.appendChild(document.createTextNode(slot.value === null ? "未設定"
+        : "現在: " + m1(slot.value) + " 百万円" + targetSourceLabel(slot.source)));
+      // ヨミ採用ボタンで入れた値には由来を残す（R4 Minor-9）
+      var org = STATE.targetOrigin && STATE.targetOrigin[f[1]];
+      if (slot.source === "local" && org && org.kind === "yomi" &&
+        toDisplayYen(org.yen) === toDisplayYen(slot.value)) {
+        srcEl.appendChild(document.createTextNode(" "));
+        var oc = el("span", "chip is-warn");
+        oc.appendChild(el("span", "dot"));
+        oc.appendChild(document.createTextNode("ヨミ由来（+2.6〜3.8% 過大の可能性）"));
+        srcEl.appendChild(oc);
+      }
     });
     var kinp = $("tg-kyoten"), kslot = t.kyotenConvTarget;
     if (document.activeElement !== kinp) kinp.value = kslot.value === null ? "" : String(kslot.value);
     $("tg-kyoten-src").textContent = kslot.value === null
-      ? "未設定（拠点の計画は BigQuery に存在しないため手入力）"
+      ? "未設定（拠点の計画は BigQuery に存在しないため手入力。0 は未設定として扱う）"
       : "現在: " + kslot.value + " 件" + targetSourceLabel(kslot.source);
 
     $("dt-targets-label").textContent = t.hasAnyFa
@@ -1858,13 +2386,15 @@ dl { margin: 0; }
       ? "この端末に保存できませんでした（プライベートウィンドウ等）。入力はこのページを閉じるまで有効です。正はリポジトリの dashboard/data/targets.json。"
       : "ここでの入力はこの端末のみの一時設定です（ブラウザに保存）。空欄にすると targets.json の値に戻ります。全員に反映する正の値はリポジトリの dashboard/data/targets.json。";
 
+    renderTargetWarn(m);
+
     // 社内ヨミ（q8）
     var box = $("yomi-box"); clear(box);
     if (!m.yomi) return;
     var y = m.yomi;
     var cal = el("div", "callout" + (y.comparable ? " info" : ""));
     var h = el("div", "h");
-    h.appendChild(el("span", "ic", y.comparable ? "●" : "▲"));
+    h.appendChild(icEl(y.comparable ? "●" : "▲"));
     h.appendChild(document.createTextNode(y.comparable
       ? "社内売上ヨミ（オンライン） " + m1(y.total) + " 百万円 — 目標系列として扱う設定です"
       : "参考: 社内売上ヨミ（オンライン） " + m1(y.total) + " 百万円"));
@@ -1885,12 +2415,47 @@ dl { margin: 0; }
     btn.type = "button";
     btn.addEventListener("click", function () {
       $("tg-lks").value = String(Math.round(y.total / 1e5) / 10);
+      // 由来を覚えておき、出所ラベルの横に出す（R4 Minor-9）
+      STATE.targetOrigin.lks = { kind: "yomi", yen: Math.round(y.total / 1e5) * 1e5 };
       onTargetInput();
       try { $("dt-targets").open = true; } catch (e) { /* noop */ }
     });
     wrap.appendChild(btn);
     cal.appendChild(wrap);
     box.appendChild(cal);
+  }
+
+  /**
+   * 目標入力の注意書き。
+   *  - 上限超え / 丸めて 0 になる入力を無視したこと（R4 Minor-1・Minor-2）
+   *  - 明示 total と 3 サービス合計の乖離（R4 Minor-4）
+   */
+  function renderTargetWarn(m) {
+    var host = $("tg-warn");
+    if (!host) return;
+    clear(host);
+    var msgs = [];
+    for (var i = 0; i < tgRejected.length; i++) {
+      var r = tgRejected[i];
+      msgs.push(r.kind === "max"
+        ? r.label + "は上限（" + r.max.toLocaleString("ja-JP") + " 百万円）を超えているため無視しました"
+        : r.label + "は小さすぎるため（丸めると 0 円）無視しました");
+    }
+    var mm = m.targets.faTotalMismatch;
+    if (mm) {
+      msgs.push("合計の目標 " + m1(m.targets.fa.total.value) + " 百万円 と 3サービスの合計 " +
+        m1(mm.sum) + " 百万円 が " + pctPlain(mm.rate) + " 食い違っています（合計欄を優先して表示中）");
+    }
+    // 通期目標の不整合は通期セクション側（#fy-warn）に出す
+    host.hidden = !msgs.length;
+    if (!msgs.length) return;
+    msgs.forEach(function (t2) {
+      var c = el("div", "chip is-warn");
+      c.style.marginRight = "6px";
+      c.appendChild(el("span", "dot"));
+      c.appendChild(document.createTextNode(t2));
+      host.appendChild(c);
+    });
   }
 
   function renderBreakdownTable(m) {
@@ -2035,6 +2600,245 @@ dl { margin: 0; }
     });
   }
 
+  /* ---------------- 通期達成シミュレーション（契約 v1.3） ---------------- */
+
+  /** STATE.sim（表示単位）→ fySim の入力（円）。 */
+  function simInputs() {
+    var s = STATE.sim || SIM_EMPTY;
+    var ovr = {};
+    for (var k in s.perMonthLksOverride) {
+      if (Object.prototype.hasOwnProperty.call(s.perMonthLksOverride, k)) ovr[k] = s.perMonthLksOverride[k];
+    }
+    return {
+      lksAdjPct: s.lksAdjPct,
+      mnyMonthly: s.mnyMonthly,
+      pdMonthly: s.pdMonthly,
+      perMonthLksOverride: ovr
+    };
+  }
+
+  var FY_STATUS = {
+    actual: { label: "確定", cls: "is-actual" },
+    current: { label: "当月（レンジ）", cls: "is-current" },
+    future: { label: "推定", cls: "is-future" }
+  };
+  var FY_BASIS = {
+    q1: "公式FA（確定）",
+    model: "当月モデル（①〜④）",
+    yomi: "ヨミ ÷ 補正 ÷ 構成比",
+    avg3: "直近3確定月の平均",
+    override: "手入力の上書き",
+    missing: "データなし"
+  };
+
+  var fySig = null;        // 組み立て済みテーブルの形（月と区分）
+  var fyCells = {};        // ym -> セル参照
+
+  function renderFy(m) {
+    var sec = $("sec-fy");
+    var fy;
+    try { fy = L.fySim(m, effectiveData(), simInputs()); }
+    catch (e) { sec.hidden = true; STATE.fy = null; return; }
+    STATE.fy = fy;
+    sec.hidden = !fy || !fy.available;
+    if (!fy || !fy.available) return;
+
+    $("fy-label").textContent = fy.fyLabel;
+    $("fy-head-note").textContent = "年度は 4月〜翌3月。実績 " + fy.counts.actual + " ヶ月 ／ 当月 1 ヶ月 ／ 将来 " +
+      fy.counts.future + " ヶ月";
+
+    var sig = fy.first + "|" + fy.last + "|" + fy.months.map(function (r) { return r.status; }).join(",");
+    if (sig !== fySig) { buildFyTable(fy); fySig = sig; }
+    updateFyValues(fy);
+    renderFyHero(fy);
+    renderFyTargets(m, fy);
+    renderFySimInputs(fy);
+    renderFyCaveat(fy);
+  }
+
+  function renderFyCaveat(fy) {
+    var host = $("fy-caveat-dyn"); clear(host);
+    var bits = [];
+    bits.push("ヨミの補正: central ÷ " + L.YOMI_BIAS.central + "・low ÷ " + L.YOMI_BIAS.low + "・high ÷ " + L.YOMI_BIAS.high +
+      "（確定3ヶ月のバックテストで +2.6〜3.8% の一貫過大）");
+    bits.push("オンライン構成比 " + pctPlain(fy.params.onlineShare) +
+      (fy.params.onlineShareFallback ? "（q4 が取れず 100% として計算）" : "（q4 当月）"));
+    if (fy.counts.floored) bits.push("前受計上分が推定を上回った月が " + fy.counts.floored + " ヶ月（フロア適用）");
+    if (fy.counts.overrides) bits.push("手入力で上書きした月が " + fy.counts.overrides + " ヶ月");
+    if (fy.counts.missingActual) bits.push("q1 に無い実績月が " + fy.counts.missingActual + " ヶ月あり 0 円として扱っている");
+    host.textContent = bits.join(" ／ ");
+  }
+
+  function renderFyHero(fy) {
+    var t = fy.goals.total;
+    $("fy-lede").textContent = "";
+    var lede = $("fy-lede"); clear(lede);
+    lede.appendChild(document.createTextNode(fy.fyLabel + "は "));
+    var fig = el("span", "fig", m1g(fy.fyTotal.total.central));
+    lede.appendChild(fig);
+    lede.appendChild(document.createTextNode(" 百万円 で着地見込み"));
+
+    var cmp = $("fy-cmp"); clear(cmp);
+    if (t.diff) {
+      var up = t.diff.met;
+      var c = el("div", "cmp " + (up ? "up" : "down"));
+      c.appendChild(el("span", "lb", "通期目標比"));
+      c.appendChild(el("span", "ar", up ? "▲" : "▼"));
+      c.appendChild(el("span", "vv", (up ? "+" : "-") + m1g(Math.abs(t.diff.diff)) + " 百万円"));
+      c.appendChild(el("span", "sub", "（達成率 " + pctPlain(t.diff.rate) + " ／ 目標 " + m1g(t.target) +
+        " 百万円" + targetSourceLabel(t.source) + "）"));
+      cmp.appendChild(c);
+    } else {
+      cmp.appendChild(el("div", "cmp none", "通期目標が未設定です — 前年度実績を基準線にしています"));
+    }
+    if (fy.prevFy.available) {
+      var up2 = fy.prevFy.yoyDiff >= 0;
+      var c2 = el("div", "cmp " + (up2 ? "up" : "down"));
+      c2.appendChild(el("span", "lb", "前年度比（" + fy.prevFy.label + "）"));
+      c2.appendChild(el("span", "ar", up2 ? "▲" : "▼"));
+      c2.appendChild(el("span", "vv", (up2 ? "+" : "-") + m1g(Math.abs(fy.prevFy.yoyDiff)) + " 百万円"));
+      c2.appendChild(el("span", "sub", "（" + pct(fy.prevFy.yoy) + " ／ 前年度 " + m1g(fy.prevFy.total) + " 百万円）"));
+      cmp.appendChild(c2);
+    }
+
+    var sub = $("fy-sub"); clear(sub);
+    var parts = [
+      "通期レンジ " + mRangeG(fy.fyTotal.total.low, fy.fyTotal.total.high) + " 百万円",
+      "実績 " + fy.counts.actual + " ヶ月 " + m1g(fy.actual.total) + "／当月 " + m1g(fy.currentBand.total.central) +
+      "／将来 " + fy.counts.future + " ヶ月 " + m1g(fy.future.total.central) + " 百万円"
+    ];
+    if (t.needPerFutureMonth !== null) {
+      parts.push("目標達成に必要な将来月あたり " + m1g(t.needPerFutureMonth) + " 百万円" +
+        "（将来月の見込み平均 " + m1g(fy.counts.future ? fy.future.total.central / fy.counts.future : 0) + "）");
+    } else if (t.target !== null && fy.counts.future === 0) {
+      parts.push("将来月は残っていない（当月で年度が終わる）");
+    }
+    if (!fy.prevFy.available) {
+      parts.push("前年度比は q1 に前年度（" + fy.prevFy.first + "〜" + fy.prevFy.last + "）が " +
+        fy.prevFy.present + "/12 ヶ月しか無いため非表示");
+    }
+    sub.textContent = parts.join(" ／ ");
+  }
+
+  function buildFyTable(fy) {
+    var tb = $("tbl-fy").querySelector("tbody"); clear(tb);
+    fyCells = {};
+    fy.months.forEach(function (r) {
+      var st = FY_STATUS[r.status];
+      var tr = el("tr", st.cls);
+      var th = el("td", null, r.label);
+      if (r.month === 1) th.setAttribute("title", r.ym + "（年をまたぐ）");
+      tr.appendChild(th);
+      tr.appendChild(el("td", null, st.label));
+
+      var tdL = el("td", "n");
+      if (r.editable) {
+        var inp = el("input");
+        inp.type = "number"; inp.min = "0"; inp.step = "0.1"; inp.inputMode = "decimal";
+        inp.id = "fy-m-" + r.ym;
+        inp.setAttribute("aria-label", r.ym + " の SHElikes を上書き（百万円）");
+        inp.addEventListener("input", onFyMonthInput);
+        tdL.appendChild(inp);
+        fyCells[r.ym] = { lksInput: inp, lksTd: tdL };
+      } else {
+        fyCells[r.ym] = { lksTd: tdL };
+      }
+      tr.appendChild(tdL);
+
+      ["mny", "pd", "total", "cum"].forEach(function (k) {
+        var td = el("td", "n");
+        fyCells[r.ym][k] = td;
+        tr.appendChild(td);
+      });
+      var tdB = el("td");
+      fyCells[r.ym].basis = tdB;
+      tr.appendChild(tdB);
+      tb.appendChild(tr);
+    });
+  }
+
+  function updateFyValues(fy) {
+    fy.months.forEach(function (r, i) {
+      var c = fyCells[r.ym];
+      if (!c) return;
+      if (c.lksInput) {
+        if (document.activeElement !== c.lksInput) {
+          var ovv = STATE.sim.perMonthLksOverride[r.ym];
+          c.lksInput.value = (ovv === undefined || ovv === null) ? "" : String(Math.round(ovv / 1e5) / 10);
+        }
+        c.lksInput.placeholder = m1(r.lks.central);
+        c.lksTd.className = "n" + (r.basis === "override" ? " ovr" : "");
+        c.lksInput.title = r.basis === "override"
+          ? "上書き中。空欄にすると推定（" + m1g(r.lks.central) + " 百万円）に戻ります。"
+          : "推定 " + m1g(r.lks.central) + " 百万円（レンジ " + mRangeG(r.lks.low, r.lks.high) + "）。数値を入れると上書きできます。";
+      } else {
+        c.lksTd.textContent = r.status === "current"
+          ? m1g(r.lks.central) + "（" + mRangeG(r.lks.low, r.lks.high) + "）"
+          : m1g(r.lks.central);
+      }
+      c.mny.textContent = m1g(r.mny.central);
+      c.pd.textContent = m1g(r.pd.central);
+      c.total.textContent = r.status === "current"
+        ? m1g(r.total.central) + "（" + mRangeG(r.total.low, r.total.high) + "）"
+        : m1g(r.total.central);
+      c.cum.textContent = m1g(fy.cumulative[i].central);
+      c.basis.textContent = FY_BASIS[r.basis] || r.basis || "";
+      if (r.floored) {
+        c.basis.textContent += "（前受 " + m1g(r.bookedForward.lks) + " がフロア）";
+      }
+    });
+    $("fy-table-note").textContent =
+      "金額は百万円・小数1桁。将来月の SHElikes 欄は上書きできます（空欄で推定に戻る）。" +
+      "当月は着地レンジを括弧で併記。累積は central の積み上げ。";
+  }
+
+  function renderFyTargets(m, fy) {
+    var t = m.targets;
+    FY_FIELDS.forEach(function (f) {
+      var inp = $(f[0]), slot = t.fy[f[1]];
+      if (!inp) return;
+      if (document.activeElement !== inp) {
+        inp.value = slot.value === null ? "" : String(Math.round(slot.value / 1e5) / 10);
+      }
+      $(f[0] + "-src").textContent = slot.value === null ? "未設定"
+        : "現在: " + m1g(slot.value) + " 百万円" + targetSourceLabel(slot.source);
+    });
+    $("dt-fy-targets-label").textContent = t.hasAnyFy ? "通期目標を変更する" : "通期目標を設定する（未設定）";
+    $("fy-targets-scope").textContent = STATE.targetSaved === false
+      ? "この端末に保存できませんでした（プライベートウィンドウ等）。入力はこのページを閉じるまで有効です。"
+      : "この端末のみの一時設定です。全員に反映する正の値はリポジトリの dashboard/data/targets.json（fy_targets）。空欄で戻ります。";
+    // 上限・不整合の注意は月次目標と同じ枠組みで出す
+    var warn = $("fy-warn");
+    if (warn) {
+      clear(warn);
+      var mm = t.fyTotalMismatch;
+      warn.hidden = !mm;
+      if (mm) {
+        var c = el("span", "chip is-warn");
+        c.appendChild(el("span", "dot"));
+        c.appendChild(document.createTextNode("通期 合計の目標 " + m1g(t.fy.total.value) +
+          " 百万円 と 3サービスの合計 " + m1g(mm.sum) + " 百万円 が " + pctPlain(mm.rate) + " 食い違っています"));
+        warn.appendChild(c);
+      }
+    }
+  }
+
+  function renderFySimInputs(fy) {
+    var a = $("in-fy-adj"), mn = $("in-fy-mny"), pdI = $("in-fy-pd");
+    if (document.activeElement !== a) a.value = STATE.sim.lksAdjPct === null ? "" : String(STATE.sim.lksAdjPct);
+    if (document.activeElement !== mn) mn.value = STATE.sim.mnyMonthly === null ? "" : String(Math.round(STATE.sim.mnyMonthly / 1e5) / 10);
+    if (document.activeElement !== pdI) pdI.value = STATE.sim.pdMonthly === null ? "" : String(Math.round(STATE.sim.pdMonthly / 1e5) / 10);
+    $("in-fy-adj-src").textContent = "既定 0%（ヨミ由来の推定をそのまま使う）。現在 " + (fy.inputs.lksAdjPct >= 0 ? "+" : "") + fy.inputs.lksAdjPct + "%";
+    $("in-fy-mny-src").textContent = "既定 " + m1g(fy.defaults.mnyMonthly) + " 百万円（直近" + fy.defaults.recentMonths + "確定月の平均）";
+    $("in-fy-pd-src").textContent = "既定 " + m1g(fy.defaults.pdMonthly) + " 百万円（直近" + fy.defaults.recentMonths + "確定月の平均）";
+    var n = Object.keys(STATE.sim.perMonthLksOverride).length;
+    $("dt-fy-sim-label").textContent = "将来月の前提を調整する" +
+      (simIsEmpty(STATE.sim) ? "" : "（この端末の調整あり" + (n ? "・月別上書き " + n + " 件" : "") + "）");
+    $("fy-sim-scope").textContent = STATE.simSaved === false
+      ? "この端末に保存できませんでした（プライベートウィンドウ等）。調整はこのページを閉じるまで有効です。"
+      : "調整はこの端末のみ（ブラウザに保存）。空欄にすると既定に戻ります。";
+  }
+
   function kvTable(table, rows) {
     var tb = table.querySelector("tbody"); clear(tb);
     rows.forEach(function (r) {
@@ -2111,7 +2915,16 @@ dl { margin: 0; }
       ["レンジと「約」", "low / central / high は「上振れの可能性」の織り込み率だけが違う3シナリオ。中央値には「約」を付けて点推定でないことを示す。"],
       ["画面の言葉と契約の記号", "「これから入る見込み」＝① 更新残、「反映待ち」＝② 既成約未計上、「これからの新規成約」＝③、「上振れの可能性」＝④ 滞納/処理ラグ。トップは平易な言葉、正確な定義は各項目のツールチップとこの表に置いている。"],
       ["目標（fa_targets）", "リポジトリの dashboard/data/targets.json が正。設定されていれば着地見込みとの差分・達成率を主表示し、未設定なら前月実績を基準線にする。画面から入れた値はこの端末のブラウザにだけ保存される一時設定で、出所を各欄に明示している。"],
-      ["成約件数の進捗", "オンラインの計画は q7（社内のヨミ件数、レギュラー＋スタライ）。実績は q6 の有効成約（n_valid）合計。必要ペース = max(0, 計画 − 実績) ÷ 残り日数。現ペース着地 = 実績 + 成約ペース × 残り日数。拠点の計画は BigQuery に無いため targets.json か画面入力で与える。"],
+      ["成約件数の進捗", "オンラインの計画は q7（社内のヨミ件数、レギュラー＋スタライ）。実績は q6 の有効成約（n_valid）合計。" +
+        "実績には基準日当日ぶんが入っているため、進捗の残り日数は当日を除く（" + m.conv.days + " 日）。" +
+        "必要ペース = max(0, 計画 − 実績) ÷ 残り日数。現ペース着地 = 実績 + 成約ペース × 残り日数。" +
+        "③（FA）側の残日数は当日を含む " + m.meta.remainingDays + " 日で、定義が別物なので数が 1 日ずれる。" +
+        "拠点の計画は BigQuery に無いため targets.json か画面入力で与える（0 は未設定扱い）。"],
+      ["通期シミュレーション", "年度は 4月〜翌3月。実績月は q1 の確定値、当月は ①〜④ の着地モデル（レンジつき）、将来月は " +
+        "max(すでに計上済みの前受分, 社内売上ヨミ ÷ バイアス補正 ÷ オンライン構成比 × (1 + 一括調整%))。" +
+        "バイアス補正は確定3ヶ月のバックテスト（ヨミがFA実績比 +2.6〜3.8% の一貫過大）に基づき central ÷ " + L.YOMI_BIAS.central +
+        "・low ÷ " + L.YOMI_BIAS.low + "・high ÷ " + L.YOMI_BIAS.high + "。ヨミが無い月と SHEmoney・プロデは直近3確定月の平均を既定にする。" +
+        "将来月は粗い推定であり、当月の積み上げモデルとは精度が別物。月別の上書き・一括調整はこの端末にだけ保存される。"],
       ["社内売上ヨミ（q8）", (m.yomi && m.yomi.comparable) ? "財務会計と突合可能と判定されているため、目標系列として扱っている。" : "オンライン売上のヨミ。財務会計とは定義が異なる可能性があるため既定では参考値として扱い、目標には自動反映しない（手動で目標欄に入れることは可能）。"]
     ].forEach(function (p) {
       var d = el("div", "d");
@@ -2301,7 +3114,9 @@ dl { margin: 0; }
     { host: "chart-breakdown", fn: chartBreakdown },
     { host: "chart-channel", fn: chartChannel },
     { host: "chart-conv", fn: chartConv },
-    { host: "chart-monthly", fn: chartMonthly }
+    { host: "chart-monthly", fn: chartMonthly },
+    { host: "chart-fy-monthly", fn: chartFyMonthly },
+    { host: "chart-fy-cum", fn: chartFyCum }
   ];
 
   function drawTotalBullet(host, m) { svcBullet(m.total, false)(host); }
@@ -2330,6 +3145,7 @@ dl { margin: 0; }
     renderPlanTable(m);
     renderChannelTable(m);
     renderMonthlyTable(m);
+    renderFy(m);
     renderMnyPd(m);
     renderDefs(m);
     renderScenario(m);
@@ -2343,6 +3159,7 @@ dl { margin: 0; }
       var host = $(c.host);
       if (host) c.fn(host, STATE.model);
     });
+    renderFyLegend();
     // サービスカードのミニブレット（カード再生成のたびに幅が確定する）
     var cardHosts = document.querySelectorAll("#cards .svc .chart");
     for (var i = 0; i < cardHosts.length; i++) {
@@ -2393,19 +3210,75 @@ dl { margin: 0; }
     if (tgDeb) clearTimeout(tgDeb);
     tgDeb = setTimeout(onTargetInput, 160);
   }
-  ["tg-total", "tg-lks", "tg-mny", "tg-pd", "tg-kyoten"].forEach(function (id) {
-    $(id).addEventListener("input", onTargetInputDebounced);
+  ALL_TG_IDS.forEach(function (id) {
+    var e2 = $(id);
+    if (e2) e2.addEventListener("input", onTargetInputDebounced);
   });
   $("btn-targets-reset").addEventListener("click", function () {
     STATE.targetOverride = null;
+    STATE.targetOrigin = {};
     STATE.targetSaved = saveLocalTargets(null);
-    ["tg-total", "tg-lks", "tg-mny", "tg-pd", "tg-kyoten"].forEach(function (id) { $(id).value = ""; });
+    ALL_TG_IDS.forEach(function (id) { if ($(id)) $(id).value = ""; });
     render();
   });
 
   $("btn-reset").addEventListener("click", function () {
     STATE.opts.paceOn = null; STATE.opts.paceKyoten = null;
     STATE.opts.lagWeight = L.DEFAULT_LAG_WEIGHT;
+    render();
+  });
+
+  /* ---- 通期シミュレーションのつまみ ---- */
+
+  /** 入力欄 → 円。空欄・数値でない・負は null（＝既定に戻す）。 */
+  function yenFromInput(inp, maxM) {
+    var raw = String(inp.value === null || inp.value === undefined ? "" : inp.value).trim();
+    if (raw === "") return null;
+    var v = parseFloat(raw);
+    if (!isFinite(v) || v < 0) return null;
+    if (maxM && v > maxM) return null;
+    return Math.round(v * 1e6);
+  }
+
+  var simDeb = null;
+  function onFySim() {
+    if (simDeb) clearTimeout(simDeb);
+    simDeb = setTimeout(function () {
+      var a = String($("in-fy-adj").value || "").trim();
+      var av = parseFloat(a);
+      STATE.sim.lksAdjPct = (a === "" || !isFinite(av)) ? null : Math.max(-100, Math.min(200, av));
+      STATE.sim.mnyMonthly = yenFromInput($("in-fy-mny"), 100000);
+      STATE.sim.pdMonthly = yenFromInput($("in-fy-pd"), 100000);
+      saveLocalSim();
+      render();
+    }, 160);
+  }
+  ["in-fy-adj", "in-fy-mny", "in-fy-pd"].forEach(function (id) {
+    var e2 = $(id);
+    if (e2) e2.addEventListener("input", onFySim);
+  });
+
+  var fyMonthDeb = null;
+  function onFyMonthInput(ev) {
+    var inp = ev.currentTarget;
+    var ym = String(inp.id).slice("fy-m-".length);
+    if (fyMonthDeb) clearTimeout(fyMonthDeb);
+    fyMonthDeb = setTimeout(function () {
+      var v = yenFromInput(inp, 1000000);
+      if (v === null) delete STATE.sim.perMonthLksOverride[ym];
+      else STATE.sim.perMonthLksOverride[ym] = v;
+      saveLocalSim();
+      render();
+    }, 200);
+  }
+
+  $("btn-fy-reset").addEventListener("click", function () {
+    STATE.sim = { lksAdjPct: null, mnyMonthly: null, pdMonthly: null, perMonthLksOverride: {} };
+    saveLocalSim();
+    ["in-fy-adj", "in-fy-mny", "in-fy-pd"].forEach(function (id) { if ($(id)) $(id).value = ""; });
+    for (var k in fyCells) {
+      if (Object.prototype.hasOwnProperty.call(fyCells, k) && fyCells[k].lksInput) fyCells[k].lksInput.value = "";
+    }
     render();
   });
 
@@ -2647,6 +3520,10 @@ dl { margin: 0; }
    * 7. 起動
    * ================================================================ */
   STATE.targetOverride = loadLocalTargets();
+  if (STATE.targetOverride && STATE.targetOverride.origin && typeof STATE.targetOverride.origin === "object") {
+    STATE.targetOrigin = STATE.targetOverride.origin;
+  }
+  STATE.sim = loadLocalSim();
   render();
   if (typeof ResizeObserver === "function") {
     try {

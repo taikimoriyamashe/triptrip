@@ -35,15 +35,17 @@ QUERY_KEYS = [
     "q8_yomi",
 ]
 
-# targets.json が無い / 壊れているときの既定（契約 v1.2 / logic.js の DEFAULT_TARGETS と同値）
+# targets.json が無い / 壊れているときの既定（契約 v1.2・v1.3 / logic.js の DEFAULT_TARGETS と同値）
 DEFAULT_TARGETS = {
     "fa_targets": {"lks": None, "mny": None, "pd": None, "total": None},
+    "fy_targets": {"lks": None, "mny": None, "pd": None, "total": None},
     "kyoten_conv_target": None,
     "yomi": {
         "comparable": False,
         "note": "社内売上ヨミ(オンライン)は財務会計と定義が異なる可能性があるため参考値",
     },
     "note": "fa_targets は月次の目標FA(円)。null=未設定(UIは前月実績を基準線として表示)。",
+    "fy_note": "fy_targets は当年度(4月〜3月)の通期目標FA(円)。null=未設定(UIは前年度通期実績を基準線として表示)。",
 }
 
 # 契約 v1.2 で追加。データ層が未対応でも生成を止めない（UI 側でフォールバック）。
@@ -137,19 +139,21 @@ def load_targets(path: str, snapshot_targets, warn) -> dict:
         if not isinstance(src, dict):
             warn(f"targets({origin}) がオブジェクトではないため無視する")
             return False
-        fa = src.get("fa_targets")
-        if isinstance(fa, dict):
-            for k in ("lks", "mny", "pd", "total"):
-                if k in fa:
-                    v = fa[k]
-                    if v is None:
-                        merged["fa_targets"][k] = None
-                    elif isinstance(v, (int, float)) and v > 0:
-                        merged["fa_targets"][k] = v
-                    else:
-                        warn(f"targets({origin}).fa_targets.{k} が数値でない: {v!r}（無視）")
-        elif fa is not None:
-            warn(f"targets({origin}).fa_targets がオブジェクトでない（無視）")
+        # 月次目標(fa_targets)と通期目標(fy_targets)は同じ流儀で畳む（契約 v1.3）
+        for group in ("fa_targets", "fy_targets"):
+            g = src.get(group)
+            if isinstance(g, dict):
+                for k in ("lks", "mny", "pd", "total"):
+                    if k in g:
+                        v = g[k]
+                        if v is None:
+                            merged[group][k] = None
+                        elif isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0:
+                            merged[group][k] = v
+                        else:
+                            warn(f"targets({origin}).{group}.{k} が数値でない: {v!r}（無視）")
+            elif g is not None:
+                warn(f"targets({origin}).{group} がオブジェクトでない（無視）")
         if "kyoten_conv_target" in src:
             v = src["kyoten_conv_target"]
             if v is None or (isinstance(v, (int, float)) and v >= 0):
@@ -164,6 +168,8 @@ def load_targets(path: str, snapshot_targets, warn) -> dict:
                 merged["yomi"]["note"] = str(y["note"])
         if src.get("note"):
             merged["note"] = str(src["note"])
+        if src.get("fy_note"):
+            merged["fy_note"] = str(src["fy_note"])
         return True
 
     used = "既定(全 null)"
@@ -183,7 +189,8 @@ def load_targets(path: str, snapshot_targets, warn) -> dict:
 
     fa = merged["fa_targets"]
     n_set = sum(1 for v in fa.values() if v)
-    print(f"  targets  : {used}（fa_targets {n_set}/4 設定"
+    n_fy = sum(1 for v in merged["fy_targets"].values() if v)
+    print(f"  targets  : {used}（fa_targets {n_set}/4 設定・fy_targets {n_fy}/4 設定"
           f"{'・拠点成約目標あり' if merged['kyoten_conv_target'] else ''}"
           f"{'・ヨミ=目標系列' if merged['yomi']['comparable'] else '・ヨミ=参考値'}）")
     return merged

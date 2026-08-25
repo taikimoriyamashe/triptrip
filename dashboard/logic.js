@@ -9,10 +9,11 @@
  * export:
  *   parseBqResult(bqJson[, rows])  -> 型付き rows[]
  *   buildModel(data, opts)         -> 表示用モデル
- *   normalizeTargets(base, override)   -> 目標の正規化（出所つき）
+ *   fySim(model, data, sim)        -> 通期（年度4月〜3月）達成シミュレーション
+ *   normalizeTargets(base, override)   -> 目標の正規化（出所つき・月次 fa / 通期 fy）
  *   targetDiff(landingCentral, target) -> 目標差分・達成率
  *   convProgress({plan, actual, remainingDays, pace}) -> 成約件数の進捗
- *   （補助）CHANNELS, QUERY_KEYS, defaultPaces, lastDayOfMonth, prevMonth, fmt*
+ *   （補助）CHANNELS, QUERY_KEYS, defaultPaces, lastDayOfMonth, prevMonth, addMonths, fmt*
  */
 (function (root, factory) {
   "use strict";
@@ -37,13 +38,33 @@
     "q8_yomi"
   ];
 
-  /** targets.json が無い / 欠けているときの既定（契約 v1.2）。 */
+  /** targets.json が無い / 欠けているときの既定（契約 v1.2 / v1.3）。 */
   var DEFAULT_TARGETS = {
     fa_targets: { lks: null, mny: null, pd: null, total: null },
+    fy_targets: { lks: null, mny: null, pd: null, total: null },
     kyoten_conv_target: null,
     yomi: { comparable: false, note: "社内売上ヨミ(オンライン)は財務会計と定義が異なる可能性があるため参考値" },
-    note: ""
+    note: "",
+    fy_note: ""
   };
+
+  /** 明示 total と Σ(lks+mny+pd) の乖離をユーザーに知らせるしきい値（R4 Minor-4）。 */
+  var TOTAL_MISMATCH_TOL = 0.03;
+
+  /* --- 通期シミュレーション（契約 v1.3） --- */
+
+  /** 年度の開始月（SHE の年度は 4月〜3月）。 */
+  var FY_START_MONTH = 4;
+
+  /**
+   * 社内売上ヨミ（q8）の一貫過大バイアス。T4 バックテスト: 確定3ヶ月で +2.6〜+3.8%。
+   * 将来月 LKS = ヨミ ÷ bias（central=1.031 / low=1.038 / high=1.026）。
+   * low ほど大きく割り引く＝保守側。
+   */
+  var YOMI_BIAS = { low: 1.038, central: 1.031, high: 1.026 };
+
+  /** 将来月の既定値・ヨミ欠損月のフォールバックに使う「直近 n 確定月」の n。 */
+  var RECENT_MONTHS = 3;
 
   var SERVICE_KEYS = ["lks", "mny", "pd", "total"];
 
@@ -340,57 +361,99 @@
     base = base && typeof base === "object" ? base : {};
     override = override && typeof override === "object" ? override : {};
 
-    var baseFa = (base.fa_targets && typeof base.fa_targets === "object") ? base.fa_targets : {};
-    var ovFa = (override.fa_targets && typeof override.fa_targets === "object") ? override.fa_targets : {};
-
-    var fa = {};
-    for (var i = 0; i < SERVICE_KEYS.length; i++) {
-      var k = SERVICE_KEYS[i];
-      var ov = num(ovFa[k]);
-      var bv = num(baseFa[k]);
-      if (ov !== null && ov > 0) fa[k] = { value: ov, source: "local" };
-      else if (bv !== null && bv > 0) fa[k] = { value: bv, source: "repo" };
-      else fa[k] = { value: null, source: null };
+    /** 1 グループ（fa_targets / fy_targets）を repo + local で畳む。 */
+    function foldGroup(baseObj, ovObj) {
+      var g = {};
+      for (var i = 0; i < SERVICE_KEYS.length; i++) {
+        var k = SERVICE_KEYS[i];
+        var ov = num(ovObj[k]);
+        var bv = num(baseObj[k]);
+        if (ov !== null && ov > 0) g[k] = { value: ov, source: "local" };
+        else if (bv !== null && bv > 0) g[k] = { value: bv, source: "repo" };
+        else g[k] = { value: null, source: null };
+      }
+      // total 未設定でも 3 サービスすべてに目標があれば合計を導出（出所を derived と明示）
+      if (g.total.value === null) {
+        var sum = 0, all = true;
+        ["lks", "mny", "pd"].forEach(function (k2) {
+          if (g[k2].value === null) all = false; else sum += g[k2].value;
+        });
+        if (all && sum > 0) g.total = { value: sum, source: "derived" };
+      }
+      return g;
     }
 
-    // total 未設定でも 3 サービスすべてに目標があれば合計を導出（出所を derived と明示）
-    if (fa.total.value === null) {
-      var sum = 0, all = true;
-      ["lks", "mny", "pd"].forEach(function (k2) {
-        if (fa[k2].value === null) all = false; else sum += fa[k2].value;
-      });
-      if (all && sum > 0) fa.total = { value: sum, source: "derived" };
+    /**
+     * 明示 total と 3 サービスの合計が食い違っているか（契約 v1.3 / R4 Minor-4）。
+     * derived な total は定義上一致するので対象外。乖離 3% 超のときだけ返す。
+     */
+    function mismatchOf(g) {
+      if (g.total.value === null || g.total.source === "derived") return null;
+      var sum = 0;
+      for (var i = 0; i < 3; i++) {
+        var v = g[["lks", "mny", "pd"][i]].value;
+        if (v === null) return null;
+        sum += v;
+      }
+      var diff = g.total.value - sum;
+      var rate = Math.abs(diff) / g.total.value;
+      return rate > TOTAL_MISMATCH_TOL ? { sum: sum, diff: diff, rate: rate } : null;
     }
 
+    var obj = function (o) { return (o && typeof o === "object") ? o : {}; };
+    var baseFa = obj(base.fa_targets), ovFa = obj(override.fa_targets);
+    var baseFy = obj(base.fy_targets), ovFy = obj(override.fy_targets);
+
+    var fa = foldGroup(baseFa, ovFa);
+    var fy = foldGroup(baseFy, ovFy);
+
+    // 拠点の成約目標。0 は「未設定」に丸める（契約 v1.2.1 / R4 Minor-5）。
     var ovK = num(override.kyoten_conv_target);
     var baseK = num(base.kyoten_conv_target);
     var kyoten;
-    if (ovK !== null && ovK >= 0) kyoten = { value: ovK, source: "local" };
-    else if (baseK !== null && baseK >= 0) kyoten = { value: baseK, source: "repo" };
+    if (ovK !== null && ovK > 0) kyoten = { value: ovK, source: "local" };
+    else if (baseK !== null && baseK > 0) kyoten = { value: baseK, source: "repo" };
     else kyoten = { value: null, source: null };
 
-    var baseYomi = (base.yomi && typeof base.yomi === "object") ? base.yomi : {};
-    var ovYomi = (override.yomi && typeof override.yomi === "object") ? override.yomi : {};
+    var baseYomi = obj(base.yomi), ovYomi = obj(override.yomi);
     var comparable = ovYomi.comparable !== undefined ? !!ovYomi.comparable
       : baseYomi.comparable !== undefined ? !!baseYomi.comparable
         : DEFAULT_TARGETS.yomi.comparable;
 
-    var hasAnyFa = false;
-    for (var j = 0; j < SERVICE_KEYS.length; j++) if (fa[SERVICE_KEYS[j]].value !== null) hasAnyFa = true;
+    var hasAnyFa = false, hasAnyFy = false;
+    for (var j = 0; j < SERVICE_KEYS.length; j++) {
+      if (fa[SERVICE_KEYS[j]].value !== null) hasAnyFa = true;
+      if (fy[SERVICE_KEYS[j]].value !== null) hasAnyFy = true;
+    }
+
+    // 「この端末の設定あり」は override の実キーで判定する（R4 Minor-11）。
+    // 採用されなかった上書き（0・負値）は残さない前提だが、念のため有効値だけを数える。
+    var hasLocalOverride = (function () {
+      for (var x = 0; x < SERVICE_KEYS.length; x++) {
+        var kx = SERVICE_KEYS[x];
+        var a = num(ovFa[kx]), b = num(ovFy[kx]);
+        if ((a !== null && a > 0) || (b !== null && b > 0)) return true;
+      }
+      if (ovK !== null && ovK > 0) return true;
+      if (ovYomi.comparable !== undefined || ovYomi.note !== undefined) return true;
+      return false;
+    })();
 
     return {
       fa: fa,
+      fy: fy,
       kyotenConvTarget: kyoten,
       yomi: {
         comparable: comparable,
         note: (ovYomi.note || baseYomi.note || DEFAULT_TARGETS.yomi.note)
       },
       note: base.note || "",
+      fyNote: base.fy_note || "",
       hasAnyFa: hasAnyFa,
-      hasLocalOverride: (function () {
-        for (var x = 0; x < SERVICE_KEYS.length; x++) if (fa[SERVICE_KEYS[x]].source === "local") return true;
-        return kyoten.source === "local";
-      })()
+      hasAnyFy: hasAnyFy,
+      faTotalMismatch: mismatchOf(fa),
+      fyTotalMismatch: mismatchOf(fy),
+      hasLocalOverride: hasLocalOverride
     };
   }
 
@@ -453,6 +516,7 @@
       actual: actual,
       remaining: remaining,
       remainingDays: days,
+      noDaysLeft: days <= 0,
       neededPace: neededPace,
       unreachable: unreachable,
       pace: pace,
@@ -787,11 +851,18 @@
     }
 
     var validTotals = paceDefaults.validTotals;
+    /**
+     * 成約進捗だけは「基準日当日を除いた残り日数」を使う（契約 v1.2.1 / R4 Important-1）。
+     * 実績（q6 の n_valid 合計）には基準日当日ぶんが既に入っているため、
+     * 残日数にも当日を含めると同じ 1 日を両側で数えてしまい、着地が楽観側へずれる。
+     * ③（FA）の remainingDays と meta.remainingDays は従来どおり当日を含む（定義が別物）。
+     */
+    var convDays = Math.max(0, remainingDays - 1);
     var convProgressOnline = convProgress({
       label: CH_ONLINE,
       plan: planOnline,
       actual: validTotals[CH_ONLINE] || 0,
-      remainingDays: remainingDays,
+      remainingDays: convDays,
       pace: paceOn,
       src: planSrc,
       asOf: planAsOf
@@ -800,7 +871,7 @@
       label: CH_KYOTEN,
       plan: targets.kyotenConvTarget.value,
       actual: validTotals[CH_KYOTEN] || 0,
-      remainingDays: remainingDays,
+      remainingDays: convDays,
       pace: paceKy,
       src: targets.kyotenConvTarget.source === "local" ? "手入力(この端末)"
         : targets.kyotenConvTarget.source === "repo" ? "手入力(targets.json)" : null,
@@ -949,6 +1020,8 @@
       conv: {
         online: convProgressOnline,
         kyoten: convProgressKyoten,
+        // 成約進捗の残日数（基準日当日を除く。meta.remainingDays とは 1 日ずれる）
+        days: convDays,
         hasPlan: convProgressOnline.hasPlan || convProgressKyoten.hasPlan
       },
       yomi: yomi,
@@ -957,6 +1030,300 @@
         q4_lks_channel_booked: q4.length, q5_conv_profile: q5.length, q6_conv_actuals: q6.length,
         q7_conv_plan: q7.length, q8_yomi: q8.length
       }
+    };
+  }
+
+  /* ------------------------------------------------------------------ *
+   * fySim — 通期達成シミュレーション（契約 v1.3）
+   * ------------------------------------------------------------------ */
+
+  /** 'YYYY-MM' に n ヶ月足す（n は負も可）。 */
+  function addMonths(ym, n) {
+    var m = /^(\d{4})-(\d{2})/.exec(String(ym || ""));
+    if (!m) return "";
+    var t = (+m[1]) * 12 + (+m[2] - 1) + n;
+    var y = Math.floor(t / 12), mo = t - y * 12 + 1;
+    return y + "-" + (mo < 10 ? "0" + mo : "" + mo);
+  }
+
+  /** 'YYYY-MM' が属する年度（4月開始）の開始年。2026-03 → 2025 / 2026-04 → 2026。 */
+  function fyStartYearOf(ym) {
+    var m = /^(\d{4})-(\d{2})/.exec(String(ym || ""));
+    if (!m) return null;
+    return (+m[2]) >= FY_START_MONTH ? +m[1] : (+m[1]) - 1;
+  }
+
+  function band(v) { return { low: v, central: v, high: v }; }
+  function addBand(a, b) { return { low: a.low + b.low, central: a.central + b.central, high: a.high + b.high }; }
+
+  /**
+   * 通期（年度 4月〜3月）の着地シミュレーション。純関数。
+   *
+   * 精度の注意: 将来月は「社内売上ヨミ × バイアス補正 ÷ オンライン構成比」という粗い推定で、
+   * 当月の ①〜④ 積み上げモデルとは精度が別物。UI で必ず明示すること。
+   *
+   * @param {object} model buildModel の結果
+   * @param {object} data  latest.json 形状（q1 / q8 / targets を参照する）
+   * @param {object} [sim] {lksAdjPct, mnyMonthly, pdMonthly, perMonthLksOverride:{ym:円}, targets}
+   */
+  function fySim(model, data, sim) {
+    model = model || {};
+    data = data || {};
+    sim = sim || {};
+
+    var meta = model.meta || {};
+    var targetMonth = String(meta.targetMonth || data.target_month || "");
+    var fyStart = fyStartYearOf(targetMonth);
+    if (fyStart === null) {
+      return { available: false, reason: "no_target_month", months: [], fyLabel: "" };
+    }
+
+    var fyFirst = fyStart + "-04";
+    var monthKeys = [];
+    for (var i = 0; i < 12; i++) monthKeys.push(addMonths(fyFirst, i));
+
+    // --- 実績（q1）。model.history があればそれを、無ければ data から直接。 ---
+    var histMap = {};
+    var hist = isArr(model.history) ? model.history : null;
+    if (hist) {
+      for (var hi = 0; hi < hist.length; hi++) histMap[hist[hi].ym] = hist[hi];
+    } else {
+      var q1 = rowsOf(data, "q1_official_monthly");
+      for (var qi = 0; qi < q1.length; qi++) {
+        histMap[String(q1[qi].year_month)] = {
+          ym: String(q1[qi].year_month),
+          lks: n0(q1[qi].lks, 0), mny: n0(q1[qi].mny, 0), pd: n0(q1[qi].pd, 0)
+        };
+      }
+    }
+    /** 当該月に「すでに計上済み」の額（未来月なら前受計上分）。 */
+    function booked(ym) {
+      var h = histMap[ym];
+      return {
+        lks: h ? n0(h.lks, 0) : 0, mny: h ? n0(h.mny, 0) : 0, pd: h ? n0(h.pd, 0) : 0,
+        present: !!h
+      };
+    }
+
+    /** 対象月より前の「直近 n 確定月」の平均（欠損月は飛ばす）。 */
+    function recentAvg(key) {
+      var vals = [];
+      for (var k = 1; k <= 24 && vals.length < RECENT_MONTHS; k++) {
+        var h = histMap[addMonths(targetMonth, -k)];
+        if (h) vals.push(n0(h[key], 0));
+      }
+      if (!vals.length) return 0;
+      var s = 0;
+      for (var v = 0; v < vals.length; v++) s += vals[v];
+      return s / vals.length;
+    }
+    var recent = { lks: recentAvg("lks"), mny: recentAvg("mny"), pd: recentAvg("pd"), n: RECENT_MONTHS };
+
+    // --- 社内売上ヨミ（q8） ---
+    var yomiMap = {};
+    var q8 = rowsOf(data, "q8_yomi");
+    for (var yi = 0; yi < q8.length; yi++) {
+      var ym8 = String(q8[yi].month || ""), yv = num(q8[yi].yomi_total);
+      if (ym8 && yv !== null) yomiMap[ym8] = yv;
+    }
+
+    // --- オンライン構成比（q4 当月）。取れなければ 1（＝割り戻さない）。 ---
+    var onlineShare = 0;
+    var chs = (model.lks && isArr(model.lks.channels)) ? model.lks.channels : [];
+    for (var ci = 0; ci < chs.length; ci++) if (chs[ci].channel === CH_ONLINE) onlineShare = n0(chs[ci].share, 0);
+    var shareFallback = !(onlineShare > 0);
+    var shareDiv = shareFallback ? 1 : onlineShare;
+
+    // --- シミュレーション入力 ---
+    var adjPct = num(sim.lksAdjPct);
+    if (adjPct === null) adjPct = 0;
+    adjPct = clamp(adjPct, -100, 200);
+    var adjF = Math.max(0, 1 + adjPct / 100);
+
+    var mnyMonthly = num(sim.mnyMonthly);
+    var mnyIsDefault = mnyMonthly === null;
+    if (mnyIsDefault) mnyMonthly = recent.mny;
+    mnyMonthly = Math.max(0, mnyMonthly);
+
+    var pdMonthly = num(sim.pdMonthly);
+    var pdIsDefault = pdMonthly === null;
+    if (pdIsDefault) pdMonthly = recent.pd;
+    pdMonthly = Math.max(0, pdMonthly);
+
+    var ovr = (sim.perMonthLksOverride && typeof sim.perMonthLksOverride === "object")
+      ? sim.perMonthLksOverride : {};
+
+    // --- 月次行 ---
+    var months = [], overrideCount = 0, missingActual = 0, flooredCount = 0;
+    var sums = {
+      actual: { lks: 0, mny: 0, pd: 0, total: 0 },
+      future: { lks: band(0), mny: band(0), pd: band(0), total: band(0) }
+    };
+    var current = null;
+
+    for (var mi = 0; mi < monthKeys.length; mi++) {
+      var ym = monthKeys[mi];
+      var bf = booked(ym);
+      var status = ym < targetMonth ? "actual" : (ym === targetMonth ? "current" : "future");
+      var row = {
+        ym: ym,
+        month: +ym.slice(5, 7),
+        label: (+ym.slice(5, 7)) + "月",
+        status: status,
+        bookedForward: { lks: bf.lks, mny: bf.mny, pd: bf.pd },
+        present: bf.present,
+        basis: null, yomi: null, floored: false, editable: false
+      };
+
+      if (status === "actual") {
+        if (!bf.present) missingActual++;
+        row.lks = band(bf.lks); row.mny = band(bf.mny); row.pd = band(bf.pd);
+        row.basis = bf.present ? "q1" : "missing";
+        sums.actual.lks += bf.lks; sums.actual.mny += bf.mny; sums.actual.pd += bf.pd;
+      } else if (status === "current") {
+        var L1 = (model.lks && model.lks.landing) || band(bf.lks);
+        var M1 = (model.mny && model.mny.landing) || band(bf.mny);
+        var P1c = (model.pd && model.pd.landing) || band(bf.pd);
+        row.lks = { low: L1.low, central: L1.central, high: L1.high };
+        row.mny = { low: M1.low, central: M1.central, high: M1.high };
+        row.pd = { low: P1c.low, central: P1c.central, high: P1c.high };
+        row.basis = "model";
+      } else {
+        row.editable = true;
+        var ov = num(ovr[ym]);
+        if (ov !== null) {
+          row.lks = band(Math.max(0, ov));
+          row.basis = "override";
+          overrideCount++;
+        } else if (yomiMap[ym] !== undefined) {
+          var yv2 = yomiMap[ym];
+          row.yomi = yv2;
+          var est = {};
+          var fl = false;
+          ["low", "central", "high"].forEach(function (b) {
+            var e = yv2 / YOMI_BIAS[b] / shareDiv * adjF;
+            if (bf.lks > e) fl = true;
+            est[b] = Math.max(bf.lks, e);
+          });
+          row.lks = est;
+          row.basis = "yomi";
+          row.floored = fl;
+          if (fl) flooredCount++;
+        } else {
+          var av = Math.max(bf.lks, recent.lks * adjF);
+          row.lks = band(av);
+          row.basis = "avg3";
+          row.floored = bf.lks > recent.lks * adjF;
+          if (row.floored) flooredCount++;
+        }
+        row.mny = band(Math.max(bf.mny, mnyMonthly));
+        row.pd = band(Math.max(bf.pd, pdMonthly));
+        sums.future.lks = addBand(sums.future.lks, row.lks);
+        sums.future.mny = addBand(sums.future.mny, row.mny);
+        sums.future.pd = addBand(sums.future.pd, row.pd);
+      }
+
+      row.total = addBand(addBand(row.lks, row.mny), row.pd);
+      if (status === "future") sums.future.total = addBand(sums.future.total, row.total);
+      if (status === "current") current = row;
+      months.push(row);
+    }
+    sums.actual.total = sums.actual.lks + sums.actual.mny + sums.actual.pd;
+
+    var actualCount = 0, futureCount = 0;
+    for (var mj = 0; mj < months.length; mj++) {
+      if (months[mj].status === "actual") actualCount++;
+      else if (months[mj].status === "future") futureCount++;
+    }
+
+    // --- 通期合計 ---
+    var curBand = current
+      ? { lks: current.lks, mny: current.mny, pd: current.pd, total: current.total }
+      : { lks: band(0), mny: band(0), pd: band(0), total: band(0) };
+    var fyTotal = {};
+    ["lks", "mny", "pd"].forEach(function (k) {
+      fyTotal[k] = addBand(addBand(band(sums.actual[k]), curBand[k]), sums.future[k]);
+    });
+    fyTotal.total = addBand(addBand(band(sums.actual.total), curBand.total), sums.future.total);
+
+    // --- 累積（チャート用・central と band） ---
+    var run = band(0), cumulative = [];
+    for (var mk = 0; mk < months.length; mk++) {
+      run = addBand(run, months[mk].total);
+      cumulative.push({ ym: months[mk].ym, status: months[mk].status, low: run.low, central: run.central, high: run.high });
+    }
+
+    // --- 目標 ---
+    var tAll = (model.targets && model.targets.fy) ? model.targets : normalizeTargets(data.targets, sim.targets);
+    var fyT = tAll.fy;
+    var goals = {};
+    SERVICE_KEYS.forEach(function (k) {
+      var slot = fyT[k] || { value: null, source: null };
+      var landing = fyTotal[k].central;
+      var need = null;
+      if (slot.value !== null && futureCount > 0) {
+        need = Math.max(0, slot.value - sums.actual[k] - curBand[k].central) / futureCount;
+      }
+      goals[k] = {
+        target: slot.value,
+        source: slot.source,
+        diff: targetDiff(landing, slot.value),
+        needPerFutureMonth: need,
+        futureCount: futureCount
+      };
+    });
+
+    // --- 前年度通期（q1 に前年度分がそろっているときだけ） ---
+    var prevKeys = [];
+    for (var pi = 0; pi < 12; pi++) prevKeys.push(addMonths((fyStart - 1) + "-04", pi));
+    var prevPresent = 0, prevSum = { lks: 0, mny: 0, pd: 0 };
+    for (var pj = 0; pj < prevKeys.length; pj++) {
+      var ph = histMap[prevKeys[pj]];
+      if (ph) {
+        prevPresent++;
+        prevSum.lks += n0(ph.lks, 0); prevSum.mny += n0(ph.mny, 0); prevSum.pd += n0(ph.pd, 0);
+      }
+    }
+    var prevAvailable = prevPresent === 12;
+    var prevTotal = prevSum.lks + prevSum.mny + prevSum.pd;
+    var prevFy = {
+      available: prevAvailable,
+      label: (fyStart - 1) + "年度",
+      first: prevKeys[0], last: prevKeys[11],
+      present: prevPresent, expected: 12,
+      lks: prevAvailable ? prevSum.lks : null,
+      mny: prevAvailable ? prevSum.mny : null,
+      pd: prevAvailable ? prevSum.pd : null,
+      total: prevAvailable ? prevTotal : null,
+      yoy: (prevAvailable && prevTotal > 0) ? (fyTotal.total.central / prevTotal - 1) : null,
+      yoyDiff: prevAvailable ? (fyTotal.total.central - prevTotal) : null
+    };
+
+    return {
+      available: true,
+      fyStartYear: fyStart,
+      fyLabel: fyStart + "年度",
+      first: monthKeys[0],
+      last: monthKeys[11],
+      targetMonth: targetMonth,
+      months: months,
+      cumulative: cumulative,
+      actual: sums.actual,
+      currentBand: curBand,
+      future: sums.future,
+      fyTotal: fyTotal,
+      counts: {
+        actual: actualCount, future: futureCount, current: current ? 1 : 0,
+        overrides: overrideCount, missingActual: missingActual, floored: flooredCount
+      },
+      goals: goals,
+      prevFy: prevFy,
+      defaults: { lksAdjPct: 0, mnyMonthly: recent.mny, pdMonthly: recent.pd, recentLks: recent.lks, recentMonths: RECENT_MONTHS },
+      inputs: {
+        lksAdjPct: adjPct, mnyMonthly: mnyMonthly, pdMonthly: pdMonthly,
+        mnyIsDefault: mnyIsDefault, pdIsDefault: pdIsDefault, overrideCount: overrideCount
+      },
+      params: { onlineShare: shareDiv, onlineShareFallback: shareFallback, bias: YOMI_BIAS, recentMonths: RECENT_MONTHS }
     };
   }
 
@@ -1009,8 +1376,15 @@
     // 主 API
     parseBqResult: parseBqResult,
     buildModel: buildModel,
+    fySim: fySim,
     // 補助（UI / テスト用）
     CHANNELS: CHANNELS,
+    FY_START_MONTH: FY_START_MONTH,
+    YOMI_BIAS: YOMI_BIAS,
+    RECENT_MONTHS: RECENT_MONTHS,
+    TOTAL_MISMATCH_TOL: TOTAL_MISMATCH_TOL,
+    addMonths: addMonths,
+    fyStartYearOf: fyStartYearOf,
     CONV_CHANNELS: CONV_CHANNELS,
     QUERY_KEYS: QUERY_KEYS,
     K_FALLBACK: K_FALLBACK,

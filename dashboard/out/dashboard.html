@@ -213,6 +213,9 @@ li { margin-bottom: .3em; }
 .chip.is-crit .dot { background: var(--critical); }
 .chip.is-info    { background: var(--info-bg);     border-color: transparent; color: var(--ink-2); }
 .chip.is-info .dot { background: var(--measure); }
+/* 入力の却下・目標の不整合など、その場で出す注意の行（長文になるので折り返す） */
+.warnrow { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
+.warnrow .chip { white-space: normal; }
 
 .btn {
   appearance: none; border: 1px solid var(--rule-strong); border-radius: 3px;
@@ -283,11 +286,11 @@ li { margin-bottom: .3em; }
 .bullet-host { margin-top: 14px; }
 
 /* ------------------------------ 成約進捗 ------------------------------ */
-.convgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 18px 26px; }
+.convgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); gap: 18px 26px; }
 .convblk .top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin-bottom: 2px; }
 .convblk .top h3 { font-size: 13.5px; }
 .convblk .top .spacer { flex: 1 1 auto; }
-.convblk .facts { margin-top: 10px; display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 8px 12px; }
+.convblk .facts { margin-top: 10px; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(92px, 100%), 1fr)); gap: 8px 12px; }
 .convblk .fact .k { font-size: 11px; color: var(--ink-3); display: block; }
 .convblk .fact .v { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .convblk .fact .v small { font-size: 11px; font-weight: 400; color: var(--ink-3); margin-left: 2px; }
@@ -337,6 +340,18 @@ td.n, th.n { font-variant-numeric: tabular-nums; }
 .smallmult .panel h3 { font-size: 12.5px; margin-bottom: 1px; }
 .smallmult .panel .axisnote { font-size: 11px; color: var(--ink-3); margin-bottom: 6px; }
 
+/* ------------------------------ 通期シミュレーション ------------------------------ */
+.fy-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr)); gap: 18px; }
+.fy-charts .panel { min-width: 0; }
+.fy-charts .panel h3 { font-size: 12.5px; margin-bottom: 1px; }
+.fy-charts .panel .axisnote { font-size: 11px; color: var(--ink-3); margin-bottom: 6px; }
+#tbl-fy input[type="number"] {
+  font-size: 13px; padding: 2px 6px; text-align: right; max-width: 110px; min-width: 74px;
+}
+#tbl-fy tr.is-current > td { background: var(--surface-2); }
+#tbl-fy tr.is-future > td { color: var(--ink-2); }
+#tbl-fy td.ovr { color: var(--ink); font-weight: 600; }
+
 #tip {
   position: fixed; z-index: 40; pointer-events: none; opacity: 0;
   transform: translate(-50%, -100%);
@@ -352,7 +367,7 @@ td.n, th.n { font-variant-numeric: tabular-nums; }
 #tip .r .s { color: var(--ink-2); }
 
 /* ------------------------------ シナリオ入力 ------------------------------ */
-.scen { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; align-items: end; }
+.scen { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr)); gap: 14px; align-items: end; }
 .field label { display: block; font-size: 12px; color: var(--ink-2); margin-bottom: 4px; }
 .field .hint { font-size: 11px; color: var(--ink-3); margin-top: 3px; }
 input[type="number"] {
@@ -400,7 +415,7 @@ pre {
   line-height: 1.6; color: var(--ink-2); tab-size: 2;
 }
 
-.defs { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px,1fr)); gap: 6px 28px; }
+.defs { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 6px 28px; }
 .defs .d { padding: 8px 0; border-bottom: 1px solid var(--rule); }
 .defs .d dt { font-weight: 600; font-size: 12.5px; margin-bottom: 2px; }
 .defs .d dd { margin: 0; font-size: 12.5px; color: var(--ink-2); }
@@ -488,6 +503,7 @@ dl { margin: 0; }
             <div class="hint">リポジトリの targets.json の値に戻ります</div>
           </div>
         </div>
+        <div id="tg-warn" class="warnrow" hidden></div>
         <div id="yomi-box" style="margin-top:12px"></div>
       </div>
     </details>
@@ -639,6 +655,115 @@ dl { margin: 0; }
     </details>
   </section>
 
+  <!-- ================= 通期達成シミュレーション ================= -->
+  <section class="card" id="sec-fy" aria-labelledby="h-fy" hidden>
+    <div class="sec-h">
+      <h2 id="h-fy">通期達成シミュレーション（<span id="fy-label">年度</span>）</h2>
+      <span class="spacer"></span>
+      <span class="note" id="fy-head-note"></span>
+    </div>
+
+    <div class="callout" style="margin-bottom:12px">
+      <div class="h"><span class="ic" aria-hidden="true">▲</span>将来月は粗い推定 — 当月モデルとは精度が別物</div>
+      将来月の SHElikes は「社内売上ヨミ（オンライン） ÷ バイアス補正 ÷ オンライン構成比」で置いた推定で、
+      当月の ①〜④ を積み上げた着地モデルとは<b>精度が違う</b>。SHEmoney・プロデは直近3確定月の平均を既定にしている。
+      いずれも「すでに計上済みの前受分」を下限（フロア）として使う。
+      <div id="fy-caveat-dyn" style="margin-top:6px"></div>
+    </div>
+
+    <p class="lede" id="fy-lede"></p>
+    <div class="hero-cmp" id="fy-cmp"></div>
+    <div class="hero-sub" id="fy-sub"></div>
+
+    <div class="fy-charts">
+      <div class="panel">
+        <h3>月次の着地（実績 → 当月 → 将来推定）</h3>
+        <div class="axisnote">縦軸: 百万円／3サービス合計。横軸: 4月〜翌3月。</div>
+        <div class="chart" id="chart-fy-monthly"></div>
+      </div>
+      <div class="panel">
+        <h3>累積（通期目標に届くか）</h3>
+        <div class="axisnote">縦軸: 百万円の累計。将来は帯が low–high。</div>
+        <div class="chart" id="chart-fy-cum"></div>
+      </div>
+    </div>
+    <div class="legend" id="legend-fy"></div>
+
+    <details id="dt-fy-targets">
+      <summary><span id="dt-fy-targets-label">通期目標を設定する</span></summary>
+      <div class="body">
+        <p class="hint" id="fy-targets-scope"></p>
+        <div class="scen">
+          <div class="field">
+            <label for="fy-total">通期 合計の目標（百万円）</label>
+            <input type="number" id="fy-total" min="0" step="1" inputmode="decimal">
+            <div class="hint" id="fy-total-src"></div>
+          </div>
+          <div class="field">
+            <label for="fy-lks">通期 SHElikes（百万円）</label>
+            <input type="number" id="fy-lks" min="0" step="1" inputmode="decimal">
+            <div class="hint" id="fy-lks-src"></div>
+          </div>
+          <div class="field">
+            <label for="fy-mny">通期 SHEmoney（百万円）</label>
+            <input type="number" id="fy-mny" min="0" step="1" inputmode="decimal">
+            <div class="hint" id="fy-mny-src"></div>
+          </div>
+          <div class="field">
+            <label for="fy-pd">通期 プロデ（百万円）</label>
+            <input type="number" id="fy-pd" min="0" step="1" inputmode="decimal">
+            <div class="hint" id="fy-pd-src"></div>
+          </div>
+        </div>
+        <div id="fy-warn" class="warnrow" hidden></div>
+      </div>
+    </details>
+
+    <details id="dt-fy-sim">
+      <summary><span id="dt-fy-sim-label">将来月の前提を調整する</span></summary>
+      <div class="body">
+        <p class="hint" id="fy-sim-scope"></p>
+        <div class="scen">
+          <div class="field">
+            <label for="in-fy-adj">SHElikes 将来月の一括調整（%）</label>
+            <input type="number" id="in-fy-adj" step="1" min="-100" max="200" inputmode="decimal">
+            <div class="hint" id="in-fy-adj-src"></div>
+          </div>
+          <div class="field">
+            <label for="in-fy-mny">SHEmoney 将来月の月次値（百万円）</label>
+            <input type="number" id="in-fy-mny" min="0" step="0.1" inputmode="decimal">
+            <div class="hint" id="in-fy-mny-src"></div>
+          </div>
+          <div class="field">
+            <label for="in-fy-pd">プロデ 将来月の月次値（百万円）</label>
+            <input type="number" id="in-fy-pd" min="0" step="0.1" inputmode="decimal">
+            <div class="hint" id="in-fy-pd-src"></div>
+          </div>
+          <div class="field">
+            <button class="btn" id="btn-fy-reset">調整を戻す</button>
+            <div class="hint">月別の上書きもまとめて消えます</div>
+          </div>
+        </div>
+      </div>
+    </details>
+
+    <div class="tablewrap" style="margin-top:14px">
+      <table id="tbl-fy">
+        <thead>
+          <tr>
+            <th>月</th><th>区分</th>
+            <th class="n">SHElikes（百万円）</th>
+            <th class="n">SHEmoney</th><th class="n">プロデ</th>
+            <th class="n">合計</th><th class="n">累積</th>
+            <th>根拠</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p class="hint" id="fy-table-note"></p>
+  </section>
+
   <!-- ================= MNY / プロデ ================= -->
   <div class="cards cards-2" id="cards-2">
     <section class="card" style="margin-top:0" aria-labelledby="h-mny">
@@ -718,10 +843,11 @@ dl { margin: 0; }
  * export:
  *   parseBqResult(bqJson[, rows])  -> 型付き rows[]
  *   buildModel(data, opts)         -> 表示用モデル
- *   normalizeTargets(base, override)   -> 目標の正規化（出所つき）
+ *   fySim(model, data, sim)        -> 通期（年度4月〜3月）達成シミュレーション
+ *   normalizeTargets(base, override)   -> 目標の正規化（出所つき・月次 fa / 通期 fy）
  *   targetDiff(landingCentral, target) -> 目標差分・達成率
  *   convProgress({plan, actual, remainingDays, pace}) -> 成約件数の進捗
- *   （補助）CHANNELS, QUERY_KEYS, defaultPaces, lastDayOfMonth, prevMonth, fmt*
+ *   （補助）CHANNELS, QUERY_KEYS, defaultPaces, lastDayOfMonth, prevMonth, addMonths, fmt*
  */
 (function (root, factory) {
   "use strict";
@@ -746,13 +872,33 @@ dl { margin: 0; }
     "q8_yomi"
   ];
 
-  /** targets.json が無い / 欠けているときの既定（契約 v1.2）。 */
+  /** targets.json が無い / 欠けているときの既定（契約 v1.2 / v1.3）。 */
   var DEFAULT_TARGETS = {
     fa_targets: { lks: null, mny: null, pd: null, total: null },
+    fy_targets: { lks: null, mny: null, pd: null, total: null },
     kyoten_conv_target: null,
     yomi: { comparable: false, note: "社内売上ヨミ(オンライン)は財務会計と定義が異なる可能性があるため参考値" },
-    note: ""
+    note: "",
+    fy_note: ""
   };
+
+  /** 明示 total と Σ(lks+mny+pd) の乖離をユーザーに知らせるしきい値（R4 Minor-4）。 */
+  var TOTAL_MISMATCH_TOL = 0.03;
+
+  /* --- 通期シミュレーション（契約 v1.3） --- */
+
+  /** 年度の開始月（SHE の年度は 4月〜3月）。 */
+  var FY_START_MONTH = 4;
+
+  /**
+   * 社内売上ヨミ（q8）の一貫過大バイアス。T4 バックテスト: 確定3ヶ月で +2.6〜+3.8%。
+   * 将来月 LKS = ヨミ ÷ bias（central=1.031 / low=1.038 / high=1.026）。
+   * low ほど大きく割り引く＝保守側。
+   */
+  var YOMI_BIAS = { low: 1.038, central: 1.031, high: 1.026 };
+
+  /** 将来月の既定値・ヨミ欠損月のフォールバックに使う「直近 n 確定月」の n。 */
+  var RECENT_MONTHS = 3;
 
   var SERVICE_KEYS = ["lks", "mny", "pd", "total"];
 
@@ -1049,57 +1195,99 @@ dl { margin: 0; }
     base = base && typeof base === "object" ? base : {};
     override = override && typeof override === "object" ? override : {};
 
-    var baseFa = (base.fa_targets && typeof base.fa_targets === "object") ? base.fa_targets : {};
-    var ovFa = (override.fa_targets && typeof override.fa_targets === "object") ? override.fa_targets : {};
-
-    var fa = {};
-    for (var i = 0; i < SERVICE_KEYS.length; i++) {
-      var k = SERVICE_KEYS[i];
-      var ov = num(ovFa[k]);
-      var bv = num(baseFa[k]);
-      if (ov !== null && ov > 0) fa[k] = { value: ov, source: "local" };
-      else if (bv !== null && bv > 0) fa[k] = { value: bv, source: "repo" };
-      else fa[k] = { value: null, source: null };
+    /** 1 グループ（fa_targets / fy_targets）を repo + local で畳む。 */
+    function foldGroup(baseObj, ovObj) {
+      var g = {};
+      for (var i = 0; i < SERVICE_KEYS.length; i++) {
+        var k = SERVICE_KEYS[i];
+        var ov = num(ovObj[k]);
+        var bv = num(baseObj[k]);
+        if (ov !== null && ov > 0) g[k] = { value: ov, source: "local" };
+        else if (bv !== null && bv > 0) g[k] = { value: bv, source: "repo" };
+        else g[k] = { value: null, source: null };
+      }
+      // total 未設定でも 3 サービスすべてに目標があれば合計を導出（出所を derived と明示）
+      if (g.total.value === null) {
+        var sum = 0, all = true;
+        ["lks", "mny", "pd"].forEach(function (k2) {
+          if (g[k2].value === null) all = false; else sum += g[k2].value;
+        });
+        if (all && sum > 0) g.total = { value: sum, source: "derived" };
+      }
+      return g;
     }
 
-    // total 未設定でも 3 サービスすべてに目標があれば合計を導出（出所を derived と明示）
-    if (fa.total.value === null) {
-      var sum = 0, all = true;
-      ["lks", "mny", "pd"].forEach(function (k2) {
-        if (fa[k2].value === null) all = false; else sum += fa[k2].value;
-      });
-      if (all && sum > 0) fa.total = { value: sum, source: "derived" };
+    /**
+     * 明示 total と 3 サービスの合計が食い違っているか（契約 v1.3 / R4 Minor-4）。
+     * derived な total は定義上一致するので対象外。乖離 3% 超のときだけ返す。
+     */
+    function mismatchOf(g) {
+      if (g.total.value === null || g.total.source === "derived") return null;
+      var sum = 0;
+      for (var i = 0; i < 3; i++) {
+        var v = g[["lks", "mny", "pd"][i]].value;
+        if (v === null) return null;
+        sum += v;
+      }
+      var diff = g.total.value - sum;
+      var rate = Math.abs(diff) / g.total.value;
+      return rate > TOTAL_MISMATCH_TOL ? { sum: sum, diff: diff, rate: rate } : null;
     }
 
+    var obj = function (o) { return (o && typeof o === "object") ? o : {}; };
+    var baseFa = obj(base.fa_targets), ovFa = obj(override.fa_targets);
+    var baseFy = obj(base.fy_targets), ovFy = obj(override.fy_targets);
+
+    var fa = foldGroup(baseFa, ovFa);
+    var fy = foldGroup(baseFy, ovFy);
+
+    // 拠点の成約目標。0 は「未設定」に丸める（契約 v1.2.1 / R4 Minor-5）。
     var ovK = num(override.kyoten_conv_target);
     var baseK = num(base.kyoten_conv_target);
     var kyoten;
-    if (ovK !== null && ovK >= 0) kyoten = { value: ovK, source: "local" };
-    else if (baseK !== null && baseK >= 0) kyoten = { value: baseK, source: "repo" };
+    if (ovK !== null && ovK > 0) kyoten = { value: ovK, source: "local" };
+    else if (baseK !== null && baseK > 0) kyoten = { value: baseK, source: "repo" };
     else kyoten = { value: null, source: null };
 
-    var baseYomi = (base.yomi && typeof base.yomi === "object") ? base.yomi : {};
-    var ovYomi = (override.yomi && typeof override.yomi === "object") ? override.yomi : {};
+    var baseYomi = obj(base.yomi), ovYomi = obj(override.yomi);
     var comparable = ovYomi.comparable !== undefined ? !!ovYomi.comparable
       : baseYomi.comparable !== undefined ? !!baseYomi.comparable
         : DEFAULT_TARGETS.yomi.comparable;
 
-    var hasAnyFa = false;
-    for (var j = 0; j < SERVICE_KEYS.length; j++) if (fa[SERVICE_KEYS[j]].value !== null) hasAnyFa = true;
+    var hasAnyFa = false, hasAnyFy = false;
+    for (var j = 0; j < SERVICE_KEYS.length; j++) {
+      if (fa[SERVICE_KEYS[j]].value !== null) hasAnyFa = true;
+      if (fy[SERVICE_KEYS[j]].value !== null) hasAnyFy = true;
+    }
+
+    // 「この端末の設定あり」は override の実キーで判定する（R4 Minor-11）。
+    // 採用されなかった上書き（0・負値）は残さない前提だが、念のため有効値だけを数える。
+    var hasLocalOverride = (function () {
+      for (var x = 0; x < SERVICE_KEYS.length; x++) {
+        var kx = SERVICE_KEYS[x];
+        var a = num(ovFa[kx]), b = num(ovFy[kx]);
+        if ((a !== null && a > 0) || (b !== null && b > 0)) return true;
+      }
+      if (ovK !== null && ovK > 0) return true;
+      if (ovYomi.comparable !== undefined || ovYomi.note !== undefined) return true;
+      return false;
+    })();
 
     return {
       fa: fa,
+      fy: fy,
       kyotenConvTarget: kyoten,
       yomi: {
         comparable: comparable,
         note: (ovYomi.note || baseYomi.note || DEFAULT_TARGETS.yomi.note)
       },
       note: base.note || "",
+      fyNote: base.fy_note || "",
       hasAnyFa: hasAnyFa,
-      hasLocalOverride: (function () {
-        for (var x = 0; x < SERVICE_KEYS.length; x++) if (fa[SERVICE_KEYS[x]].source === "local") return true;
-        return kyoten.source === "local";
-      })()
+      hasAnyFy: hasAnyFy,
+      faTotalMismatch: mismatchOf(fa),
+      fyTotalMismatch: mismatchOf(fy),
+      hasLocalOverride: hasLocalOverride
     };
   }
 
@@ -1162,6 +1350,7 @@ dl { margin: 0; }
       actual: actual,
       remaining: remaining,
       remainingDays: days,
+      noDaysLeft: days <= 0,
       neededPace: neededPace,
       unreachable: unreachable,
       pace: pace,
@@ -1496,11 +1685,18 @@ dl { margin: 0; }
     }
 
     var validTotals = paceDefaults.validTotals;
+    /**
+     * 成約進捗だけは「基準日当日を除いた残り日数」を使う（契約 v1.2.1 / R4 Important-1）。
+     * 実績（q6 の n_valid 合計）には基準日当日ぶんが既に入っているため、
+     * 残日数にも当日を含めると同じ 1 日を両側で数えてしまい、着地が楽観側へずれる。
+     * ③（FA）の remainingDays と meta.remainingDays は従来どおり当日を含む（定義が別物）。
+     */
+    var convDays = Math.max(0, remainingDays - 1);
     var convProgressOnline = convProgress({
       label: CH_ONLINE,
       plan: planOnline,
       actual: validTotals[CH_ONLINE] || 0,
-      remainingDays: remainingDays,
+      remainingDays: convDays,
       pace: paceOn,
       src: planSrc,
       asOf: planAsOf
@@ -1509,7 +1705,7 @@ dl { margin: 0; }
       label: CH_KYOTEN,
       plan: targets.kyotenConvTarget.value,
       actual: validTotals[CH_KYOTEN] || 0,
-      remainingDays: remainingDays,
+      remainingDays: convDays,
       pace: paceKy,
       src: targets.kyotenConvTarget.source === "local" ? "手入力(この端末)"
         : targets.kyotenConvTarget.source === "repo" ? "手入力(targets.json)" : null,
@@ -1658,6 +1854,8 @@ dl { margin: 0; }
       conv: {
         online: convProgressOnline,
         kyoten: convProgressKyoten,
+        // 成約進捗の残日数（基準日当日を除く。meta.remainingDays とは 1 日ずれる）
+        days: convDays,
         hasPlan: convProgressOnline.hasPlan || convProgressKyoten.hasPlan
       },
       yomi: yomi,
@@ -1666,6 +1864,300 @@ dl { margin: 0; }
         q4_lks_channel_booked: q4.length, q5_conv_profile: q5.length, q6_conv_actuals: q6.length,
         q7_conv_plan: q7.length, q8_yomi: q8.length
       }
+    };
+  }
+
+  /* ------------------------------------------------------------------ *
+   * fySim — 通期達成シミュレーション（契約 v1.3）
+   * ------------------------------------------------------------------ */
+
+  /** 'YYYY-MM' に n ヶ月足す（n は負も可）。 */
+  function addMonths(ym, n) {
+    var m = /^(\d{4})-(\d{2})/.exec(String(ym || ""));
+    if (!m) return "";
+    var t = (+m[1]) * 12 + (+m[2] - 1) + n;
+    var y = Math.floor(t / 12), mo = t - y * 12 + 1;
+    return y + "-" + (mo < 10 ? "0" + mo : "" + mo);
+  }
+
+  /** 'YYYY-MM' が属する年度（4月開始）の開始年。2026-03 → 2025 / 2026-04 → 2026。 */
+  function fyStartYearOf(ym) {
+    var m = /^(\d{4})-(\d{2})/.exec(String(ym || ""));
+    if (!m) return null;
+    return (+m[2]) >= FY_START_MONTH ? +m[1] : (+m[1]) - 1;
+  }
+
+  function band(v) { return { low: v, central: v, high: v }; }
+  function addBand(a, b) { return { low: a.low + b.low, central: a.central + b.central, high: a.high + b.high }; }
+
+  /**
+   * 通期（年度 4月〜3月）の着地シミュレーション。純関数。
+   *
+   * 精度の注意: 将来月は「社内売上ヨミ × バイアス補正 ÷ オンライン構成比」という粗い推定で、
+   * 当月の ①〜④ 積み上げモデルとは精度が別物。UI で必ず明示すること。
+   *
+   * @param {object} model buildModel の結果
+   * @param {object} data  latest.json 形状（q1 / q8 / targets を参照する）
+   * @param {object} [sim] {lksAdjPct, mnyMonthly, pdMonthly, perMonthLksOverride:{ym:円}, targets}
+   */
+  function fySim(model, data, sim) {
+    model = model || {};
+    data = data || {};
+    sim = sim || {};
+
+    var meta = model.meta || {};
+    var targetMonth = String(meta.targetMonth || data.target_month || "");
+    var fyStart = fyStartYearOf(targetMonth);
+    if (fyStart === null) {
+      return { available: false, reason: "no_target_month", months: [], fyLabel: "" };
+    }
+
+    var fyFirst = fyStart + "-04";
+    var monthKeys = [];
+    for (var i = 0; i < 12; i++) monthKeys.push(addMonths(fyFirst, i));
+
+    // --- 実績（q1）。model.history があればそれを、無ければ data から直接。 ---
+    var histMap = {};
+    var hist = isArr(model.history) ? model.history : null;
+    if (hist) {
+      for (var hi = 0; hi < hist.length; hi++) histMap[hist[hi].ym] = hist[hi];
+    } else {
+      var q1 = rowsOf(data, "q1_official_monthly");
+      for (var qi = 0; qi < q1.length; qi++) {
+        histMap[String(q1[qi].year_month)] = {
+          ym: String(q1[qi].year_month),
+          lks: n0(q1[qi].lks, 0), mny: n0(q1[qi].mny, 0), pd: n0(q1[qi].pd, 0)
+        };
+      }
+    }
+    /** 当該月に「すでに計上済み」の額（未来月なら前受計上分）。 */
+    function booked(ym) {
+      var h = histMap[ym];
+      return {
+        lks: h ? n0(h.lks, 0) : 0, mny: h ? n0(h.mny, 0) : 0, pd: h ? n0(h.pd, 0) : 0,
+        present: !!h
+      };
+    }
+
+    /** 対象月より前の「直近 n 確定月」の平均（欠損月は飛ばす）。 */
+    function recentAvg(key) {
+      var vals = [];
+      for (var k = 1; k <= 24 && vals.length < RECENT_MONTHS; k++) {
+        var h = histMap[addMonths(targetMonth, -k)];
+        if (h) vals.push(n0(h[key], 0));
+      }
+      if (!vals.length) return 0;
+      var s = 0;
+      for (var v = 0; v < vals.length; v++) s += vals[v];
+      return s / vals.length;
+    }
+    var recent = { lks: recentAvg("lks"), mny: recentAvg("mny"), pd: recentAvg("pd"), n: RECENT_MONTHS };
+
+    // --- 社内売上ヨミ（q8） ---
+    var yomiMap = {};
+    var q8 = rowsOf(data, "q8_yomi");
+    for (var yi = 0; yi < q8.length; yi++) {
+      var ym8 = String(q8[yi].month || ""), yv = num(q8[yi].yomi_total);
+      if (ym8 && yv !== null) yomiMap[ym8] = yv;
+    }
+
+    // --- オンライン構成比（q4 当月）。取れなければ 1（＝割り戻さない）。 ---
+    var onlineShare = 0;
+    var chs = (model.lks && isArr(model.lks.channels)) ? model.lks.channels : [];
+    for (var ci = 0; ci < chs.length; ci++) if (chs[ci].channel === CH_ONLINE) onlineShare = n0(chs[ci].share, 0);
+    var shareFallback = !(onlineShare > 0);
+    var shareDiv = shareFallback ? 1 : onlineShare;
+
+    // --- シミュレーション入力 ---
+    var adjPct = num(sim.lksAdjPct);
+    if (adjPct === null) adjPct = 0;
+    adjPct = clamp(adjPct, -100, 200);
+    var adjF = Math.max(0, 1 + adjPct / 100);
+
+    var mnyMonthly = num(sim.mnyMonthly);
+    var mnyIsDefault = mnyMonthly === null;
+    if (mnyIsDefault) mnyMonthly = recent.mny;
+    mnyMonthly = Math.max(0, mnyMonthly);
+
+    var pdMonthly = num(sim.pdMonthly);
+    var pdIsDefault = pdMonthly === null;
+    if (pdIsDefault) pdMonthly = recent.pd;
+    pdMonthly = Math.max(0, pdMonthly);
+
+    var ovr = (sim.perMonthLksOverride && typeof sim.perMonthLksOverride === "object")
+      ? sim.perMonthLksOverride : {};
+
+    // --- 月次行 ---
+    var months = [], overrideCount = 0, missingActual = 0, flooredCount = 0;
+    var sums = {
+      actual: { lks: 0, mny: 0, pd: 0, total: 0 },
+      future: { lks: band(0), mny: band(0), pd: band(0), total: band(0) }
+    };
+    var current = null;
+
+    for (var mi = 0; mi < monthKeys.length; mi++) {
+      var ym = monthKeys[mi];
+      var bf = booked(ym);
+      var status = ym < targetMonth ? "actual" : (ym === targetMonth ? "current" : "future");
+      var row = {
+        ym: ym,
+        month: +ym.slice(5, 7),
+        label: (+ym.slice(5, 7)) + "月",
+        status: status,
+        bookedForward: { lks: bf.lks, mny: bf.mny, pd: bf.pd },
+        present: bf.present,
+        basis: null, yomi: null, floored: false, editable: false
+      };
+
+      if (status === "actual") {
+        if (!bf.present) missingActual++;
+        row.lks = band(bf.lks); row.mny = band(bf.mny); row.pd = band(bf.pd);
+        row.basis = bf.present ? "q1" : "missing";
+        sums.actual.lks += bf.lks; sums.actual.mny += bf.mny; sums.actual.pd += bf.pd;
+      } else if (status === "current") {
+        var L1 = (model.lks && model.lks.landing) || band(bf.lks);
+        var M1 = (model.mny && model.mny.landing) || band(bf.mny);
+        var P1c = (model.pd && model.pd.landing) || band(bf.pd);
+        row.lks = { low: L1.low, central: L1.central, high: L1.high };
+        row.mny = { low: M1.low, central: M1.central, high: M1.high };
+        row.pd = { low: P1c.low, central: P1c.central, high: P1c.high };
+        row.basis = "model";
+      } else {
+        row.editable = true;
+        var ov = num(ovr[ym]);
+        if (ov !== null) {
+          row.lks = band(Math.max(0, ov));
+          row.basis = "override";
+          overrideCount++;
+        } else if (yomiMap[ym] !== undefined) {
+          var yv2 = yomiMap[ym];
+          row.yomi = yv2;
+          var est = {};
+          var fl = false;
+          ["low", "central", "high"].forEach(function (b) {
+            var e = yv2 / YOMI_BIAS[b] / shareDiv * adjF;
+            if (bf.lks > e) fl = true;
+            est[b] = Math.max(bf.lks, e);
+          });
+          row.lks = est;
+          row.basis = "yomi";
+          row.floored = fl;
+          if (fl) flooredCount++;
+        } else {
+          var av = Math.max(bf.lks, recent.lks * adjF);
+          row.lks = band(av);
+          row.basis = "avg3";
+          row.floored = bf.lks > recent.lks * adjF;
+          if (row.floored) flooredCount++;
+        }
+        row.mny = band(Math.max(bf.mny, mnyMonthly));
+        row.pd = band(Math.max(bf.pd, pdMonthly));
+        sums.future.lks = addBand(sums.future.lks, row.lks);
+        sums.future.mny = addBand(sums.future.mny, row.mny);
+        sums.future.pd = addBand(sums.future.pd, row.pd);
+      }
+
+      row.total = addBand(addBand(row.lks, row.mny), row.pd);
+      if (status === "future") sums.future.total = addBand(sums.future.total, row.total);
+      if (status === "current") current = row;
+      months.push(row);
+    }
+    sums.actual.total = sums.actual.lks + sums.actual.mny + sums.actual.pd;
+
+    var actualCount = 0, futureCount = 0;
+    for (var mj = 0; mj < months.length; mj++) {
+      if (months[mj].status === "actual") actualCount++;
+      else if (months[mj].status === "future") futureCount++;
+    }
+
+    // --- 通期合計 ---
+    var curBand = current
+      ? { lks: current.lks, mny: current.mny, pd: current.pd, total: current.total }
+      : { lks: band(0), mny: band(0), pd: band(0), total: band(0) };
+    var fyTotal = {};
+    ["lks", "mny", "pd"].forEach(function (k) {
+      fyTotal[k] = addBand(addBand(band(sums.actual[k]), curBand[k]), sums.future[k]);
+    });
+    fyTotal.total = addBand(addBand(band(sums.actual.total), curBand.total), sums.future.total);
+
+    // --- 累積（チャート用・central と band） ---
+    var run = band(0), cumulative = [];
+    for (var mk = 0; mk < months.length; mk++) {
+      run = addBand(run, months[mk].total);
+      cumulative.push({ ym: months[mk].ym, status: months[mk].status, low: run.low, central: run.central, high: run.high });
+    }
+
+    // --- 目標 ---
+    var tAll = (model.targets && model.targets.fy) ? model.targets : normalizeTargets(data.targets, sim.targets);
+    var fyT = tAll.fy;
+    var goals = {};
+    SERVICE_KEYS.forEach(function (k) {
+      var slot = fyT[k] || { value: null, source: null };
+      var landing = fyTotal[k].central;
+      var need = null;
+      if (slot.value !== null && futureCount > 0) {
+        need = Math.max(0, slot.value - sums.actual[k] - curBand[k].central) / futureCount;
+      }
+      goals[k] = {
+        target: slot.value,
+        source: slot.source,
+        diff: targetDiff(landing, slot.value),
+        needPerFutureMonth: need,
+        futureCount: futureCount
+      };
+    });
+
+    // --- 前年度通期（q1 に前年度分がそろっているときだけ） ---
+    var prevKeys = [];
+    for (var pi = 0; pi < 12; pi++) prevKeys.push(addMonths((fyStart - 1) + "-04", pi));
+    var prevPresent = 0, prevSum = { lks: 0, mny: 0, pd: 0 };
+    for (var pj = 0; pj < prevKeys.length; pj++) {
+      var ph = histMap[prevKeys[pj]];
+      if (ph) {
+        prevPresent++;
+        prevSum.lks += n0(ph.lks, 0); prevSum.mny += n0(ph.mny, 0); prevSum.pd += n0(ph.pd, 0);
+      }
+    }
+    var prevAvailable = prevPresent === 12;
+    var prevTotal = prevSum.lks + prevSum.mny + prevSum.pd;
+    var prevFy = {
+      available: prevAvailable,
+      label: (fyStart - 1) + "年度",
+      first: prevKeys[0], last: prevKeys[11],
+      present: prevPresent, expected: 12,
+      lks: prevAvailable ? prevSum.lks : null,
+      mny: prevAvailable ? prevSum.mny : null,
+      pd: prevAvailable ? prevSum.pd : null,
+      total: prevAvailable ? prevTotal : null,
+      yoy: (prevAvailable && prevTotal > 0) ? (fyTotal.total.central / prevTotal - 1) : null,
+      yoyDiff: prevAvailable ? (fyTotal.total.central - prevTotal) : null
+    };
+
+    return {
+      available: true,
+      fyStartYear: fyStart,
+      fyLabel: fyStart + "年度",
+      first: monthKeys[0],
+      last: monthKeys[11],
+      targetMonth: targetMonth,
+      months: months,
+      cumulative: cumulative,
+      actual: sums.actual,
+      currentBand: curBand,
+      future: sums.future,
+      fyTotal: fyTotal,
+      counts: {
+        actual: actualCount, future: futureCount, current: current ? 1 : 0,
+        overrides: overrideCount, missingActual: missingActual, floored: flooredCount
+      },
+      goals: goals,
+      prevFy: prevFy,
+      defaults: { lksAdjPct: 0, mnyMonthly: recent.mny, pdMonthly: recent.pd, recentLks: recent.lks, recentMonths: RECENT_MONTHS },
+      inputs: {
+        lksAdjPct: adjPct, mnyMonthly: mnyMonthly, pdMonthly: pdMonthly,
+        mnyIsDefault: mnyIsDefault, pdIsDefault: pdIsDefault, overrideCount: overrideCount
+      },
+      params: { onlineShare: shareDiv, onlineShareFallback: shareFallback, bias: YOMI_BIAS, recentMonths: RECENT_MONTHS }
     };
   }
 
@@ -1718,8 +2210,15 @@ dl { margin: 0; }
     // 主 API
     parseBqResult: parseBqResult,
     buildModel: buildModel,
+    fySim: fySim,
     // 補助（UI / テスト用）
     CHANNELS: CHANNELS,
+    FY_START_MONTH: FY_START_MONTH,
+    YOMI_BIAS: YOMI_BIAS,
+    RECENT_MONTHS: RECENT_MONTHS,
+    TOTAL_MISMATCH_TOL: TOTAL_MISMATCH_TOL,
+    addMonths: addMonths,
+    fyStartYearOf: fyStartYearOf,
     CONV_CHANNELS: CONV_CHANNELS,
     QUERY_KEYS: QUERY_KEYS,
     K_FALLBACK: K_FALLBACK,
@@ -1743,7 +2242,7 @@ dl { margin: 0; }
   };
 });
 </script>
-<script>window.__APP__={data:{"generated_at":"2026-08-25T19:19:33+09:00","basis_date":"2026-08-25","target_month":"2026-08","queries":{"q1_official_monthly":{"rows":[{"year_month":"2025-08","lks":365725385,"mny":4258938,"pd":6889460},{"year_month":"2025-09","lks":361980265,"mny":4380271,"pd":7576915},{"year_month":"2025-10","lks":375786197,"mny":4447538,"pd":8558880},{"year_month":"2025-11","lks":364396124,"mny":4666338,"pd":9545748},{"year_month":"2025-12","lks":375939467,"mny":4709470,"pd":10165103},{"year_month":"2026-01","lks":371987873,"mny":4548392,"pd":9723534},{"year_month":"2026-02","lks":331649365,"mny":4245214,"pd":9045613},{"year_month":"2026-03","lks":356468137,"mny":4420541,"pd":8654908},{"year_month":"2026-04","lks":335236140,"mny":4164079,"pd":7739234},{"year_month":"2026-05","lks":345393853,"mny":4470075,"pd":8875475},{"year_month":"2026-06","lks":341073716,"mny":4354158,"pd":8670759},{"year_month":"2026-07","lks":356607091,"mny":4619550,"pd":9080741},{"year_month":"2026-08","lks":351200806,"mny":4492633,"pd":10160505},{"year_month":"2026-09","lks":258231292,"mny":1696975,"pd":8034120},{"year_month":"2026-10","lks":213593061,"mny":1166730,"pd":7664829},{"year_month":"2026-11","lks":185989891,"mny":379418,"pd":7008848},{"year_month":"2026-12","lks":173860849,"mny":-42056,"pd":5431998},{"year_month":"2027-01","lks":156233304,"mny":-473666,"pd":3323009},{"year_month":"2027-02","lks":124486848,"mny":-646754,"pd":1673341},{"year_month":"2027-03","lks":120405354,"mny":-864412,"pd":252300},{"year_month":"2027-04","lks":99209939,"mny":-917855,"pd":0},{"year_month":"2027-05","lks":82430782,"mny":-920429,"pd":0},{"year_month":"2027-06","lks":58173404,"mny":-814722,"pd":0},{"year_month":"2027-07","lks":35478694,"mny":-636941,"pd":0},{"year_month":"2027-08","lks":9746449,"mny":-451273,"pd":0}]},"q2_lks_pending":{"rows":[{"plan_name":"スタンダードプラン","payment_type":"一括","fa_per_day_cur":453.27601492435133,"fa_per_day_prev":473.6688170616428,"n_window":430,"window_days":1681,"n_lag":173,"lag_days":3428},{"plan_name":"ライトプラン","payment_type":"一括","fa_per_day_cur":318.8453963190805,"fa_per_day_prev":322.06157828492724,"n_window":236,"window_days":944,"n_lag":25,"lag_days":493},{"plan_name":"レギュラープラン","payment_type":"一括","fa_per_day_cur":1136.5324302713889,"fa_per_day_prev":1313.8776966509113,"n_window":30,"window_days":125,"n_lag":63,"lag_days":1312},{"plan_name":"レギュラープラン","payment_type":"分割","fa_per_day_cur":882.4823488290807,"fa_per_day_prev":1221.4920590564016,"n_window":65,"window_days":308,"n_lag":173,"lag_days":3495},{"plan_name":"卒業生プラン","payment_type":"一括","fa_per_day_cur":155.27361942781104,"fa_per_day_prev":158.6633316658329,"n_window":50,"window_days":196,"n_lag":10,"lag_days":201}]},"q3_mny_pd_pending":{"rows":[{"service_key":"money","fa_per_day_cur":740.2961232260297,"fa_per_day_prev":767.2846258042669,"n_window":19,"window_days":89,"n_lag":5,"lag_days":106,"n_active_cur":262,"n_active_prev":260},{"service_key":"multicreator","fa_per_day_cur":0.0,"fa_per_day_prev":0.0,"n_window":0,"window_days":0,"n_lag":85,"lag_days":2125,"n_active_cur":85,"n_active_prev":87}]},"q4_lks_channel_booked":{"rows":[{"channel":"オンライン","n_users":32596,"booked_fa":322452468},{"channel":"拠点","n_users":3754,"booked_fa":20919091},{"channel":"分類不能","n_users":11290,"booked_fa":7742523},{"channel":"成約記録なし","n_users":888,"booked_fa":86724}]},"q5_conv_profile":{"rows":[{"channel":"オンライン","dom":1,"n_conv":14,"fa_per_conv":22290.5},{"channel":"オンライン","dom":2,"n_conv":26,"fa_per_conv":19719.5},{"channel":"オンライン","dom":3,"n_conv":26,"fa_per_conv":20211.96153846154},{"channel":"オンライン","dom":4,"n_conv":29,"fa_per_conv":15073.310344827587},{"channel":"オンライン","dom":5,"n_conv":25,"fa_per_conv":20840.2},{"channel":"オンライン","dom":6,"n_conv":31,"fa_per_conv":17288.129032258064},{"channel":"オンライン","dom":7,"n_conv":27,"fa_per_conv":14467.481481481482},{"channel":"オンライン","dom":8,"n_conv":17,"fa_per_conv":12833.411764705883},{"channel":"オンライン","dom":9,"n_conv":23,"fa_per_conv":11478.173913043478},{"channel":"オンライン","dom":10,"n_conv":26,"fa_per_conv":13795.038461538461},{"channel":"オンライン","dom":11,"n_conv":23,"fa_per_conv":15024.869565217392},{"channel":"オンライン","dom":12,"n_conv":24,"fa_per_conv":10288.791666666666},{"channel":"オンライン","dom":13,"n_conv":37,"fa_per_conv":11861.378378378378},{"channel":"オンライン","dom":14,"n_conv":24,"fa_per_conv":11825.5},{"channel":"オンライン","dom":15,"n_conv":25,"fa_per_conv":11801.08},{"channel":"オンライン","dom":16,"n_conv":26,"fa_per_conv":10430.23076923077},{"channel":"オンライン","dom":17,"n_conv":22,"fa_per_conv":6878.727272727273},{"channel":"オンライン","dom":18,"n_conv":30,"fa_per_conv":8406.4},{"channel":"オンライン","dom":19,"n_conv":22,"fa_per_conv":7338.590909090909},{"channel":"オンライン","dom":20,"n_conv":23,"fa_per_conv":7452.130434782609},{"channel":"オンライン","dom":21,"n_conv":24,"fa_per_conv":4795.416666666667},{"channel":"オンライン","dom":22,"n_conv":24,"fa_per_conv":4776.0},{"channel":"オンライン","dom":23,"n_conv":20,"fa_per_conv":2776.05},{"channel":"オンライン","dom":24,"n_conv":35,"fa_per_conv":3920.057142857143},{"channel":"オンライン","dom":25,"n_conv":35,"fa_per_conv":3491.657142857143},{"channel":"オンライン","dom":26,"n_conv":32,"fa_per_conv":2037.8125},{"channel":"オンライン","dom":27,"n_conv":19,"fa_per_conv":864.8947368421053},{"channel":"オンライン","dom":28,"n_conv":30,"fa_per_conv":1106.2666666666667},{"channel":"オンライン","dom":29,"n_conv":21,"fa_per_conv":332.95238095238096},{"channel":"オンライン","dom":30,"n_conv":38,"fa_per_conv":217.55263157894737},{"channel":"オンライン","dom":31,"n_conv":28,"fa_per_conv":0.0},{"channel":"分類不能","dom":14,"n_conv":1,"fa_per_conv":27967.0},{"channel":"分類不能","dom":16,"n_conv":1,"fa_per_conv":19233.0},{"channel":"分類不能","dom":22,"n_conv":1,"fa_per_conv":0.0},{"channel":"拠点","dom":1,"n_conv":1,"fa_per_conv":22435.0},{"channel":"拠点","dom":2,"n_conv":1,"fa_per_conv":33600.0},{"channel":"拠点","dom":3,"n_conv":1,"fa_per_conv":15224.0},{"channel":"拠点","dom":4,"n_conv":5,"fa_per_conv":19206.6},{"channel":"拠点","dom":5,"n_conv":1,"fa_per_conv":0.0},{"channel":"拠点","dom":6,"n_conv":4,"fa_per_conv":18081.0},{"channel":"拠点","dom":7,"n_conv":2,"fa_per_conv":21000.0},{"channel":"拠点","dom":8,"n_conv":4,"fa_per_conv":2700.0},{"channel":"拠点","dom":9,"n_conv":2,"fa_per_conv":18156.0},{"channel":"拠点","dom":10,"n_conv":5,"fa_per_conv":17875.6},{"channel":"拠点","dom":11,"n_conv":2,"fa_per_conv":18600.5},{"channel":"拠点","dom":12,"n_conv":2,"fa_per_conv":4200.0},{"channel":"拠点","dom":13,"n_conv":6,"fa_per_conv":9275.833333333334},{"channel":"拠点","dom":14,"n_conv":4,"fa_per_conv":11605.0},{"channel":"拠点","dom":15,"n_conv":3,"fa_per_conv":9600.0},{"channel":"拠点","dom":16,"n_conv":6,"fa_per_conv":10476.0},{"channel":"拠点","dom":17,"n_conv":1,"fa_per_conv":0.0},{"channel":"拠点","dom":18,"n_conv":3,"fa_per_conv":14400.0},{"channel":"拠点","dom":19,"n_conv":4,"fa_per_conv":7909.75},{"channel":"拠点","dom":20,"n_conv":6,"fa_per_conv":1200.0},{"channel":"拠点","dom":21,"n_conv":1,"fa_per_conv":12000.0},{"channel":"拠点","dom":22,"n_conv":1,"fa_per_conv":3599.0},{"channel":"拠点","dom":23,"n_conv":4,"fa_per_conv":2999.75},{"channel":"拠点","dom":24,"n_conv":3,"fa_per_conv":2800.0},{"channel":"拠点","dom":25,"n_conv":2,"fa_per_conv":0.0},{"channel":"拠点","dom":26,"n_conv":6,"fa_per_conv":1108.8333333333333},{"channel":"拠点","dom":27,"n_conv":2,"fa_per_conv":4799.5},{"channel":"拠点","dom":28,"n_conv":5,"fa_per_conv":1440.4},{"channel":"拠点","dom":29,"n_conv":4,"fa_per_conv":101.25},{"channel":"拠点","dom":30,"n_conv":4,"fa_per_conv":332.0},{"channel":"拠点","dom":31,"n_conv":4,"fa_per_conv":37000.0}]},"q6_conv_actuals":{"rows":[{"channel":"オンライン","dom":1,"n_all":40,"n_valid":33,"booked_fa_valid":847599},{"channel":"オンライン","dom":2,"n_all":27,"n_valid":24,"booked_fa_valid":557301},{"channel":"オンライン","dom":3,"n_all":31,"n_valid":29,"booked_fa_valid":541949},{"channel":"オンライン","dom":4,"n_all":26,"n_valid":20,"booked_fa_valid":475106},{"channel":"オンライン","dom":5,"n_all":27,"n_valid":25,"booked_fa_valid":570811},{"channel":"オンライン","dom":6,"n_all":21,"n_valid":14,"booked_fa_valid":200976},{"channel":"オンライン","dom":7,"n_all":27,"n_valid":22,"booked_fa_valid":416033},{"channel":"オンライン","dom":8,"n_all":31,"n_valid":22,"booked_fa_valid":427632},{"channel":"オンライン","dom":9,"n_all":25,"n_valid":23,"booked_fa_valid":255664},{"channel":"オンライン","dom":10,"n_all":26,"n_valid":24,"booked_fa_valid":351166},{"channel":"オンライン","dom":11,"n_all":36,"n_valid":33,"booked_fa_valid":439073},{"channel":"オンライン","dom":12,"n_all":27,"n_valid":21,"booked_fa_valid":309475},{"channel":"オンライン","dom":13,"n_all":21,"n_valid":17,"booked_fa_valid":259038},{"channel":"オンライン","dom":14,"n_all":22,"n_valid":21,"booked_fa_valid":308973},{"channel":"オンライン","dom":15,"n_all":25,"n_valid":24,"booked_fa_valid":303943},{"channel":"オンライン","dom":16,"n_all":34,"n_valid":28,"booked_fa_valid":332248},{"channel":"オンライン","dom":17,"n_all":36,"n_valid":32,"booked_fa_valid":342193},{"channel":"オンライン","dom":18,"n_all":37,"n_valid":34,"booked_fa_valid":318189},{"channel":"オンライン","dom":19,"n_all":39,"n_valid":33,"booked_fa_valid":274994},{"channel":"オンライン","dom":20,"n_all":37,"n_valid":29,"booked_fa_valid":188031},{"channel":"オンライン","dom":21,"n_all":26,"n_valid":25,"booked_fa_valid":343878},{"channel":"オンライン","dom":22,"n_all":39,"n_valid":36,"booked_fa_valid":347858},{"channel":"オンライン","dom":23,"n_all":41,"n_valid":39,"booked_fa_valid":122783},{"channel":"オンライン","dom":24,"n_all":44,"n_valid":42,"booked_fa_valid":104549},{"channel":"オンライン","dom":25,"n_all":27,"n_valid":27,"booked_fa_valid":0},{"channel":"分類不能","dom":18,"n_all":2,"n_valid":2,"booked_fa_valid":27395},{"channel":"分類不能","dom":23,"n_all":1,"n_valid":1,"booked_fa_valid":6931},{"channel":"分類不能","dom":25,"n_all":1,"n_valid":1,"booked_fa_valid":0},{"channel":"拠点","dom":1,"n_all":5,"n_valid":4,"booked_fa_valid":57983},{"channel":"拠点","dom":2,"n_all":7,"n_valid":6,"booked_fa_valid":76800},{"channel":"拠点","dom":3,"n_all":2,"n_valid":2,"booked_fa_valid":33600},{"channel":"拠点","dom":4,"n_all":5,"n_valid":3,"booked_fa_valid":43308},{"channel":"拠点","dom":5,"n_all":4,"n_valid":4,"booked_fa_valid":33633},{"channel":"拠点","dom":6,"n_all":4,"n_valid":4,"booked_fa_valid":67659},{"channel":"拠点","dom":7,"n_all":6,"n_valid":5,"booked_fa_valid":68029},{"channel":"拠点","dom":8,"n_all":3,"n_valid":2,"booked_fa_valid":54001},{"channel":"拠点","dom":9,"n_all":3,"n_valid":3,"booked_fa_valid":51601},{"channel":"拠点","dom":10,"n_all":4,"n_valid":3,"booked_fa_valid":29218},{"channel":"拠点","dom":11,"n_all":4,"n_valid":3,"booked_fa_valid":24422},{"channel":"拠点","dom":12,"n_all":3,"n_valid":3,"booked_fa_valid":12276},{"channel":"拠点","dom":13,"n_all":5,"n_valid":3,"booked_fa_valid":50425},{"channel":"拠点","dom":14,"n_all":6,"n_valid":5,"booked_fa_valid":58800},{"channel":"拠点","dom":15,"n_all":4,"n_valid":4,"booked_fa_valid":35206},{"channel":"拠点","dom":16,"n_all":5,"n_valid":4,"booked_fa_valid":38515},{"channel":"拠点","dom":17,"n_all":2,"n_valid":2,"booked_fa_valid":9600},{"channel":"拠点","dom":18,"n_all":4,"n_valid":3,"booked_fa_valid":1216},{"channel":"拠点","dom":19,"n_all":7,"n_valid":6,"booked_fa_valid":40673},{"channel":"拠点","dom":20,"n_all":3,"n_valid":3,"booked_fa_valid":2027},{"channel":"拠点","dom":21,"n_all":4,"n_valid":4,"booked_fa_valid":2838},{"channel":"拠点","dom":22,"n_all":2,"n_valid":2,"booked_fa_valid":11953},{"channel":"拠点","dom":23,"n_all":6,"n_valid":6,"booked_fa_valid":19216},{"channel":"拠点","dom":24,"n_all":5,"n_valid":5,"booked_fa_valid":8877},{"channel":"拠点","dom":25,"n_all":3,"n_valid":3,"booked_fa_valid":0}]},"q7_conv_plan":{"rows":[{"month":"2026-07","plan_regular":637.0,"plan_sutara":172.0,"src_regular":"実績","src_sutara":"実績","as_of":"2026-08-25"},{"month":"2026-08","plan_regular":639.0,"plan_sutara":207.0,"src_regular":"ヨミ","src_sutara":"ヨミ","as_of":"2026-08-25"},{"month":"2026-09","plan_regular":677.0,"plan_sutara":191.0,"src_regular":"ヨミ","src_sutara":"ヨミ","as_of":"2026-08-25"}]},"q8_yomi":{"rows":[{"month":"2026-08","yomi_total":342266659.4989925,"as_of":"2026-08-25"},{"month":"2026-09","yomi_total":331042371.03698397,"as_of":"2026-08-25"},{"month":"2026-10","yomi_total":344793286.1624259,"as_of":"2026-08-25"}]}},"targets":{"fa_targets":{"lks":null,"mny":null,"pd":null,"total":null},"kyoten_conv_target":null,"yomi":{"comparable":false,"note":"社内売上ヨミ(オンライン)は財務会計と定義が異なるため参考値。T1検証(2026-08-25): 確定3ヶ月(2026-05〜07)の月初時点ヨミはオンラインFA実績比 +2.6〜+3.8% の一貫過大(05: +3.8% / 06: +2.6% / 07: +3.2%、7月中旬時点では+3.6%)で±3%以内に収まらず comparable=false を維持。"},"note":"fa_targets は月次の目標FA(円)。null=未設定(UIは前月実績を基準線として表示)。"},"meta":{"bytes_processed":{"q1_official_monthly":3234,"q2_lks_pending":938801872,"q3_mny_pd_pending":1410966995,"q4_lks_channel_booked":861675478,"q5_conv_profile":861675478,"q6_conv_actuals":861675478,"q7_conv_plan":13580,"q8_yomi":3136}}},queries:{"q1_official_monthly":"-- q1_official_monthly: 公式月次FA(計上済み実績)。\n-- ソース: monthly_financial_accounting(スプレッドシート公式モニタリングの元テーブル)。\n-- 範囲: 当月(CURRENT_DATE('Asia/Tokyo')基準)の12ヶ月前 〜 テーブルにある未来月まで全部。\n-- 出力列: year_month STRING 'YYYY-MM' / lks INT(likes財務会計) / mny INT(money財務会計) / pd INT(likespro財務会計)\nSELECT\n  year_month,\n  `likes財務会計` AS lks,\n  `money財務会計` AS mny,\n  `likespro財務会計` AS pd\nFROM `shelikes-001.sheinc_marts_output_spreadsheet_official_monitoring.monthly_financial_accounting`\nWHERE year_month >= FORMAT_DATE('%Y-%m', DATE_SUB(DATE_TRUNC(CURRENT_DATE('Asia/Tokyo'), MONTH), INTERVAL 12 MONTH))\nORDER BY year_month","q2_lks_pending":"-- q2_lks_pending: LKS 既存会員の課金更新残(①window)・滞納/処理ラグ(④lag)をプラン×支払種別で集計。\n-- 基準日 = CURRENT_DATE('Asia/Tokyo')。当月トークン(int_membership_tokens, order_status=1, 対象4プラン)を\n--   effective_at < 基準日 → 'early' / それ以外 → 'window' に分け、order別の当月FA(int_likes_financial_accounting)と突合。\n-- 単価: fa_per_day_cur = Σ early FA ÷ Σ early 当月内有効日数。fa_per_day_prev = 前月トークン全体の同計算\n--   (月初で early が空 = fa_per_day_cur が NULL のときのフォールバック用。前月は全日 early 扱いなので全体で計算)。\n-- 新規会員除外 [契約v1.1・R1裁定]: 当月に最初の有効成約をした user(likes_conversions rn=1 が当月)の order は\n--   window(①: n_window/window_days)と lag(④: n_lag/lag_days)の両方から除外する。\n--   ①④=既存会員のみ / ②③(q5×q6)=当月新規のみ、という対称な切り分けで二重計上を防止。\n-- 防御 [契約v1.1]: all_orders は JOIN 前に order_id で1行化(重複ファンアウト防止)。\n--   m_days は COALESCE(GREATEST(...,0),0) で NULL を 0 に正規化(COUNTIF/SUM の非対称防止)。\n-- 出力列: plan_name STRING / payment_type STRING / fa_per_day_cur FLOAT(NULL可) / fa_per_day_prev FLOAT(NULL可)\n--         / n_window INT(window かつ FA=0 の件数) / window_days INT / n_lag INT(early かつ FA=0 の件数) / lag_days INT\nWITH params AS (\n  SELECT basis_date,\n    DATE_TRUNC(basis_date, MONTH) AS m_start,\n    LAST_DAY(basis_date, MONTH) AS m_end,\n    DATE_SUB(DATE_TRUNC(basis_date, MONTH), INTERVAL 1 MONTH) AS pm_start,\n    DATE_SUB(DATE_TRUNC(basis_date, MONTH), INTERVAL 1 DAY) AS pm_end\n  FROM (SELECT CURRENT_DATE('Asia/Tokyo') AS basis_date)\n),\norders AS (\n  -- order_id で1行化(all_orders の重複行による将来ファンアウト防止。MAXで決定的に代表値を選ぶ)\n  SELECT order_id, MAX(payment_type) AS payment_type, MAX(user_id) AS user_id\n  FROM `shelikes-001.sheinc_marts_accounting.all_orders`\n  GROUP BY order_id\n),\nnew_users AS (\n  SELECT e.user_id\n  FROM (\n    SELECT user_id, DATE(purchased_at) AS pdate,\n      ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY purchased_at ASC) AS rn\n    FROM `shelikes-001.sheinc_marts_fy24.likes_conversions`\n    WHERE is_valid_conversions IS TRUE\n  ) e\n  CROSS JOIN params p\n  WHERE e.rn = 1 AND e.pdate >= p.m_start\n),\ntok_cur AS (\n  SELECT t.order_id, t.plan_name, o.payment_type,\n    COALESCE(GREATEST(DATE_DIFF(LEAST(t.expires_at, p.m_end), GREATEST(t.effective_at, p.m_start), DAY) + 1, 0), 0) AS m_days,\n    IF(t.effective_at < p.basis_date, 'early', 'window') AS grp,\n    (nu.user_id IS NOT NULL) AS is_new_user\n  FROM `shelikes-001.sheinc_intermediate.int_membership_tokens` t\n  JOIN orders o USING (order_id)\n  CROSS JOIN params p\n  LEFT JOIN new_users nu ON o.user_id = nu.user_id\n  WHERE t.target_month = p.m_start\n    AND t.order_status = 1\n    AND t.plan_name IN ('レギュラープラン','スタンダードプラン','ライトプラン','卒業生プラン')\n),\nfa_cur AS (\n  SELECT f.order_id,\n    SUM(f.monthly_accounting_without_tax + f.monthly_accounting_discount + f.monthly_accounting_own_expense) AS m_fa\n  FROM `shelikes-001.sheinc_intermediate.int_likes_financial_accounting` f\n  CROSS JOIN params p\n  WHERE f.target_month = p.m_start\n  GROUP BY f.order_id\n),\nj_cur AS (\n  SELECT t.*, COALESCE(f.m_fa, 0) AS m_fa\n  FROM tok_cur t LEFT JOIN fa_cur f USING (order_id)\n),\ncur_agg AS (\n  SELECT plan_name, payment_type,\n    SAFE_DIVIDE(SUM(IF(grp='early', m_fa, 0)), NULLIF(SUM(IF(grp='early', m_days, 0)), 0)) AS fa_per_day_cur,\n    COUNTIF(grp='window' AND m_fa = 0 AND NOT is_new_user) AS n_window,\n    SUM(IF(grp='window' AND m_fa = 0 AND NOT is_new_user, m_days, 0)) AS window_days,\n    COUNTIF(grp='early' AND m_fa = 0 AND NOT is_new_user) AS n_lag,\n    SUM(IF(grp='early' AND m_fa = 0 AND NOT is_new_user, m_days, 0)) AS lag_days\n  FROM j_cur\n  GROUP BY 1, 2\n),\ntok_prev AS (\n  SELECT t.order_id, t.plan_name, o.payment_type,\n    COALESCE(GREATEST(DATE_DIFF(LEAST(t.expires_at, p.pm_end), GREATEST(t.effective_at, p.pm_start), DAY) + 1, 0), 0) AS m_days\n  FROM `shelikes-001.sheinc_intermediate.int_membership_tokens` t\n  JOIN orders o USING (order_id)\n  CROSS JOIN params p\n  WHERE t.target_month = p.pm_start\n    AND t.order_status = 1\n    AND t.plan_name IN ('レギュラープラン','スタンダードプラン','ライトプラン','卒業生プラン')\n),\nfa_prev AS (\n  SELECT f.order_id,\n    SUM(f.monthly_accounting_without_tax + f.monthly_accounting_discount + f.monthly_accounting_own_expense) AS m_fa\n  FROM `shelikes-001.sheinc_intermediate.int_likes_financial_accounting` f\n  CROSS JOIN params p\n  WHERE f.target_month = p.pm_start\n  GROUP BY f.order_id\n),\nprev_agg AS (\n  SELECT t.plan_name, t.payment_type,\n    SAFE_DIVIDE(SUM(COALESCE(f.m_fa, 0)), NULLIF(SUM(t.m_days), 0)) AS fa_per_day_prev\n  FROM tok_prev t LEFT JOIN fa_prev f USING (order_id)\n  GROUP BY 1, 2\n)\nSELECT\n  c.plan_name,\n  c.payment_type,\n  c.fa_per_day_cur,\n  p.fa_per_day_prev,\n  c.n_window,\n  c.window_days,\n  c.n_lag,\n  c.lag_days\nFROM cur_agg c\nLEFT JOIN prev_agg p USING (plan_name, payment_type)\nORDER BY c.plan_name, c.payment_type","q3_mny_pd_pending":"-- q3_mny_pd_pending: MNY(money)・プロデ(multicreator)の課金更新残・滞納/処理ラグを service_key 別に集計。\n-- q2 と同じ手法(基準日 = CURRENT_DATE('Asia/Tokyo')、early/window 分割、1日単価×残日数)。\n-- FA は sheinc_marts_accounting.monthly_accounting(order_id別 当月SUM: without_tax + discount + own_expense)。\n-- 既知の仕様: multicreator の FA は marts monthly_accounting に載らない別パイプライン\n--   → fa_per_day_cur/prev は 0 または NULL になる(正しい挙動)。件数列(n_window, n_active_*)だけ意味を持つ。\n-- 新規会員除外は行わない [契約v1.1]: MNY/プロデには②③(新規成約プロファイル成分)が存在しないため。\n-- 防御 [契約v1.1]: all_orders は JOIN 前に order_id で1行化(重複ファンアウト防止)。\n--   m_days は COALESCE(GREATEST(...,0),0) で NULL を 0 に正規化(COUNTIF/SUM の非対称防止)。\n-- 出力列: service_key STRING / fa_per_day_cur FLOAT(NULL可) / fa_per_day_prev FLOAT(NULL可)\n--         / n_window INT / window_days INT / n_lag INT / lag_days INT\n--         / n_active_cur INT(当月トークン件数) / n_active_prev INT(前月トークン件数)\nWITH params AS (\n  SELECT basis_date,\n    DATE_TRUNC(basis_date, MONTH) AS m_start,\n    LAST_DAY(basis_date, MONTH) AS m_end,\n    DATE_SUB(DATE_TRUNC(basis_date, MONTH), INTERVAL 1 MONTH) AS pm_start,\n    DATE_SUB(DATE_TRUNC(basis_date, MONTH), INTERVAL 1 DAY) AS pm_end\n  FROM (SELECT CURRENT_DATE('Asia/Tokyo') AS basis_date)\n),\norders AS (\n  -- order_id で1行化(all_orders の重複行による将来ファンアウト防止。MAXで決定的に代表値を選ぶ)\n  SELECT order_id, MAX(service_key) AS service_key\n  FROM `shelikes-001.sheinc_marts_accounting.all_orders`\n  GROUP BY order_id\n),\ntok_cur AS (\n  SELECT t.order_id, o.service_key,\n    COALESCE(GREATEST(DATE_DIFF(LEAST(t.expires_at, p.m_end), GREATEST(t.effective_at, p.m_start), DAY) + 1, 0), 0) AS m_days,\n    IF(t.effective_at < p.basis_date, 'early', 'window') AS grp\n  FROM `shelikes-001.sheinc_intermediate.int_membership_tokens` t\n  JOIN orders o USING (order_id)\n  CROSS JOIN params p\n  WHERE t.target_month = p.m_start\n    AND t.order_status = 1\n    AND o.service_key IN ('money', 'multicreator')\n),\nfa_cur AS (\n  SELECT f.order_id,\n    SUM(f.monthly_accounting_without_tax + f.monthly_accounting_discount + f.monthly_accounting_own_expense) AS m_fa\n  FROM `shelikes-001.sheinc_marts_accounting.monthly_accounting` f\n  CROSS JOIN params p\n  WHERE f.target_month = p.m_start\n  GROUP BY f.order_id\n),\nj_cur AS (\n  SELECT t.*, COALESCE(f.m_fa, 0) AS m_fa\n  FROM tok_cur t LEFT JOIN fa_cur f USING (order_id)\n),\ncur_agg AS (\n  SELECT service_key,\n    SAFE_DIVIDE(SUM(IF(grp='early', m_fa, 0)), NULLIF(SUM(IF(grp='early', m_days, 0)), 0)) AS fa_per_day_cur,\n    COUNTIF(grp='window' AND m_fa = 0) AS n_window,\n    SUM(IF(grp='window' AND m_fa = 0, m_days, 0)) AS window_days,\n    COUNTIF(grp='early' AND m_fa = 0) AS n_lag,\n    SUM(IF(grp='early' AND m_fa = 0, m_days, 0)) AS lag_days,\n    COUNT(*) AS n_active_cur\n  FROM j_cur\n  GROUP BY 1\n),\ntok_prev AS (\n  SELECT t.order_id, o.service_key,\n    COALESCE(GREATEST(DATE_DIFF(LEAST(t.expires_at, p.pm_end), GREATEST(t.effective_at, p.pm_start), DAY) + 1, 0), 0) AS m_days\n  FROM `shelikes-001.sheinc_intermediate.int_membership_tokens` t\n  JOIN orders o USING (order_id)\n  CROSS JOIN params p\n  WHERE t.target_month = p.pm_start\n    AND t.order_status = 1\n    AND o.service_key IN ('money', 'multicreator')\n),\nfa_prev AS (\n  SELECT f.order_id,\n    SUM(f.monthly_accounting_without_tax + f.monthly_accounting_discount + f.monthly_accounting_own_expense) AS m_fa\n  FROM `shelikes-001.sheinc_marts_accounting.monthly_accounting` f\n  CROSS JOIN params p\n  WHERE f.target_month = p.pm_start\n  GROUP BY f.order_id\n),\nprev_agg AS (\n  SELECT t.service_key,\n    SAFE_DIVIDE(SUM(COALESCE(f.m_fa, 0)), NULLIF(SUM(t.m_days), 0)) AS fa_per_day_prev,\n    COUNT(*) AS n_active_prev\n  FROM tok_prev t LEFT JOIN fa_prev f USING (order_id)\n  GROUP BY 1\n)\nSELECT\n  service_key,\n  c.fa_per_day_cur,\n  p.fa_per_day_prev,\n  IFNULL(c.n_window, 0) AS n_window,\n  IFNULL(c.window_days, 0) AS window_days,\n  IFNULL(c.n_lag, 0) AS n_lag,\n  IFNULL(c.lag_days, 0) AS lag_days,\n  IFNULL(c.n_active_cur, 0) AS n_active_cur,\n  IFNULL(p.n_active_prev, 0) AS n_active_prev\nFROM cur_agg c\nFULL OUTER JOIN prev_agg p USING (service_key)\nORDER BY service_key","q4_lks_channel_booked":"-- q4_lks_channel_booked: LKS 計上済みFA(当月)のチャネル按分。\n-- entrance = likes_conversions(is_valid_conversions IS TRUE)の user_id ごと最初(purchased_at昇順 rn=1)の trial_lesson_type。\n-- channel: trial_lesson_type LIKE '拠点%' → '拠点' / IN ('OTL','ONS') → 'オンライン' / それ以外(NULL含む) → '分類不能'。\n--          当月FAがあるのに有効成約記録が無い user → '成約記録なし'。\n-- FA: int_likes_financial_accounting の user_id 別 当月SUM(without_tax + discount + own_expense)。\n-- 検証: Σ booked_fa = q1 の当月 lks と一致すること(スレッド実績: 完全一致)。\n-- 出力列: channel STRING / n_users INT / booked_fa INT\nWITH params AS (\n  SELECT DATE_TRUNC(CURRENT_DATE('Asia/Tokyo'), MONTH) AS m_start\n),\nentrance AS (\n  SELECT user_id, trial_lesson_type,\n    ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY purchased_at ASC) AS rn\n  FROM `shelikes-001.sheinc_marts_fy24.likes_conversions`\n  WHERE is_valid_conversions IS TRUE\n),\nuser_ch AS (\n  SELECT user_id,\n    CASE\n      WHEN trial_lesson_type LIKE '拠点%' THEN '拠点'\n      WHEN trial_lesson_type IN ('OTL', 'ONS') THEN 'オンライン'\n      ELSE '分類不能'\n    END AS channel\n  FROM entrance\n  WHERE rn = 1\n),\nfa AS (\n  SELECT f.user_id,\n    SUM(f.monthly_accounting_without_tax + f.monthly_accounting_discount + f.monthly_accounting_own_expense) AS m_fa\n  FROM `shelikes-001.sheinc_intermediate.int_likes_financial_accounting` f\n  CROSS JOIN params p\n  WHERE f.target_month = p.m_start\n  GROUP BY f.user_id\n)\nSELECT\n  COALESCE(uc.channel, '成約記録なし') AS channel,\n  COUNT(*) AS n_users,\n  SUM(fa.m_fa) AS booked_fa\nFROM fa\nLEFT JOIN user_ch uc USING (user_id)\nGROUP BY 1\nORDER BY booked_fa DESC","q5_conv_profile":"-- q5_conv_profile: 成約日別・1件あたり当月FA プロファイル(前月実測)。\n-- 前月に最初の有効成約をした user(likes_conversions rn=1 が前月)について、\n-- 成約日(日 dom)× channel ごとに件数と「その userたちの前月FA合計 ÷ 件数」を出す。\n-- 用途: ③今後の新規成約分 = pace × Σ profile(残日)、②既成約の未計上残 = Σ max(0, n×profile − booked)。\n-- 注意: 拠点の per-dom 単価はノイズが大きい → 利用側はオンラインプロファイル×スケール係数を使う(契約参照)。\n-- 出力列: channel STRING / dom INT(1..31) / n_conv INT / fa_per_conv FLOAT\nWITH params AS (\n  SELECT\n    DATE_SUB(DATE_TRUNC(CURRENT_DATE('Asia/Tokyo'), MONTH), INTERVAL 1 MONTH) AS pm_start,\n    DATE_SUB(DATE_TRUNC(CURRENT_DATE('Asia/Tokyo'), MONTH), INTERVAL 1 DAY) AS pm_end\n),\nentrance AS (\n  SELECT user_id, DATE(purchased_at) AS pdate, trial_lesson_type,\n    ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY purchased_at ASC) AS rn\n  FROM `shelikes-001.sheinc_marts_fy24.likes_conversions`\n  WHERE is_valid_conversions IS TRUE\n),\nprev_conv AS (\n  SELECT e.user_id,\n    EXTRACT(DAY FROM e.pdate) AS dom,\n    CASE\n      WHEN e.trial_lesson_type LIKE '拠点%' THEN '拠点'\n      WHEN e.trial_lesson_type IN ('OTL', 'ONS') THEN 'オンライン'\n      ELSE '分類不能'\n    END AS channel\n  FROM entrance e\n  CROSS JOIN params p\n  WHERE e.rn = 1 AND e.pdate BETWEEN p.pm_start AND p.pm_end\n),\nfa AS (\n  SELECT f.user_id,\n    SUM(f.monthly_accounting_without_tax + f.monthly_accounting_discount + f.monthly_accounting_own_expense) AS m_fa\n  FROM `shelikes-001.sheinc_intermediate.int_likes_financial_accounting` f\n  CROSS JOIN params p\n  WHERE f.target_month = p.pm_start\n  GROUP BY f.user_id\n)\nSELECT\n  c.channel,\n  c.dom,\n  COUNT(*) AS n_conv,\n  SAFE_DIVIDE(SUM(COALESCE(fa.m_fa, 0)), COUNT(*)) AS fa_per_conv\nFROM prev_conv c\nLEFT JOIN fa USING (user_id)\nGROUP BY 1, 2\nORDER BY 1, 2","q6_conv_actuals":"-- q6_conv_actuals: 当月の成約実績(channel×日)。\n-- 当月に purchased_at がある成約(有効/無効両方)を user ごとに purchased_at 昇順で並べ、rn=1 の成約を数える。\n-- n_valid(is_valid_conversions 基準)が事業側認識の成約件数と一致する(スレッド実証: オンライン498 vs 認識500)。\n-- booked_fa_valid = 有効成約 user の当月FA合計(int_likes_financial_accounting の user_id 別SUM)。\n-- 出力列: channel STRING / dom INT / n_all INT / n_valid INT / booked_fa_valid INT\nWITH params AS (\n  SELECT\n    DATE_TRUNC(CURRENT_DATE('Asia/Tokyo'), MONTH) AS m_start,\n    LAST_DAY(CURRENT_DATE('Asia/Tokyo'), MONTH) AS m_end\n),\nent AS (\n  SELECT c.user_id, DATE(c.purchased_at) AS pdate, c.trial_lesson_type, c.is_valid_conversions,\n    ROW_NUMBER() OVER (PARTITION BY c.user_id ORDER BY c.purchased_at ASC) AS rn\n  FROM `shelikes-001.sheinc_marts_fy24.likes_conversions` c\n  CROSS JOIN params p\n  WHERE DATE(c.purchased_at) BETWEEN p.m_start AND p.m_end\n),\nconv AS (\n  SELECT user_id, pdate, is_valid_conversions,\n    EXTRACT(DAY FROM pdate) AS dom,\n    CASE\n      WHEN trial_lesson_type LIKE '拠点%' THEN '拠点'\n      WHEN trial_lesson_type IN ('OTL', 'ONS') THEN 'オンライン'\n      ELSE '分類不能'\n    END AS channel\n  FROM ent\n  WHERE rn = 1\n),\nfa AS (\n  SELECT f.user_id,\n    SUM(f.monthly_accounting_without_tax + f.monthly_accounting_discount + f.monthly_accounting_own_expense) AS m_fa\n  FROM `shelikes-001.sheinc_intermediate.int_likes_financial_accounting` f\n  CROSS JOIN params p\n  WHERE f.target_month = p.m_start\n  GROUP BY f.user_id\n)\nSELECT\n  c.channel,\n  c.dom,\n  COUNT(*) AS n_all,\n  COUNTIF(c.is_valid_conversions) AS n_valid,\n  SUM(IF(c.is_valid_conversions, COALESCE(fa.m_fa, 0), 0)) AS booked_fa_valid\nFROM conv c\nLEFT JOIN fa USING (user_id)\nGROUP BY 1, 2\nORDER BY 1, 2","q7_conv_plan":"-- q7_conv_plan: オンライン成約の社内計画(ヨミ)件数 [契約v1.2追加]。\n-- ソース: likes_monthly_online_revenue_forecast_inputs(毎日更新の materialized 出力。\n--   spread_sheet_v2 系の Drive 外部テーブルは権限不可のため使用しない)。\n-- 範囲: 前月〜翌月の3行(CURRENT_DATE('Asia/Tokyo')基準)。\n-- 意味: plan_regular + plan_sutara ≒ オンライン成約(valid)の月間計画。src_* = '実績'(確定月) | 'ヨミ'(計画)。\n--   検証済み: 2026-07 実績行 637+172=809 ≒ q6/q5系の7月オンラインvalid実績806(±1%)。\n--   拠点の計画はBQに存在しない(Drive外部のみ)→ targets.json / UI の手入力で扱う。\n-- 出力列: month STRING 'YYYY-MM' / plan_regular FLOAT / plan_sutara FLOAT\n--         / src_regular STRING / src_sutara STRING / as_of DATE(計算日)\nWITH params AS (\n  SELECT\n    FORMAT_DATE('%Y-%m', DATE_SUB(DATE_TRUNC(CURRENT_DATE('Asia/Tokyo'), MONTH), INTERVAL 1 MONTH)) AS pm,\n    FORMAT_DATE('%Y-%m', DATE_ADD(DATE_TRUNC(CURRENT_DATE('Asia/Tokyo'), MONTH), INTERVAL 1 MONTH)) AS nm\n)\nSELECT\n  f.`対象月` AS month,\n  f.`成約数_レギュラー` AS plan_regular,\n  f.`成約数_スタライ` AS plan_sutara,\n  f.`成約数の出所_レギュラー` AS src_regular,\n  f.`成約数の出所_スタライ` AS src_sutara,\n  f.`計算日_as_of` AS as_of\nFROM `shelikes-001.sheinc_marts_output_spreadsheet_official_monitoring.likes_monthly_online_revenue_forecast_inputs` f\nCROSS JOIN params p\nWHERE f.`対象月` BETWEEN p.pm AND p.nm\nORDER BY month","q8_yomi":"-- q8_yomi: 社内売上ヨミ(オンライン・金額) [契約v1.2追加]。\n-- ソース: likes_monthly_online_revenue_forecast(毎日更新の materialized 出力。\n--   fy24 履歴のシナリオA・当日as_ofと完全一致することを確認済み。Drive外部テーブルは使用しない)。\n-- yomi_total = レギュラー入会金ヨミ + レギュラー月額ヨミ + スタライ入会金ヨミ + スタライ月額ヨミ。\n-- 注意: ヨミは財務会計(FA)と定義が異なる(T1実測: 2026-05〜07の月初時点ヨミはオンラインFA実績比 +2.6〜+3.8% 過大)。\n--   表示上の扱いは targets.json の yomi.comparable フラグに従う(既定 false = 参考値表示)。\n-- 範囲: 当月〜+2ヶ月の3行(CURRENT_DATE('Asia/Tokyo')基準)。\n-- 出力列: month STRING 'YYYY-MM' / yomi_total FLOAT / as_of DATE(計算日)\nWITH params AS (\n  SELECT\n    FORMAT_DATE('%Y-%m', DATE_TRUNC(CURRENT_DATE('Asia/Tokyo'), MONTH)) AS m0,\n    FORMAT_DATE('%Y-%m', DATE_ADD(DATE_TRUNC(CURRENT_DATE('Asia/Tokyo'), MONTH), INTERVAL 2 MONTH)) AS m2\n)\nSELECT\n  f.`対象月` AS month,\n  f.`レギュラー入会金ヨミ` + f.`レギュラー月額ヨミ` + f.`スタライ入会金ヨミ` + f.`スタライ月額ヨミ` AS yomi_total,\n  f.`計算日_as_of` AS as_of\nFROM `shelikes-001.sheinc_marts_output_spreadsheet_official_monitoring.likes_monthly_online_revenue_forecast` f\nCROSS JOIN params p\nWHERE f.`対象月` BETWEEN p.m0 AND p.m2\nORDER BY month"}};</script>
+<script>window.__APP__={data:{"generated_at":"2026-08-26T08:16:14+09:00","basis_date":"2026-08-26","target_month":"2026-08","queries":{"q1_official_monthly":{"rows":[{"year_month":"2025-04","lks":299790133,"mny":4924364,"pd":7796413},{"year_month":"2025-05","lks":319234325,"mny":5302392,"pd":7825644},{"year_month":"2025-06","lks":324100303,"mny":4843494,"pd":7375303},{"year_month":"2025-07","lks":351914855,"mny":4707957,"pd":7176355},{"year_month":"2025-08","lks":365708087,"mny":4258938,"pd":6889460},{"year_month":"2025-09","lks":362152426,"mny":4380271,"pd":7576915},{"year_month":"2025-10","lks":375761050,"mny":4447538,"pd":8558880},{"year_month":"2025-11","lks":363886175,"mny":4666338,"pd":9545748},{"year_month":"2025-12","lks":375852928,"mny":4709470,"pd":10165103},{"year_month":"2026-01","lks":371901538,"mny":4548392,"pd":9723534},{"year_month":"2026-02","lks":331735302,"mny":4245214,"pd":9045613},{"year_month":"2026-03","lks":356458734,"mny":4420541,"pd":8654908},{"year_month":"2026-04","lks":335234309,"mny":4164079,"pd":7739234},{"year_month":"2026-05","lks":345251114,"mny":4470075,"pd":8875475},{"year_month":"2026-06","lks":341171068,"mny":4354158,"pd":8670759},{"year_month":"2026-07","lks":356537598,"mny":4619550,"pd":9080741},{"year_month":"2026-08","lks":352259506,"mny":4507808,"pd":10235745},{"year_month":"2026-09","lks":261582432,"mny":1730800,"pd":8034120},{"year_month":"2026-10","lks":214651578,"mny":1177836,"pd":7705149},{"year_month":"2026-11","lks":186881991,"mny":390164,"pd":7182048},{"year_month":"2026-12","lks":174732770,"mny":-30950,"pd":5655714},{"year_month":"2027-01","lks":157087690,"mny":-462562,"pd":3456160},{"year_month":"2027-02","lks":125263057,"mny":-636723,"pd":1777874},{"year_month":"2027-03","lks":121201497,"mny":-853307,"pd":274700},{"year_month":"2027-04","lks":99967591,"mny":-928543,"pd":0},{"year_month":"2027-05","lks":83218412,"mny":-931474,"pd":0},{"year_month":"2027-06","lks":58930098,"mny":-825410,"pd":0},{"year_month":"2027-07","lks":36283661,"mny":-647985,"pd":0},{"year_month":"2027-08","lks":10421001,"mny":-462318,"pd":0}]},"q2_lks_pending":{"rows":[{"plan_name":"スタンダードプラン","payment_type":"一括","fa_per_day_cur":454.5532992344692,"fa_per_day_prev":473.6688170616428,"n_window":339,"window_days":1120,"n_lag":176,"lag_days":3364},{"plan_name":"ライトプラン","payment_type":"一括","fa_per_day_cur":319.226597530122,"fa_per_day_prev":322.06157828492724,"n_window":186,"window_days":638,"n_lag":29,"lag_days":520},{"plan_name":"レギュラープラン","payment_type":"一括","fa_per_day_cur":1161.5764478549265,"fa_per_day_prev":1313.8776966509113,"n_window":22,"window_days":69,"n_lag":71,"lag_days":1368},{"plan_name":"レギュラープラン","payment_type":"分割","fa_per_day_cur":900.6511948755851,"fa_per_day_prev":1221.4920590564016,"n_window":50,"window_days":205,"n_lag":183,"lag_days":3498},{"plan_name":"卒業生プラン","payment_type":"一括","fa_per_day_cur":156.44557711279185,"fa_per_day_prev":158.6633316658329,"n_window":43,"window_days":154,"n_lag":8,"lag_days":159}]},"q3_mny_pd_pending":{"rows":[{"service_key":"money","fa_per_day_cur":751.1905490396057,"fa_per_day_prev":767.2846258042669,"n_window":11,"window_days":38,"n_lag":7,"lag_days":103,"n_active_cur":261,"n_active_prev":260},{"service_key":"multicreator","fa_per_day_cur":0.0,"fa_per_day_prev":0.0,"n_window":0,"window_days":0,"n_lag":85,"lag_days":2125,"n_active_cur":85,"n_active_prev":87}]},"q4_lks_channel_booked":{"rows":[{"channel":"オンライン","n_users":32634,"booked_fa":323346079},{"channel":"拠点","n_users":3758,"booked_fa":20986556},{"channel":"分類不能","n_users":11291,"booked_fa":7864718},{"channel":"成約記録なし","n_users":880,"booked_fa":62153}]},"q5_conv_profile":{"rows":[{"channel":"オンライン","dom":1,"n_conv":14,"fa_per_conv":22290.5},{"channel":"オンライン","dom":2,"n_conv":26,"fa_per_conv":19719.5},{"channel":"オンライン","dom":3,"n_conv":26,"fa_per_conv":20211.96153846154},{"channel":"オンライン","dom":4,"n_conv":29,"fa_per_conv":15073.310344827587},{"channel":"オンライン","dom":5,"n_conv":25,"fa_per_conv":20840.2},{"channel":"オンライン","dom":6,"n_conv":31,"fa_per_conv":17288.129032258064},{"channel":"オンライン","dom":7,"n_conv":27,"fa_per_conv":14467.481481481482},{"channel":"オンライン","dom":8,"n_conv":17,"fa_per_conv":12833.411764705883},{"channel":"オンライン","dom":9,"n_conv":23,"fa_per_conv":11478.173913043478},{"channel":"オンライン","dom":10,"n_conv":26,"fa_per_conv":13795.038461538461},{"channel":"オンライン","dom":11,"n_conv":23,"fa_per_conv":15024.869565217392},{"channel":"オンライン","dom":12,"n_conv":24,"fa_per_conv":10288.791666666666},{"channel":"オンライン","dom":13,"n_conv":37,"fa_per_conv":11861.378378378378},{"channel":"オンライン","dom":14,"n_conv":24,"fa_per_conv":11825.5},{"channel":"オンライン","dom":15,"n_conv":25,"fa_per_conv":11801.08},{"channel":"オンライン","dom":16,"n_conv":26,"fa_per_conv":10430.23076923077},{"channel":"オンライン","dom":17,"n_conv":22,"fa_per_conv":6878.727272727273},{"channel":"オンライン","dom":18,"n_conv":30,"fa_per_conv":8406.4},{"channel":"オンライン","dom":19,"n_conv":22,"fa_per_conv":7338.590909090909},{"channel":"オンライン","dom":20,"n_conv":23,"fa_per_conv":7452.130434782609},{"channel":"オンライン","dom":21,"n_conv":24,"fa_per_conv":4795.416666666667},{"channel":"オンライン","dom":22,"n_conv":24,"fa_per_conv":4776.0},{"channel":"オンライン","dom":23,"n_conv":20,"fa_per_conv":2776.05},{"channel":"オンライン","dom":24,"n_conv":35,"fa_per_conv":3920.057142857143},{"channel":"オンライン","dom":25,"n_conv":35,"fa_per_conv":3491.657142857143},{"channel":"オンライン","dom":26,"n_conv":32,"fa_per_conv":2037.8125},{"channel":"オンライン","dom":27,"n_conv":19,"fa_per_conv":864.8947368421053},{"channel":"オンライン","dom":28,"n_conv":30,"fa_per_conv":1106.2666666666667},{"channel":"オンライン","dom":29,"n_conv":21,"fa_per_conv":332.95238095238096},{"channel":"オンライン","dom":30,"n_conv":38,"fa_per_conv":217.55263157894737},{"channel":"オンライン","dom":31,"n_conv":28,"fa_per_conv":0.0},{"channel":"分類不能","dom":14,"n_conv":1,"fa_per_conv":27967.0},{"channel":"分類不能","dom":16,"n_conv":1,"fa_per_conv":19233.0},{"channel":"分類不能","dom":22,"n_conv":1,"fa_per_conv":0.0},{"channel":"拠点","dom":1,"n_conv":1,"fa_per_conv":22435.0},{"channel":"拠点","dom":2,"n_conv":1,"fa_per_conv":33600.0},{"channel":"拠点","dom":3,"n_conv":1,"fa_per_conv":15224.0},{"channel":"拠点","dom":4,"n_conv":5,"fa_per_conv":19206.6},{"channel":"拠点","dom":5,"n_conv":1,"fa_per_conv":0.0},{"channel":"拠点","dom":6,"n_conv":4,"fa_per_conv":18081.0},{"channel":"拠点","dom":7,"n_conv":2,"fa_per_conv":21000.0},{"channel":"拠点","dom":8,"n_conv":4,"fa_per_conv":2700.0},{"channel":"拠点","dom":9,"n_conv":2,"fa_per_conv":18156.0},{"channel":"拠点","dom":10,"n_conv":5,"fa_per_conv":17875.6},{"channel":"拠点","dom":11,"n_conv":2,"fa_per_conv":18600.5},{"channel":"拠点","dom":12,"n_conv":2,"fa_per_conv":4200.0},{"channel":"拠点","dom":13,"n_conv":6,"fa_per_conv":9275.833333333334},{"channel":"拠点","dom":14,"n_conv":4,"fa_per_conv":11605.0},{"channel":"拠点","dom":15,"n_conv":3,"fa_per_conv":9600.0},{"channel":"拠点","dom":16,"n_conv":6,"fa_per_conv":10476.0},{"channel":"拠点","dom":17,"n_conv":1,"fa_per_conv":0.0},{"channel":"拠点","dom":18,"n_conv":3,"fa_per_conv":14400.0},{"channel":"拠点","dom":19,"n_conv":4,"fa_per_conv":7909.75},{"channel":"拠点","dom":20,"n_conv":6,"fa_per_conv":1200.0},{"channel":"拠点","dom":21,"n_conv":1,"fa_per_conv":12000.0},{"channel":"拠点","dom":22,"n_conv":1,"fa_per_conv":3599.0},{"channel":"拠点","dom":23,"n_conv":4,"fa_per_conv":2999.75},{"channel":"拠点","dom":24,"n_conv":3,"fa_per_conv":2800.0},{"channel":"拠点","dom":25,"n_conv":2,"fa_per_conv":0.0},{"channel":"拠点","dom":26,"n_conv":6,"fa_per_conv":1108.8333333333333},{"channel":"拠点","dom":27,"n_conv":2,"fa_per_conv":4799.5},{"channel":"拠点","dom":28,"n_conv":5,"fa_per_conv":1440.4},{"channel":"拠点","dom":29,"n_conv":4,"fa_per_conv":101.25},{"channel":"拠点","dom":30,"n_conv":4,"fa_per_conv":332.0},{"channel":"拠点","dom":31,"n_conv":4,"fa_per_conv":37000.0}]},"q6_conv_actuals":{"rows":[{"channel":"オンライン","dom":1,"n_all":40,"n_valid":33,"booked_fa_valid":847599},{"channel":"オンライン","dom":2,"n_all":27,"n_valid":24,"booked_fa_valid":557301},{"channel":"オンライン","dom":3,"n_all":31,"n_valid":29,"booked_fa_valid":541949},{"channel":"オンライン","dom":4,"n_all":26,"n_valid":20,"booked_fa_valid":475106},{"channel":"オンライン","dom":5,"n_all":27,"n_valid":25,"booked_fa_valid":575578},{"channel":"オンライン","dom":6,"n_all":21,"n_valid":14,"booked_fa_valid":215091},{"channel":"オンライン","dom":7,"n_all":27,"n_valid":22,"booked_fa_valid":416033},{"channel":"オンライン","dom":8,"n_all":31,"n_valid":22,"booked_fa_valid":427632},{"channel":"オンライン","dom":9,"n_all":25,"n_valid":23,"booked_fa_valid":255664},{"channel":"オンライン","dom":10,"n_all":26,"n_valid":24,"booked_fa_valid":351166},{"channel":"オンライン","dom":11,"n_all":36,"n_valid":33,"booked_fa_valid":439073},{"channel":"オンライン","dom":12,"n_all":27,"n_valid":21,"booked_fa_valid":309475},{"channel":"オンライン","dom":13,"n_all":21,"n_valid":17,"booked_fa_valid":259038},{"channel":"オンライン","dom":14,"n_all":22,"n_valid":21,"booked_fa_valid":315329},{"channel":"オンライン","dom":15,"n_all":25,"n_valid":24,"booked_fa_valid":303943},{"channel":"オンライン","dom":16,"n_all":34,"n_valid":28,"booked_fa_valid":332248},{"channel":"オンライン","dom":17,"n_all":36,"n_valid":32,"booked_fa_valid":342193},{"channel":"オンライン","dom":18,"n_all":37,"n_valid":34,"booked_fa_valid":318189},{"channel":"オンライン","dom":19,"n_all":39,"n_valid":33,"booked_fa_valid":280287},{"channel":"オンライン","dom":20,"n_all":37,"n_valid":29,"booked_fa_valid":192798},{"channel":"オンライン","dom":21,"n_all":26,"n_valid":25,"booked_fa_valid":263056},{"channel":"オンライン","dom":22,"n_all":39,"n_valid":36,"booked_fa_valid":347858},{"channel":"オンライン","dom":23,"n_all":41,"n_valid":39,"booked_fa_valid":132843},{"channel":"オンライン","dom":24,"n_all":44,"n_valid":42,"booked_fa_valid":145518},{"channel":"オンライン","dom":25,"n_all":40,"n_valid":40,"booked_fa_valid":108853},{"channel":"分類不能","dom":18,"n_all":2,"n_valid":2,"booked_fa_valid":27395},{"channel":"分類不能","dom":23,"n_all":1,"n_valid":1,"booked_fa_valid":6931},{"channel":"分類不能","dom":25,"n_all":1,"n_valid":1,"booked_fa_valid":0},{"channel":"拠点","dom":1,"n_all":5,"n_valid":4,"booked_fa_valid":57983},{"channel":"拠点","dom":2,"n_all":7,"n_valid":6,"booked_fa_valid":76800},{"channel":"拠点","dom":3,"n_all":2,"n_valid":2,"booked_fa_valid":33600},{"channel":"拠点","dom":4,"n_all":5,"n_valid":3,"booked_fa_valid":43308},{"channel":"拠点","dom":5,"n_all":4,"n_valid":4,"booked_fa_valid":38400},{"channel":"拠点","dom":6,"n_all":4,"n_valid":4,"booked_fa_valid":67659},{"channel":"拠点","dom":7,"n_all":6,"n_valid":5,"booked_fa_valid":68029},{"channel":"拠点","dom":8,"n_all":3,"n_valid":2,"booked_fa_valid":54001},{"channel":"拠点","dom":9,"n_all":3,"n_valid":3,"booked_fa_valid":51601},{"channel":"拠点","dom":10,"n_all":4,"n_valid":3,"booked_fa_valid":29218},{"channel":"拠点","dom":11,"n_all":4,"n_valid":3,"booked_fa_valid":24422},{"channel":"拠点","dom":12,"n_all":3,"n_valid":3,"booked_fa_valid":17569},{"channel":"拠点","dom":13,"n_all":5,"n_valid":3,"booked_fa_valid":50425},{"channel":"拠点","dom":14,"n_all":6,"n_valid":5,"booked_fa_valid":58800},{"channel":"拠点","dom":15,"n_all":4,"n_valid":4,"booked_fa_valid":35206},{"channel":"拠点","dom":16,"n_all":5,"n_valid":4,"booked_fa_valid":38515},{"channel":"拠点","dom":17,"n_all":2,"n_valid":2,"booked_fa_valid":9600},{"channel":"拠点","dom":18,"n_all":4,"n_valid":3,"booked_fa_valid":1216},{"channel":"拠点","dom":19,"n_all":7,"n_valid":6,"booked_fa_valid":45440},{"channel":"拠点","dom":20,"n_all":3,"n_valid":3,"booked_fa_valid":2027},{"channel":"拠点","dom":21,"n_all":4,"n_valid":4,"booked_fa_valid":2838},{"channel":"拠点","dom":22,"n_all":2,"n_valid":2,"booked_fa_valid":11953},{"channel":"拠点","dom":23,"n_all":6,"n_valid":6,"booked_fa_valid":19216},{"channel":"拠点","dom":24,"n_all":5,"n_valid":5,"booked_fa_valid":8877},{"channel":"拠点","dom":25,"n_all":4,"n_valid":4,"booked_fa_valid":13670}]},"q7_conv_plan":{"rows":[{"month":"2026-07","plan_regular":637.0,"plan_sutara":172.0,"src_regular":"実績","src_sutara":"実績","as_of":"2026-08-26"},{"month":"2026-08","plan_regular":639.0,"plan_sutara":207.0,"src_regular":"ヨミ","src_sutara":"ヨミ","as_of":"2026-08-26"},{"month":"2026-09","plan_regular":677.0,"plan_sutara":191.0,"src_regular":"ヨミ","src_sutara":"ヨミ","as_of":"2026-08-26"}]},"q8_yomi":{"rows":[{"month":"2026-08","yomi_total":342269822.09204555,"as_of":"2026-08-26"},{"month":"2026-09","yomi_total":331047571.1141408,"as_of":"2026-08-26"},{"month":"2026-10","yomi_total":344800525.62450576,"as_of":"2026-08-26"},{"month":"2026-11","yomi_total":342199852.07222354,"as_of":"2026-08-26"},{"month":"2026-12","yomi_total":361879314.74761844,"as_of":"2026-08-26"},{"month":"2027-01","yomi_total":367759888.45367086,"as_of":"2026-08-26"},{"month":"2027-02","yomi_total":341998510.0139798,"as_of":"2026-08-26"},{"month":"2027-03","yomi_total":387648239.8133479,"as_of":"2026-08-26"}]}},"targets":{"fa_targets":{"lks":null,"mny":null,"pd":null,"total":null},"fy_targets":{"lks":null,"mny":null,"pd":null,"total":null},"kyoten_conv_target":null,"yomi":{"comparable":false,"note":"社内売上ヨミ(オンライン)は財務会計と定義が異なるため参考値。T1検証(2026-08-25): 確定3ヶ月(2026-05〜07)の月初時点ヨミはオンラインFA実績比 +2.6〜+3.8% の一貫過大(05: +3.8% / 06: +2.6% / 07: +3.2%、7月中旬時点では+3.6%)で±3%以内に収まらず comparable=false を維持。"},"note":"fa_targets は月次の目標FA(円)。null=未設定(UIは前月実績を基準線として表示)。","fy_note":"fy_targets は当年度(4月〜3月)の通期目標FA(円)。null=未設定(UIは前年度通期実績を基準線として表示)。通期SIMの将来月推定はヨミ×バイアス補正の粗い推定であり、当月着地モデルとは精度が異なる。"},"meta":{"bytes_processed":{"q1_official_monthly":3234,"q2_lks_pending":938904419,"q3_mny_pd_pending":1411128427,"q4_lks_channel_booked":861746360,"q5_conv_profile":861746360,"q6_conv_actuals":861746360,"q7_conv_plan":13580,"q8_yomi":3136}}},queries:{"q1_official_monthly":"-- q1_official_monthly: 公式月次FA(計上済み実績)。\n-- ソース: monthly_financial_accounting(スプレッドシート公式モニタリングの元テーブル)。\n-- 範囲 [契約v1.3]: 前年度開始(=当年度開始の12ヶ月前) 〜 テーブルにある未来月まで全部。\n--   SHEの年度は4月〜3月。当年度開始 = 基準日の月が4月以降なら当年4/1、3月以前なら前年4/1。\n--   式は CURRENT_DATE('Asia/Tokyo') 基準で自己完結・年跨ぎ安全:\n--   基準日を3ヶ月戻して年頭に丸め、3ヶ月進めると当年度4/1になる(例: 2026-08-25→2026-04-01 /\n--   2027-03-15→2026-04-01 / 2027-04-01→2027-04-01)。その12ヶ月前が前年度4/1。\n-- 用途: 通期達成シミュレーション(前年度通期実績の算出・当年度実績月の確定値)。\n-- 出力列: year_month STRING 'YYYY-MM' / lks INT(likes財務会計) / mny INT(money財務会計) / pd INT(likespro財務会計)\nSELECT\n  year_month,\n  `likes財務会計` AS lks,\n  `money財務会計` AS mny,\n  `likespro財務会計` AS pd\nFROM `shelikes-001.sheinc_marts_output_spreadsheet_official_monitoring.monthly_financial_accounting`\nWHERE year_month >= FORMAT_DATE(\n  '%Y-%m',\n  DATE_SUB(\n    DATE_ADD(DATE_TRUNC(DATE_SUB(CURRENT_DATE('Asia/Tokyo'), INTERVAL 3 MONTH), YEAR), INTERVAL 3 MONTH),\n    INTERVAL 12 MONTH\n  )\n)\nORDER BY year_month","q2_lks_pending":"-- q2_lks_pending: LKS 既存会員の課金更新残(①window)・滞納/処理ラグ(④lag)をプラン×支払種別で集計。\n-- 基準日 = CURRENT_DATE('Asia/Tokyo')。当月トークン(int_membership_tokens, order_status=1, 対象4プラン)を\n--   effective_at < 基準日 → 'early' / それ以外 → 'window' に分け、order別の当月FA(int_likes_financial_accounting)と突合。\n-- 単価: fa_per_day_cur = Σ early FA ÷ Σ early 当月内有効日数。fa_per_day_prev = 前月トークン全体の同計算\n--   (月初で early が空 = fa_per_day_cur が NULL のときのフォールバック用。前月は全日 early 扱いなので全体で計算)。\n-- 新規会員除外 [契約v1.1・R1裁定]: 当月に最初の有効成約をした user(likes_conversions rn=1 が当月)の order は\n--   window(①: n_window/window_days)と lag(④: n_lag/lag_days)の両方から除外する。\n--   ①④=既存会員のみ / ②③(q5×q6)=当月新規のみ、という対称な切り分けで二重計上を防止。\n-- 防御 [契約v1.1]: all_orders は JOIN 前に order_id で1行化(重複ファンアウト防止)。\n--   m_days は COALESCE(GREATEST(...,0),0) で NULL を 0 に正規化(COUNTIF/SUM の非対称防止)。\n-- 出力列: plan_name STRING / payment_type STRING / fa_per_day_cur FLOAT(NULL可) / fa_per_day_prev FLOAT(NULL可)\n--         / n_window INT(window かつ FA=0 の件数) / window_days INT / n_lag INT(early かつ FA=0 の件数) / lag_days INT\nWITH params AS (\n  SELECT basis_date,\n    DATE_TRUNC(basis_date, MONTH) AS m_start,\n    LAST_DAY(basis_date, MONTH) AS m_end,\n    DATE_SUB(DATE_TRUNC(basis_date, MONTH), INTERVAL 1 MONTH) AS pm_start,\n    DATE_SUB(DATE_TRUNC(basis_date, MONTH), INTERVAL 1 DAY) AS pm_end\n  FROM (SELECT CURRENT_DATE('Asia/Tokyo') AS basis_date)\n),\norders AS (\n  -- order_id で1行化(all_orders の重複行による将来ファンアウト防止。MAXで決定的に代表値を選ぶ)\n  SELECT order_id, MAX(payment_type) AS payment_type, MAX(user_id) AS user_id\n  FROM `shelikes-001.sheinc_marts_accounting.all_orders`\n  GROUP BY order_id\n),\nnew_users AS (\n  SELECT e.user_id\n  FROM (\n    SELECT user_id, DATE(purchased_at) AS pdate,\n      ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY purchased_at ASC) AS rn\n    FROM `shelikes-001.sheinc_marts_fy24.likes_conversions`\n    WHERE is_valid_conversions IS TRUE\n  ) e\n  CROSS JOIN params p\n  WHERE e.rn = 1 AND e.pdate >= p.m_start\n),\ntok_cur AS (\n  SELECT t.order_id, t.plan_name, o.payment_type,\n    COALESCE(GREATEST(DATE_DIFF(LEAST(t.expires_at, p.m_end), GREATEST(t.effective_at, p.m_start), DAY) + 1, 0), 0) AS m_days,\n    IF(t.effective_at < p.basis_date, 'early', 'window') AS grp,\n    (nu.user_id IS NOT NULL) AS is_new_user\n  FROM `shelikes-001.sheinc_intermediate.int_membership_tokens` t\n  JOIN orders o USING (order_id)\n  CROSS JOIN params p\n  LEFT JOIN new_users nu ON o.user_id = nu.user_id\n  WHERE t.target_month = p.m_start\n    AND t.order_status = 1\n    AND t.plan_name IN ('レギュラープラン','スタンダードプラン','ライトプラン','卒業生プラン')\n),\nfa_cur AS (\n  SELECT f.order_id,\n    SUM(f.monthly_accounting_without_tax + f.monthly_accounting_discount + f.monthly_accounting_own_expense) AS m_fa\n  FROM `shelikes-001.sheinc_intermediate.int_likes_financial_accounting` f\n  CROSS JOIN params p\n  WHERE f.target_month = p.m_start\n  GROUP BY f.order_id\n),\nj_cur AS (\n  SELECT t.*, COALESCE(f.m_fa, 0) AS m_fa\n  FROM tok_cur t LEFT JOIN fa_cur f USING (order_id)\n),\ncur_agg AS (\n  SELECT plan_name, payment_type,\n    SAFE_DIVIDE(SUM(IF(grp='early', m_fa, 0)), NULLIF(SUM(IF(grp='early', m_days, 0)), 0)) AS fa_per_day_cur,\n    COUNTIF(grp='window' AND m_fa = 0 AND NOT is_new_user) AS n_window,\n    SUM(IF(grp='window' AND m_fa = 0 AND NOT is_new_user, m_days, 0)) AS window_days,\n    COUNTIF(grp='early' AND m_fa = 0 AND NOT is_new_user) AS n_lag,\n    SUM(IF(grp='early' AND m_fa = 0 AND NOT is_new_user, m_days, 0)) AS lag_days\n  FROM j_cur\n  GROUP BY 1, 2\n),\ntok_prev AS (\n  SELECT t.order_id, t.plan_name, o.payment_type,\n    COALESCE(GREATEST(DATE_DIFF(LEAST(t.expires_at, p.pm_end), GREATEST(t.effective_at, p.pm_start), DAY) + 1, 0), 0) AS m_days\n  FROM `shelikes-001.sheinc_intermediate.int_membership_tokens` t\n  JOIN orders o USING (order_id)\n  CROSS JOIN params p\n  WHERE t.target_month = p.pm_start\n    AND t.order_status = 1\n    AND t.plan_name IN ('レギュラープラン','スタンダードプラン','ライトプラン','卒業生プラン')\n),\nfa_prev AS (\n  SELECT f.order_id,\n    SUM(f.monthly_accounting_without_tax + f.monthly_accounting_discount + f.monthly_accounting_own_expense) AS m_fa\n  FROM `shelikes-001.sheinc_intermediate.int_likes_financial_accounting` f\n  CROSS JOIN params p\n  WHERE f.target_month = p.pm_start\n  GROUP BY f.order_id\n),\nprev_agg AS (\n  SELECT t.plan_name, t.payment_type,\n    SAFE_DIVIDE(SUM(COALESCE(f.m_fa, 0)), NULLIF(SUM(t.m_days), 0)) AS fa_per_day_prev\n  FROM tok_prev t LEFT JOIN fa_prev f USING (order_id)\n  GROUP BY 1, 2\n)\nSELECT\n  c.plan_name,\n  c.payment_type,\n  c.fa_per_day_cur,\n  p.fa_per_day_prev,\n  c.n_window,\n  c.window_days,\n  c.n_lag,\n  c.lag_days\nFROM cur_agg c\nLEFT JOIN prev_agg p USING (plan_name, payment_type)\nORDER BY c.plan_name, c.payment_type","q3_mny_pd_pending":"-- q3_mny_pd_pending: MNY(money)・プロデ(multicreator)の課金更新残・滞納/処理ラグを service_key 別に集計。\n-- q2 と同じ手法(基準日 = CURRENT_DATE('Asia/Tokyo')、early/window 分割、1日単価×残日数)。\n-- FA は sheinc_marts_accounting.monthly_accounting(order_id別 当月SUM: without_tax + discount + own_expense)。\n-- 既知の仕様: multicreator の FA は marts monthly_accounting に載らない別パイプライン\n--   → fa_per_day_cur/prev は 0 または NULL になる(正しい挙動)。件数列(n_window, n_active_*)だけ意味を持つ。\n-- 新規会員除外は行わない [契約v1.1]: MNY/プロデには②③(新規成約プロファイル成分)が存在しないため。\n-- 防御 [契約v1.1]: all_orders は JOIN 前に order_id で1行化(重複ファンアウト防止)。\n--   m_days は COALESCE(GREATEST(...,0),0) で NULL を 0 に正規化(COUNTIF/SUM の非対称防止)。\n-- 出力列: service_key STRING / fa_per_day_cur FLOAT(NULL可) / fa_per_day_prev FLOAT(NULL可)\n--         / n_window INT / window_days INT / n_lag INT / lag_days INT\n--         / n_active_cur INT(当月トークン件数) / n_active_prev INT(前月トークン件数)\nWITH params AS (\n  SELECT basis_date,\n    DATE_TRUNC(basis_date, MONTH) AS m_start,\n    LAST_DAY(basis_date, MONTH) AS m_end,\n    DATE_SUB(DATE_TRUNC(basis_date, MONTH), INTERVAL 1 MONTH) AS pm_start,\n    DATE_SUB(DATE_TRUNC(basis_date, MONTH), INTERVAL 1 DAY) AS pm_end\n  FROM (SELECT CURRENT_DATE('Asia/Tokyo') AS basis_date)\n),\norders AS (\n  -- order_id で1行化(all_orders の重複行による将来ファンアウト防止。MAXで決定的に代表値を選ぶ)\n  SELECT order_id, MAX(service_key) AS service_key\n  FROM `shelikes-001.sheinc_marts_accounting.all_orders`\n  GROUP BY order_id\n),\ntok_cur AS (\n  SELECT t.order_id, o.service_key,\n    COALESCE(GREATEST(DATE_DIFF(LEAST(t.expires_at, p.m_end), GREATEST(t.effective_at, p.m_start), DAY) + 1, 0), 0) AS m_days,\n    IF(t.effective_at < p.basis_date, 'early', 'window') AS grp\n  FROM `shelikes-001.sheinc_intermediate.int_membership_tokens` t\n  JOIN orders o USING (order_id)\n  CROSS JOIN params p\n  WHERE t.target_month = p.m_start\n    AND t.order_status = 1\n    AND o.service_key IN ('money', 'multicreator')\n),\nfa_cur AS (\n  SELECT f.order_id,\n    SUM(f.monthly_accounting_without_tax + f.monthly_accounting_discount + f.monthly_accounting_own_expense) AS m_fa\n  FROM `shelikes-001.sheinc_marts_accounting.monthly_accounting` f\n  CROSS JOIN params p\n  WHERE f.target_month = p.m_start\n  GROUP BY f.order_id\n),\nj_cur AS (\n  SELECT t.*, COALESCE(f.m_fa, 0) AS m_fa\n  FROM tok_cur t LEFT JOIN fa_cur f USING (order_id)\n),\ncur_agg AS (\n  SELECT service_key,\n    SAFE_DIVIDE(SUM(IF(grp='early', m_fa, 0)), NULLIF(SUM(IF(grp='early', m_days, 0)), 0)) AS fa_per_day_cur,\n    COUNTIF(grp='window' AND m_fa = 0) AS n_window,\n    SUM(IF(grp='window' AND m_fa = 0, m_days, 0)) AS window_days,\n    COUNTIF(grp='early' AND m_fa = 0) AS n_lag,\n    SUM(IF(grp='early' AND m_fa = 0, m_days, 0)) AS lag_days,\n    COUNT(*) AS n_active_cur\n  FROM j_cur\n  GROUP BY 1\n),\ntok_prev AS (\n  SELECT t.order_id, o.service_key,\n    COALESCE(GREATEST(DATE_DIFF(LEAST(t.expires_at, p.pm_end), GREATEST(t.effective_at, p.pm_start), DAY) + 1, 0), 0) AS m_days\n  FROM `shelikes-001.sheinc_intermediate.int_membership_tokens` t\n  JOIN orders o USING (order_id)\n  CROSS JOIN params p\n  WHERE t.target_month = p.pm_start\n    AND t.order_status = 1\n    AND o.service_key IN ('money', 'multicreator')\n),\nfa_prev AS (\n  SELECT f.order_id,\n    SUM(f.monthly_accounting_without_tax + f.monthly_accounting_discount + f.monthly_accounting_own_expense) AS m_fa\n  FROM `shelikes-001.sheinc_marts_accounting.monthly_accounting` f\n  CROSS JOIN params p\n  WHERE f.target_month = p.pm_start\n  GROUP BY f.order_id\n),\nprev_agg AS (\n  SELECT t.service_key,\n    SAFE_DIVIDE(SUM(COALESCE(f.m_fa, 0)), NULLIF(SUM(t.m_days), 0)) AS fa_per_day_prev,\n    COUNT(*) AS n_active_prev\n  FROM tok_prev t LEFT JOIN fa_prev f USING (order_id)\n  GROUP BY 1\n)\nSELECT\n  service_key,\n  c.fa_per_day_cur,\n  p.fa_per_day_prev,\n  IFNULL(c.n_window, 0) AS n_window,\n  IFNULL(c.window_days, 0) AS window_days,\n  IFNULL(c.n_lag, 0) AS n_lag,\n  IFNULL(c.lag_days, 0) AS lag_days,\n  IFNULL(c.n_active_cur, 0) AS n_active_cur,\n  IFNULL(p.n_active_prev, 0) AS n_active_prev\nFROM cur_agg c\nFULL OUTER JOIN prev_agg p USING (service_key)\nORDER BY service_key","q4_lks_channel_booked":"-- q4_lks_channel_booked: LKS 計上済みFA(当月)のチャネル按分。\n-- entrance = likes_conversions(is_valid_conversions IS TRUE)の user_id ごと最初(purchased_at昇順 rn=1)の trial_lesson_type。\n-- channel: trial_lesson_type LIKE '拠点%' → '拠点' / IN ('OTL','ONS') → 'オンライン' / それ以外(NULL含む) → '分類不能'。\n--          当月FAがあるのに有効成約記録が無い user → '成約記録なし'。\n-- FA: int_likes_financial_accounting の user_id 別 当月SUM(without_tax + discount + own_expense)。\n-- 検証: Σ booked_fa = q1 の当月 lks と一致すること(スレッド実績: 完全一致)。\n-- 出力列: channel STRING / n_users INT / booked_fa INT\nWITH params AS (\n  SELECT DATE_TRUNC(CURRENT_DATE('Asia/Tokyo'), MONTH) AS m_start\n),\nentrance AS (\n  SELECT user_id, trial_lesson_type,\n    ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY purchased_at ASC) AS rn\n  FROM `shelikes-001.sheinc_marts_fy24.likes_conversions`\n  WHERE is_valid_conversions IS TRUE\n),\nuser_ch AS (\n  SELECT user_id,\n    CASE\n      WHEN trial_lesson_type LIKE '拠点%' THEN '拠点'\n      WHEN trial_lesson_type IN ('OTL', 'ONS') THEN 'オンライン'\n      ELSE '分類不能'\n    END AS channel\n  FROM entrance\n  WHERE rn = 1\n),\nfa AS (\n  SELECT f.user_id,\n    SUM(f.monthly_accounting_without_tax + f.monthly_accounting_discount + f.monthly_accounting_own_expense) AS m_fa\n  FROM `shelikes-001.sheinc_intermediate.int_likes_financial_accounting` f\n  CROSS JOIN params p\n  WHERE f.target_month = p.m_start\n  GROUP BY f.user_id\n)\nSELECT\n  COALESCE(uc.channel, '成約記録なし') AS channel,\n  COUNT(*) AS n_users,\n  SUM(fa.m_fa) AS booked_fa\nFROM fa\nLEFT JOIN user_ch uc USING (user_id)\nGROUP BY 1\nORDER BY booked_fa DESC","q5_conv_profile":"-- q5_conv_profile: 成約日別・1件あたり当月FA プロファイル(前月実測)。\n-- 前月に最初の有効成約をした user(likes_conversions rn=1 が前月)について、\n-- 成約日(日 dom)× channel ごとに件数と「その userたちの前月FA合計 ÷ 件数」を出す。\n-- 用途: ③今後の新規成約分 = pace × Σ profile(残日)、②既成約の未計上残 = Σ max(0, n×profile − booked)。\n-- 注意: 拠点の per-dom 単価はノイズが大きい → 利用側はオンラインプロファイル×スケール係数を使う(契約参照)。\n-- 出力列: channel STRING / dom INT(1..31) / n_conv INT / fa_per_conv FLOAT\nWITH params AS (\n  SELECT\n    DATE_SUB(DATE_TRUNC(CURRENT_DATE('Asia/Tokyo'), MONTH), INTERVAL 1 MONTH) AS pm_start,\n    DATE_SUB(DATE_TRUNC(CURRENT_DATE('Asia/Tokyo'), MONTH), INTERVAL 1 DAY) AS pm_end\n),\nentrance AS (\n  SELECT user_id, DATE(purchased_at) AS pdate, trial_lesson_type,\n    ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY purchased_at ASC) AS rn\n  FROM `shelikes-001.sheinc_marts_fy24.likes_conversions`\n  WHERE is_valid_conversions IS TRUE\n),\nprev_conv AS (\n  SELECT e.user_id,\n    EXTRACT(DAY FROM e.pdate) AS dom,\n    CASE\n      WHEN e.trial_lesson_type LIKE '拠点%' THEN '拠点'\n      WHEN e.trial_lesson_type IN ('OTL', 'ONS') THEN 'オンライン'\n      ELSE '分類不能'\n    END AS channel\n  FROM entrance e\n  CROSS JOIN params p\n  WHERE e.rn = 1 AND e.pdate BETWEEN p.pm_start AND p.pm_end\n),\nfa AS (\n  SELECT f.user_id,\n    SUM(f.monthly_accounting_without_tax + f.monthly_accounting_discount + f.monthly_accounting_own_expense) AS m_fa\n  FROM `shelikes-001.sheinc_intermediate.int_likes_financial_accounting` f\n  CROSS JOIN params p\n  WHERE f.target_month = p.pm_start\n  GROUP BY f.user_id\n)\nSELECT\n  c.channel,\n  c.dom,\n  COUNT(*) AS n_conv,\n  SAFE_DIVIDE(SUM(COALESCE(fa.m_fa, 0)), COUNT(*)) AS fa_per_conv\nFROM prev_conv c\nLEFT JOIN fa USING (user_id)\nGROUP BY 1, 2\nORDER BY 1, 2","q6_conv_actuals":"-- q6_conv_actuals: 当月の成約実績(channel×日)。\n-- 当月に purchased_at がある成約(有効/無効両方)を user ごとに purchased_at 昇順で並べ、rn=1 の成約を数える。\n-- n_valid(is_valid_conversions 基準)が事業側認識の成約件数と一致する(スレッド実証: オンライン498 vs 認識500)。\n-- booked_fa_valid = 有効成約 user の当月FA合計(int_likes_financial_accounting の user_id 別SUM)。\n-- 出力列: channel STRING / dom INT / n_all INT / n_valid INT / booked_fa_valid INT\nWITH params AS (\n  SELECT\n    DATE_TRUNC(CURRENT_DATE('Asia/Tokyo'), MONTH) AS m_start,\n    LAST_DAY(CURRENT_DATE('Asia/Tokyo'), MONTH) AS m_end\n),\nent AS (\n  SELECT c.user_id, DATE(c.purchased_at) AS pdate, c.trial_lesson_type, c.is_valid_conversions,\n    ROW_NUMBER() OVER (PARTITION BY c.user_id ORDER BY c.purchased_at ASC) AS rn\n  FROM `shelikes-001.sheinc_marts_fy24.likes_conversions` c\n  CROSS JOIN params p\n  WHERE DATE(c.purchased_at) BETWEEN p.m_start AND p.m_end\n),\nconv AS (\n  SELECT user_id, pdate, is_valid_conversions,\n    EXTRACT(DAY FROM pdate) AS dom,\n    CASE\n      WHEN trial_lesson_type LIKE '拠点%' THEN '拠点'\n      WHEN trial_lesson_type IN ('OTL', 'ONS') THEN 'オンライン'\n      ELSE '分類不能'\n    END AS channel\n  FROM ent\n  WHERE rn = 1\n),\nfa AS (\n  SELECT f.user_id,\n    SUM(f.monthly_accounting_without_tax + f.monthly_accounting_discount + f.monthly_accounting_own_expense) AS m_fa\n  FROM `shelikes-001.sheinc_intermediate.int_likes_financial_accounting` f\n  CROSS JOIN params p\n  WHERE f.target_month = p.m_start\n  GROUP BY f.user_id\n)\nSELECT\n  c.channel,\n  c.dom,\n  COUNT(*) AS n_all,\n  COUNTIF(c.is_valid_conversions) AS n_valid,\n  SUM(IF(c.is_valid_conversions, COALESCE(fa.m_fa, 0), 0)) AS booked_fa_valid\nFROM conv c\nLEFT JOIN fa USING (user_id)\nGROUP BY 1, 2\nORDER BY 1, 2","q7_conv_plan":"-- q7_conv_plan: オンライン成約の社内計画(ヨミ)件数 [契約v1.2追加]。\n-- ソース: likes_monthly_online_revenue_forecast_inputs(毎日更新の materialized 出力。\n--   spread_sheet_v2 系の Drive 外部テーブルは権限不可のため使用しない)。\n-- 範囲: 前月〜翌月の3行(CURRENT_DATE('Asia/Tokyo')基準)。\n-- 意味: plan_regular + plan_sutara ≒ オンライン成約(valid)の月間計画。src_* = '実績'(確定月) | 'ヨミ'(計画)。\n--   検証済み: 2026-07 実績行 637+172=809 ≒ q6/q5系の7月オンラインvalid実績806(±1%)。\n--   拠点の計画はBQに存在しない(Drive外部のみ)→ targets.json / UI の手入力で扱う。\n-- 出力列: month STRING 'YYYY-MM' / plan_regular FLOAT / plan_sutara FLOAT\n--         / src_regular STRING / src_sutara STRING / as_of DATE(計算日)\nWITH params AS (\n  SELECT\n    FORMAT_DATE('%Y-%m', DATE_SUB(DATE_TRUNC(CURRENT_DATE('Asia/Tokyo'), MONTH), INTERVAL 1 MONTH)) AS pm,\n    FORMAT_DATE('%Y-%m', DATE_ADD(DATE_TRUNC(CURRENT_DATE('Asia/Tokyo'), MONTH), INTERVAL 1 MONTH)) AS nm\n)\nSELECT\n  f.`対象月` AS month,\n  f.`成約数_レギュラー` AS plan_regular,\n  f.`成約数_スタライ` AS plan_sutara,\n  f.`成約数の出所_レギュラー` AS src_regular,\n  f.`成約数の出所_スタライ` AS src_sutara,\n  f.`計算日_as_of` AS as_of\nFROM `shelikes-001.sheinc_marts_output_spreadsheet_official_monitoring.likes_monthly_online_revenue_forecast_inputs` f\nCROSS JOIN params p\nWHERE f.`対象月` BETWEEN p.pm AND p.nm\nORDER BY month","q8_yomi":"-- q8_yomi: 社内売上ヨミ(オンライン・金額) [契約v1.2追加]。\n-- ソース: likes_monthly_online_revenue_forecast(毎日更新の materialized 出力。\n--   fy24 履歴のシナリオA・当日as_ofと完全一致することを確認済み。Drive外部テーブルは使用しない)。\n-- yomi_total = レギュラー入会金ヨミ + レギュラー月額ヨミ + スタライ入会金ヨミ + スタライ月額ヨミ。\n-- 注意: ヨミは財務会計(FA)と定義が異なる(T1実測: 2026-05〜07の月初時点ヨミはオンラインFA実績比 +2.6〜+3.8% 過大)。\n--   表示上の扱いは targets.json の yomi.comparable フラグに従う(既定 false = 参考値表示)。\n-- 範囲 [契約v1.3]: 当月以降に存在する全月(実質FY末=3月まで。上限なし)。CURRENT_DATE('Asia/Tokyo')基準。\n-- 出力列: month STRING 'YYYY-MM' / yomi_total FLOAT / as_of DATE(計算日)\nWITH params AS (\n  SELECT\n    FORMAT_DATE('%Y-%m', DATE_TRUNC(CURRENT_DATE('Asia/Tokyo'), MONTH)) AS m0\n)\nSELECT\n  f.`対象月` AS month,\n  f.`レギュラー入会金ヨミ` + f.`レギュラー月額ヨミ` + f.`スタライ入会金ヨミ` + f.`スタライ月額ヨミ` AS yomi_total,\n  f.`計算日_as_of` AS as_of\nFROM `shelikes-001.sheinc_marts_output_spreadsheet_official_monitoring.likes_monthly_online_revenue_forecast` f\nCROSS JOIN params p\nWHERE f.`対象月` >= p.m0\nORDER BY month"}};</script>
 <script>
 (function () {
   "use strict";
@@ -1802,6 +2301,10 @@ dl { margin: 0; }
     opts: { paceOn: null, paceKyoten: null, lagWeight: L.DEFAULT_LAG_WEIGHT },
     targetOverride: null,
     targetSaved: true,
+    targetOrigin: {},       // 目標欄に入れた値の由来（例: ヨミ採用ボタン）
+    sim: { lksAdjPct: null, mnyMonthly: null, pdMonthly: null, perMonthLksOverride: {} },
+    simSaved: true,
+    fy: null,               // 直近の fySim 結果
     liveRows: {},           // key -> rows
     liveAt: {},             // key -> epoch ms
     status: {},             // key -> {state:'idle'|'loading'|'ok'|'error'|'nosql', err}
@@ -1849,6 +2352,16 @@ dl { margin: 0; }
   var yen = L.fmtYen;
   function m1(v, d) { if (v === null || v === undefined || !isFinite(v)) return "—"; return (v / 1e6).toFixed(d === undefined ? 1 : d); }
   function mRange(a, b, d) { return m1(a, d) + " – " + m1(b, d); }
+  /** 百万円・小数1桁・3桁区切り。通期など 4 桁以上になる場面で使う。 */
+  function m1g(v, d) {
+    if (v === null || v === undefined || !isFinite(v)) return "—";
+    var dd = d === undefined ? 1 : d;
+    var n = v / 1e6, neg = n < 0;
+    var s = Math.abs(n).toFixed(dd).split(".");
+    s[0] = s[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    return (neg ? "-" : "") + s.join(".");
+  }
+  function mRangeG(a, b, d) { return m1g(a, d) + " – " + m1g(b, d); }
   function pct(v, d) { return L.fmtPct(v, d); }
   function pctPlain(v, d) { if (v === null || !isFinite(v)) return "—"; return (v * 100).toFixed(d === undefined ? 1 : d) + "%"; }
 
@@ -2316,6 +2829,261 @@ dl { margin: 0; }
     host.appendChild(svg);
   }
 
+  /* ---- E. 通期シミュレーション: 月次（合計） ---- */
+  function chartFyMonthly(host, m) {
+    clear(host);
+    var fy = STATE.fy;
+    if (!fy || !fy.available) return;
+    var W = Math.max(280, host.clientWidth || 520);
+    var padL = 40, padR = 8, top = 14, plotH = 150, axisH = 32;
+    var H = top + plotH + axisH;
+    var n = fy.months.length || 1;
+    var innerW = Math.max(60, W - padL - padR);
+    var bandW = innerW / n;
+    var barW = Math.min(24, Math.max(5, bandW - 8));   // 24px 上限・面の隙間を残す
+
+    var maxV = 0;
+    fy.months.forEach(function (r) { maxV = Math.max(maxV, r.total.high, r.total.central); });
+    var ticks = niceTicks(maxV, 4);
+    var domainMax = ticks[ticks.length - 1] || 1;
+    function y(v) { return top + plotH - (v / domainMax) * plotH; }
+
+    var svg = sv("svg", { viewBox: "0 0 " + W + " " + H, role: "img" });
+    svg.setAttribute("aria-label", fy.fyLabel + "の月次着地（3サービス合計）。実績 " + fy.counts.actual +
+      " ヶ月、当月 " + m1g(fy.currentBand.total.central) + " 百万円、将来 " + fy.counts.future +
+      " ヶ月の推定を含む通期 " + m1g(fy.fyTotal.total.central) + " 百万円。");
+
+    ticks.forEach(function (t) {
+      svg.appendChild(sv("line", { x1: padL, x2: W - padR, y1: y(t), y2: y(t), stroke: cssVar("--grid"), "stroke-width": 1 }));
+      var lb = sv("text", { x: padL - 6, y: y(t) + 3.5, "text-anchor": "end", fill: cssVar("--ink-3"), "font-size": 10 });
+      lb.setAttribute("style", "font-variant-numeric:tabular-nums");
+      lb.textContent = m1g(t, 0);
+      svg.appendChild(lb);
+    });
+    svg.appendChild(sv("line", { x1: padL, x2: W - padR, y1: y(0), y2: y(0), stroke: cssVar("--baseline"), "stroke-width": 1 }));
+
+    fy.months.forEach(function (r, i) {
+      var cx = padL + bandW * i + bandW / 2;
+      var bx = cx - barW / 2;
+      var g = sv("g", {});
+      var solid = r.status === "actual" ? r.total.central : (r.bookedForward.lks + r.bookedForward.mny + r.bookedForward.pd);
+      solid = Math.min(solid, r.total.central);
+
+      // 推定・見込みぶん（淡い塗り）
+      if (r.total.central > solid) {
+        g.appendChild(sv("rect", {
+          x: bx, y: y(r.total.central), width: barW, height: Math.max(1.5, y(solid) - y(r.total.central)),
+          fill: cssVar("--measure-wash"), stroke: cssVar("--measure-soft"), "stroke-width": 1, rx: 2
+        }));
+      }
+      // 計上済み（実線）
+      if (solid > 0) {
+        g.appendChild(sv("rect", {
+          x: bx, y: y(solid), width: barW, height: Math.max(0.8, y(0) - y(solid)), rx: 2, fill: cssVar("--measure")
+        }));
+      }
+      // レンジ ひげ（当月・将来のヨミ月）
+      if (r.total.high > r.total.low + 1e-9) {
+        g.appendChild(sv("line", { x1: cx, x2: cx, y1: y(r.total.high), y2: y(r.total.low), stroke: cssVar("--ink-3"), "stroke-width": 1 }));
+        [r.total.high, r.total.low].forEach(function (v) {
+          g.appendChild(sv("line", { x1: cx - 3.5, x2: cx + 3.5, y1: y(v), y2: y(v), stroke: cssVar("--ink-3"), "stroke-width": 1 }));
+        });
+      }
+
+      var rows = [
+        { label: "区分", value: FY_STATUS[r.status].label },
+        { label: "SHElikes", value: m1g(r.lks.central) + " 百万円", color: cssVar("--measure") },
+        { label: "SHEmoney", value: m1g(r.mny.central) + " 百万円" },
+        { label: "プロデ", value: m1g(r.pd.central) + " 百万円" },
+        { label: "合計", value: m1g(r.total.central) + " 百万円" }
+      ];
+      if (r.total.high > r.total.low + 1e-9) rows.push({ label: "レンジ", value: mRangeG(r.total.low, r.total.high) });
+      rows.push({ label: "根拠", value: FY_BASIS[r.basis] || "" });
+      g.appendChild(sv("rect", { x: cx - bandW / 2, y: top, width: bandW, height: plotH, fill: "transparent" }));
+      attachTip(g, r.ym + "（" + r.label + "）", rows,
+        r.ym + " " + FY_STATUS[r.status].label + " 合計 " + m1g(r.total.central) + "百万円");
+      svg.appendChild(g);
+
+      // 狭い幅では 1 つおきにラベルを間引く（当月・年度端は必ず出す）
+      var showLabel = bandW >= 26 || r.status === "current" || i === 0 || i === fy.months.length - 1 || i % 2 === 0;
+      if (showLabel) {
+        var t2 = sv("text", {
+          x: cx, y: top + plotH + 14, "text-anchor": "middle",
+          fill: r.status === "current" ? cssVar("--ink") : cssVar("--ink-3"),
+          "font-size": 10, "font-weight": r.status === "current" ? 600 : 400
+        });
+        t2.setAttribute("style", "font-variant-numeric:tabular-nums");
+        t2.textContent = r.label;
+        svg.appendChild(t2);
+      }
+      if (r.status === "current") {
+        var mk = sv("text", { x: cx, y: top + plotH + 25, "text-anchor": "middle", fill: cssVar("--ink-3"), "font-size": 9.5 });
+        mk.textContent = "当月";
+        svg.appendChild(mk);
+      }
+      // 年またぎ（12月 → 1月）の区切り
+      if (r.month === 12 && i < fy.months.length - 1) {
+        var sx = padL + bandW * (i + 1);
+        svg.appendChild(sv("line", { x1: sx, x2: sx, y1: top, y2: top + plotH, stroke: cssVar("--rule-strong"), "stroke-width": 1 }));
+        var yl = sv("text", { x: sx + 3, y: top + 9, fill: cssVar("--ink-3"), "font-size": 9.5 });
+        yl.textContent = (fy.fyStartYear + 1) + "年";
+        svg.appendChild(yl);
+      }
+    });
+
+    makeRoving(svg);
+    host.appendChild(svg);
+  }
+
+  /* ---- F. 通期シミュレーション: 累積 ---- */
+  function chartFyCum(host, m) {
+    clear(host);
+    var fy = STATE.fy;
+    if (!fy || !fy.available) return;
+    var W = Math.max(280, host.clientWidth || 520);
+    var padL = 44, padR = 10, top = 14, plotH = 150, axisH = 32;
+    var H = top + plotH + axisH;
+    var n = fy.cumulative.length || 1;
+    var innerW = Math.max(60, W - padL - padR);
+    var step = n > 1 ? innerW / (n - 1) : 0;
+
+    var tgt = fy.goals.total.target;
+    var baseline = tgt !== null ? tgt : (fy.prevFy.available ? fy.prevFy.total : null);
+    var baselineName = tgt !== null ? "通期目標" : "前年度通期";
+    var maxV = Math.max(fy.fyTotal.total.high, baseline || 0);
+    var ticks = niceTicks(maxV, 4);
+    var domainMax = ticks[ticks.length - 1] || 1;
+    function x(i) { return padL + step * i; }
+    function y(v) { return top + plotH - (v / domainMax) * plotH; }
+
+    var svg = sv("svg", { viewBox: "0 0 " + W + " " + H, role: "img" });
+    svg.setAttribute("aria-label", fy.fyLabel + "の累積FA。年度末の見込み " + m1g(fy.fyTotal.total.central) +
+      " 百万円（レンジ " + mRangeG(fy.fyTotal.total.low, fy.fyTotal.total.high) + "）" +
+      (baseline !== null ? "、" + baselineName + " " + m1g(baseline) + " 百万円" : "") + "。");
+
+    ticks.forEach(function (t) {
+      svg.appendChild(sv("line", { x1: padL, x2: W - padR, y1: y(t), y2: y(t), stroke: cssVar("--grid"), "stroke-width": 1 }));
+      var lb = sv("text", { x: padL - 6, y: y(t) + 3.5, "text-anchor": "end", fill: cssVar("--ink-3"), "font-size": 10 });
+      lb.setAttribute("style", "font-variant-numeric:tabular-nums");
+      lb.textContent = m1g(t, 0);
+      svg.appendChild(lb);
+    });
+    svg.appendChild(sv("line", { x1: padL, x2: W - padR, y1: y(0), y2: y(0), stroke: cssVar("--baseline"), "stroke-width": 1 }));
+
+    // 不確実性の帯（当月以降）
+    var firstBand = -1;
+    for (var i0 = 0; i0 < fy.cumulative.length; i0++) {
+      if (fy.cumulative[i0].high > fy.cumulative[i0].low + 1e-9) { firstBand = i0; break; }
+    }
+    if (firstBand >= 0) {
+      var up = [], dn = [];
+      for (var b = firstBand; b < n; b++) {
+        up.push(x(b) + "," + y(fy.cumulative[b].high));
+        dn.unshift(x(b) + "," + y(fy.cumulative[b].low));
+      }
+      svg.appendChild(sv("polygon", { points: up.concat(dn).join(" "), fill: cssVar("--measure-wash"), stroke: "none" }));
+    }
+
+    // 基準線（通期目標 / 前年度通期）
+    if (baseline !== null && baseline > 0) {
+      var by = y(baseline);
+      svg.appendChild(sv("line", {
+        x1: padL, x2: W - padR, y1: by, y2: by,
+        stroke: (tgt !== null && fy.goals.total.diff && !fy.goals.total.diff.met) ? cssVar("--warning") : cssVar("--ink"),
+        "stroke-width": 2
+      }));
+      var bl = sv("text", { x: padL + 4, y: by - 5, fill: cssVar("--ink-2"), "font-size": 10.5, "font-weight": 500 });
+      bl.setAttribute("style", "font-variant-numeric:tabular-nums");
+      bl.textContent = baselineName + " " + m1g(baseline);
+      svg.appendChild(bl);
+    }
+
+    // 累積ライン（確定＝濃い / 将来＝淡い）
+    function polyline(from, to, color, width, dash) {
+      if (to <= from) return;
+      var pts = [];
+      for (var i = from; i <= to; i++) pts.push(x(i) + "," + y(fy.cumulative[i].central));
+      var a = { points: pts.join(" "), fill: "none", stroke: color, "stroke-width": width, "stroke-linejoin": "round" };
+      if (dash) a["stroke-dasharray"] = dash;
+      svg.appendChild(sv("polyline", a));
+    }
+    var curIdx = -1;
+    for (var ci2 = 0; ci2 < fy.months.length; ci2++) if (fy.months[ci2].status === "current") curIdx = ci2;
+    var solidTo = curIdx >= 0 ? curIdx : n - 1;
+    polyline(0, solidTo, cssVar("--measure"), 2, null);
+    polyline(solidTo, n - 1, cssVar("--measure-soft"), 2, "5 3");
+
+    // 点（マークは 8px 以上の当たり判定を透明 rect で確保）
+    fy.cumulative.forEach(function (c, i) {
+      var g = sv("g", {});
+      var isCur = fy.months[i].status === "current";
+      g.appendChild(sv("circle", {
+        cx: x(i), cy: y(c.central), r: isCur ? 4.5 : 3,
+        fill: fy.months[i].status === "future" ? cssVar("--surface") : cssVar("--measure"),
+        stroke: fy.months[i].status === "future" ? cssVar("--measure-soft") : cssVar("--surface"),
+        "stroke-width": 2
+      }));
+      var rows = [
+        { label: "累積", value: m1g(c.central) + " 百万円", color: cssVar("--measure") },
+        { label: "この月", value: m1g(fy.months[i].total.central) + " 百万円" },
+        { label: "区分", value: FY_STATUS[fy.months[i].status].label }
+      ];
+      if (c.high > c.low + 1e-9) rows.push({ label: "累積レンジ", value: mRangeG(c.low, c.high) });
+      if (baseline !== null && baseline > 0) rows.push({ label: baselineName + "まで", value: m1g(Math.max(0, baseline - c.central)) + " 百万円" });
+      g.appendChild(sv("rect", { x: x(i) - Math.max(12, step / 2), y: top, width: Math.max(24, step), height: plotH, fill: "transparent" }));
+      attachTip(g, fy.months[i].ym + "（" + fy.months[i].label + "）累積", rows,
+        fy.months[i].ym + " 累積 " + m1g(c.central) + "百万円");
+      svg.appendChild(g);
+    });
+
+    // x ラベル（3ヶ月ごと + 当月 + 年度末）
+    fy.months.forEach(function (r, i) {
+      if (!(r.status === "current" || i % 3 === 0 || i === n - 1)) return;
+      var t2 = sv("text", {
+        x: x(i), y: top + plotH + 14,
+        "text-anchor": i === 0 ? "start" : i === n - 1 ? "end" : "middle",
+        fill: r.status === "current" ? cssVar("--ink") : cssVar("--ink-3"),
+        "font-size": 10, "font-weight": r.status === "current" ? 600 : 400
+      });
+      t2.setAttribute("style", "font-variant-numeric:tabular-nums");
+      t2.textContent = r.label;
+      svg.appendChild(t2);
+    });
+
+    makeRoving(svg);
+    host.appendChild(svg);
+  }
+
+  function renderFyLegend() {
+    var lg = $("legend-fy"); clear(lg);
+    var fy = STATE.fy;
+    if (!fy || !fy.available) return;
+    var items = [
+      ["実績・計上済み（確定）", cssVar("--measure"), "swatch"],
+      ["当月の着地見込み / 将来月の推定", cssVar("--measure-wash"), "ghost"],
+      ["レンジ low–high", cssVar("--ink-3"), "line"],
+      ["累積の将来ぶん（破線）", cssVar("--measure-soft"), "dash"]
+    ];
+    if (fy.goals.total.target !== null) items.push(["通期目標", cssVar("--ink"), "rule"]);
+    else if (fy.prevFy.available) items.push(["前年度通期", cssVar("--ink"), "rule"]);
+    items.forEach(function (p) {
+      var it = el("span", "it");
+      var isLine = p[2] === "line" || p[2] === "rule" || p[2] === "dash";
+      var sw = el("span", isLine ? "linekey" : "swatch");
+      if (p[2] === "dash") {
+        sw.style.background = "none";
+        sw.style.borderTop = "2px dashed " + p[1];
+        sw.style.height = "0";
+      } else {
+        sw.style.background = p[1];
+      }
+      if (p[2] === "ghost") sw.style.border = "1px solid " + cssVar("--measure-soft");
+      it.appendChild(sw); it.appendChild(document.createTextNode(p[0]));
+      lg.appendChild(it);
+    });
+    kbdHint(lg);
+  }
+
   /* ---- D. 当月 日次の有効成約（ペース入力の根拠） ---- */
   function chartConv(host, m) {
     clear(host);
@@ -2415,12 +3183,25 @@ dl { margin: 0; }
     var fmt = o.fmt || function (v) { return String(Math.round(v)); };
 
     var maxCandidate = Math.max(o.value || 0, o.extend || 0, o.high || 0, o.marker || 0);
-    var max = maxCandidate > 0 ? maxCandidate * 1.08 : 1;
+    // 拡大表示では上端も詰めないと、左を寄せたぶんが右の空白に流れてしまう
+    var max = maxCandidate > 0 ? maxCandidate * (o.zoom ? 1.02 : 1.08) : 1;
+    /**
+     * FA は月内のほとんどが計上済みなので 0 起点だと常に約 92% 充填になり、
+     * 着地見込みと基準線の差が数 px しか出ない（R4 Minor-6）。
+     * zoom:true の呼び出しでは左端を min(実績, 基準線) × 0.98 まで寄せて差を見えるようにし、
+     * 「0 起点ではない」ことを軸の切れ目マークとラベルで明示する。
+     */
+    var xmin = 0;
+    if (o.zoom) {
+      var lo = Math.min(o.value || 0, (o.marker !== null && o.marker !== undefined && isFinite(o.marker) && o.marker > 0) ? o.marker : (o.value || 0));
+      if (lo > 0 && lo < max) xmin = lo * 0.98;
+    }
     var padR = 2;
-    function x(v) { return Math.max(0, Math.min(W - padR, (v / max) * (W - padR))); }
+    var span = (max - xmin) || 1;
+    function x(v) { return Math.max(0, Math.min(W - padR, ((v - xmin) / span) * (W - padR))); }
 
     var svg = sv("svg", { viewBox: "0 0 " + W + " " + H, role: "img" });
-    svg.setAttribute("aria-label", o.aria || "");
+    svg.setAttribute("aria-label", (o.aria || "") + (xmin > 0 ? "（横軸は " + fmt(xmin) + " から始まる拡大表示）" : ""));
 
     // トラック
     svg.appendChild(sv("rect", { x: 0, y: top, width: W - padR, height: barH, rx: 2, fill: cssVar("--surface-sunk") }));
@@ -2463,6 +3244,19 @@ dl { margin: 0; }
       }
     }
 
+    // 軸の切れ目（0 起点でないことを目で分かるようにする）
+    if (xmin > 0) {
+      var zz = sv("path", {
+        d: "M3," + (top + barH + 1) + " l4,-4 l-4,-4 l4,-4",
+        fill: "none", stroke: cssVar("--ink-3"), "stroke-width": 1.2
+      });
+      svg.appendChild(zz);
+      var zt = sv("text", { x: 11, y: top + barH + 15, fill: cssVar("--ink-3"), "font-size": 9.5 });
+      zt.setAttribute("style", "font-variant-numeric:tabular-nums");
+      zt.textContent = "軸は " + fmt(xmin) + " 起点";
+      svg.appendChild(zt);
+    }
+
     // 全体を1つの当たり判定に（値は必ずテキストでも出しているので補助）
     var g = sv("g", {});
     g.appendChild(sv("rect", { x: 0, y: top - 8, width: W - padR, height: barH + 18, fill: "transparent" }));
@@ -2471,10 +3265,18 @@ dl { margin: 0; }
     if (o.extendLabel) rows.push({ label: o.extendLabel, value: fmt(o.extend || 0), color: cssVar("--measure-soft") });
     if (o.low !== undefined && o.high !== undefined) rows.push({ label: "レンジ", value: fmt(o.low) + " – " + fmt(o.high) });
     if (o.marker) rows.push({ label: o.markerName || "基準", value: fmt(o.marker) });
+    if (xmin > 0) rows.push({ label: "横軸の起点", value: fmt(xmin) + "（0 起点ではない）" });
     attachTip(g, o.title || "", rows, o.aria || "");
+    // マークが 1 個しかないブレットはローヴィング tabindex の利益が無いので、
+    // makeRoving を呼ばずタブストップを 0 個にする（R4 Minor-7）。
+    // 注: tabindex を「外す」と Chromium は既定の可否判定に落ちてこの <g> を
+    // 順次移動の対象にしてしまう。attachTip が付ける tabindex="-1" を残すのが正解。
+    // 説明は svg ルートの role="img" + aria-label が持つ。
+    g.setAttribute("tabindex", "-1");
+    svg.setAttribute("focusable", "false");
+    svg.setAttribute("tabindex", "-1");
     svg.appendChild(g);
 
-    makeRoving(svg);
     host.appendChild(svg);
   }
 
@@ -2568,6 +3370,8 @@ dl { margin: 0; }
     return function (host) {
       drawBullet(host, {
         compact: compact !== false,
+        // FA は 9 割以上が計上済みなので 0 起点では差が見えない → 拡大表示（R4 Minor-6）
+        zoom: true,
         value: s.booked,
         valueLabel: "計上済み",
         extend: s.landing.central,
@@ -2744,10 +3548,11 @@ dl { margin: 0; }
     if (cp.hasPlan) {
       facts.appendChild(fact("達成率", cp.rate !== null ? pctPlain(cp.rate) : "—"));
       facts.appendChild(fact("残り", (cp.remaining !== null ? Math.round(cp.remaining).toLocaleString("ja-JP") : "—"),
-        " 件 / " + cp.remainingDays + "日"));
+        " 件 / " + (cp.noDaysLeft ? "残 0 日" : cp.remainingDays + "日")));
       facts.appendChild(fact("必要ペース",
-        cp.unreachable ? "算出不可" : cp.neededPace !== null ? cp.neededPace.toFixed(1) : "—",
-        cp.unreachable ? "" : " 件/日", cp.behind));
+        cp.noDaysLeft ? (cp.unreachable ? "残 0 日" : "達成済み")
+          : cp.neededPace !== null ? cp.neededPace.toFixed(1) : "—",
+        cp.noDaysLeft ? "" : " 件/日", cp.behind));
     }
     facts.appendChild(fact("現ペース", cp.pace.toFixed(1), " 件/日"));
     blk.appendChild(facts);
@@ -2805,7 +3610,8 @@ dl { margin: 0; }
     var b2 = convBlock(kyoten, m, { noPlanTip: "拠点の計画は BigQuery に無いため、上の「目標を設定する」から件数を入れてください。" });
     grid.appendChild(b2); convDrawers.push(b2.__draw);
 
-    $("conv-note").textContent = "残り " + m.meta.remainingDays + " 日（基準日 " + m.meta.basisDate + " を含む）"
+    // 実績には基準日当日ぶんが入っているため、進捗の残日数からは当日を除く（契約 v1.2.1）
+    $("conv-note").textContent = "残り " + m.conv.days + " 日（基準日 " + m.meta.basisDate + " の翌日から月末まで。当日ぶんは実績に計上済み）"
       + (online.hasPlan && online.src ? " ／ オンライン計画は q7（" + online.src + "）" : "");
   }
 
@@ -2829,7 +3635,53 @@ dl { margin: 0; }
     } catch (e) { return false; }
   }
 
-  var TG_FIELDS = [["tg-total", "total"], ["tg-lks", "lks"], ["tg-mny", "mny"], ["tg-pd", "pd"]];
+  /* 通期シミュレーションのつまみ（この端末のみ） */
+  var SIM_KEY = "fa-monitor-fysim-v1";
+  var SIM_EMPTY = { lksAdjPct: null, mnyMonthly: null, pdMonthly: null, perMonthLksOverride: {} };
+
+  function loadLocalSim() {
+    var out = { lksAdjPct: null, mnyMonthly: null, pdMonthly: null, perMonthLksOverride: {} };
+    try {
+      var raw = window.localStorage.getItem(SIM_KEY);
+      if (!raw) return out;
+      var o = JSON.parse(raw);
+      if (!o || typeof o !== "object") return out;
+      if (typeof o.lksAdjPct === "number" && isFinite(o.lksAdjPct)) out.lksAdjPct = o.lksAdjPct;
+      if (typeof o.mnyMonthly === "number" && isFinite(o.mnyMonthly)) out.mnyMonthly = o.mnyMonthly;
+      if (typeof o.pdMonthly === "number" && isFinite(o.pdMonthly)) out.pdMonthly = o.pdMonthly;
+      if (o.perMonthLksOverride && typeof o.perMonthLksOverride === "object") {
+        for (var k in o.perMonthLksOverride) {
+          if (!Object.prototype.hasOwnProperty.call(o.perMonthLksOverride, k)) continue;
+          var v = o.perMonthLksOverride[k];
+          if (typeof v === "number" && isFinite(v) && v >= 0) out.perMonthLksOverride[k] = v;
+        }
+      }
+    } catch (e) { /* プライベートウィンドウ等 */ }
+    return out;
+  }
+
+  function simIsEmpty(s) {
+    return s.lksAdjPct === null && s.mnyMonthly === null && s.pdMonthly === null &&
+      !Object.keys(s.perMonthLksOverride || {}).length;
+  }
+
+  function saveLocalSim() {
+    try {
+      if (simIsEmpty(STATE.sim)) window.localStorage.removeItem(SIM_KEY);
+      else window.localStorage.setItem(SIM_KEY, JSON.stringify(STATE.sim));
+      STATE.simSaved = true;
+    } catch (e) { STATE.simSaved = false; }
+  }
+
+  var TG_FIELDS = [
+    ["tg-total", "total", "合計の目標"], ["tg-lks", "lks", "SHElikes"],
+    ["tg-mny", "mny", "SHEmoney"], ["tg-pd", "pd", "プロデ"]
+  ];
+  var FY_FIELDS = [
+    ["fy-total", "total", "通期 合計の目標"], ["fy-lks", "lks", "通期 SHElikes"],
+    ["fy-mny", "mny", "通期 SHEmoney"], ["fy-pd", "pd", "通期 プロデ"]
+  ];
+  var ALL_TG_IDS = TG_FIELDS.concat(FY_FIELDS).map(function (f) { return f[0]; }).concat(["tg-kyoten"]);
 
   /** 円 → 入力欄の表示（百万円・小数1桁）に丸めた円。比較用。 */
   function toDisplayYen(v) {
@@ -2841,25 +3693,63 @@ dl { margin: 0; }
    * 全欄をそのまま保存すると、後で targets.json が更新されても
    * 古いローカル値が勝ち続けてしまうため。
    */
+  /** 目標入力の上限（百万円）。これを超える値は誤入力とみなして無視する（R4 Minor-2）。 */
+  var TG_MAX_M = 100000;        // 月次: 1,000 億円
+  var TG_MAX_FY_M = 1000000;    // 通期: 1 兆円
+
+  /** 上限超え・値が丸めて 0 になった欄。ヒント表示のために覚えておく。 */
+  var tgRejected = [];
+
+  /**
+   * 入力欄を読み、**repo（targets.json）と実際に違う値だけ**を上書きとして返す。
+   * 全欄をそのまま保存すると、後で targets.json が更新されても
+   * 古いローカル値が勝ち続けてしまうため。
+   */
   function readTargetInputs() {
     var base = L.normalizeTargets(APP.data && APP.data.targets, null);
-    var fa = {};
-    TG_FIELDS.forEach(function (f) {
-      var raw = String($(f[0]).value || "").trim();
-      if (raw === "") return;                       // 空欄は「上書きしない」＝ repo 値に従う
-      var v = parseFloat(raw);
-      if (!isFinite(v) || v <= 0) return;
-      var yenv = Math.round(v * 1e6);               // 百万円 → 円
-      if (toDisplayYen(base.fa[f[1]].value) === yenv) return;   // repo と同じなら保存しない
-      fa[f[1]] = yenv;
-    });
+    tgRejected = [];
+    function readGroup(fields, slotOf, maxM) {
+      var out = {};
+      fields.forEach(function (f) {
+        var inp = $(f[0]);
+        if (!inp) return;
+        var raw = String(inp.value || "").trim();
+        if (raw === "") return;                     // 空欄は「上書きしない」＝ repo 値に従う
+        var v = parseFloat(raw);
+        if (!isFinite(v) || v <= 0) return;
+        if (v > maxM) { tgRejected.push({ label: f[2], kind: "max", max: maxM }); return; }
+        var yenv = Math.round(v * 1e6);             // 百万円 → 円
+        if (!(yenv > 0)) { tgRejected.push({ label: f[2], kind: "tiny" }); return; }  // R4 Minor-1
+        if (toDisplayYen(slotOf(f[1]).value) === yenv) return;   // repo と同じなら保存しない
+        out[f[1]] = yenv;
+      });
+      return out;
+    }
+
     var out = {};
+    var fa = readGroup(TG_FIELDS, function (k) { return base.fa[k]; }, TG_MAX_M);
     if (Object.keys(fa).length) out.fa_targets = fa;
+    var fy = readGroup(FY_FIELDS, function (k) { return base.fy[k]; }, TG_MAX_FY_M);
+    if (Object.keys(fy).length) out.fy_targets = fy;
+
     var kraw = String($("tg-kyoten").value || "").trim();
     if (kraw !== "") {
       var kv = parseFloat(kraw);
-      if (isFinite(kv) && kv >= 0 && kv !== base.kyotenConvTarget.value) out.kyoten_conv_target = kv;
+      // 0 は「未設定」に丸める（契約 v1.2.1 / R4 Minor-5）
+      if (isFinite(kv) && kv > 0 && kv <= 100000 && kv !== base.kyotenConvTarget.value) out.kyoten_conv_target = kv;
+      else if (isFinite(kv) && kv > 100000) tgRejected.push({ label: "拠点の成約目標", kind: "max", max: 100000 });
     }
+
+    // 「ヨミ由来」の印は、その値が入っているあいだだけ持ち回る（R4 Minor-9）
+    var origin = {};
+    for (var ok2 in STATE.targetOrigin) {
+      if (!Object.prototype.hasOwnProperty.call(STATE.targetOrigin, ok2)) continue;
+      var rec = STATE.targetOrigin[ok2];
+      if (rec && out.fa_targets && toDisplayYen(out.fa_targets[ok2]) === toDisplayYen(rec.yen)) origin[ok2] = rec;
+    }
+    STATE.targetOrigin = origin;
+    if (Object.keys(origin).length) out.origin = origin;
+
     return Object.keys(out).length ? out : null;
   }
 
@@ -2876,13 +3766,25 @@ dl { margin: 0; }
       if (document.activeElement !== inp) {
         inp.value = slot.value === null ? "" : String(Math.round(slot.value / 1e5) / 10);
       }
-      $(f[0] + "-src").textContent = slot.value === null ? "未設定"
-        : "現在: " + m1(slot.value) + " 百万円" + targetSourceLabel(slot.source);
+      var srcEl = $(f[0] + "-src");
+      clear(srcEl);
+      srcEl.appendChild(document.createTextNode(slot.value === null ? "未設定"
+        : "現在: " + m1(slot.value) + " 百万円" + targetSourceLabel(slot.source)));
+      // ヨミ採用ボタンで入れた値には由来を残す（R4 Minor-9）
+      var org = STATE.targetOrigin && STATE.targetOrigin[f[1]];
+      if (slot.source === "local" && org && org.kind === "yomi" &&
+        toDisplayYen(org.yen) === toDisplayYen(slot.value)) {
+        srcEl.appendChild(document.createTextNode(" "));
+        var oc = el("span", "chip is-warn");
+        oc.appendChild(el("span", "dot"));
+        oc.appendChild(document.createTextNode("ヨミ由来（+2.6〜3.8% 過大の可能性）"));
+        srcEl.appendChild(oc);
+      }
     });
     var kinp = $("tg-kyoten"), kslot = t.kyotenConvTarget;
     if (document.activeElement !== kinp) kinp.value = kslot.value === null ? "" : String(kslot.value);
     $("tg-kyoten-src").textContent = kslot.value === null
-      ? "未設定（拠点の計画は BigQuery に存在しないため手入力）"
+      ? "未設定（拠点の計画は BigQuery に存在しないため手入力。0 は未設定として扱う）"
       : "現在: " + kslot.value + " 件" + targetSourceLabel(kslot.source);
 
     $("dt-targets-label").textContent = t.hasAnyFa
@@ -2893,13 +3795,15 @@ dl { margin: 0; }
       ? "この端末に保存できませんでした（プライベートウィンドウ等）。入力はこのページを閉じるまで有効です。正はリポジトリの dashboard/data/targets.json。"
       : "ここでの入力はこの端末のみの一時設定です（ブラウザに保存）。空欄にすると targets.json の値に戻ります。全員に反映する正の値はリポジトリの dashboard/data/targets.json。";
 
+    renderTargetWarn(m);
+
     // 社内ヨミ（q8）
     var box = $("yomi-box"); clear(box);
     if (!m.yomi) return;
     var y = m.yomi;
     var cal = el("div", "callout" + (y.comparable ? " info" : ""));
     var h = el("div", "h");
-    h.appendChild(el("span", "ic", y.comparable ? "●" : "▲"));
+    h.appendChild(icEl(y.comparable ? "●" : "▲"));
     h.appendChild(document.createTextNode(y.comparable
       ? "社内売上ヨミ（オンライン） " + m1(y.total) + " 百万円 — 目標系列として扱う設定です"
       : "参考: 社内売上ヨミ（オンライン） " + m1(y.total) + " 百万円"));
@@ -2920,12 +3824,47 @@ dl { margin: 0; }
     btn.type = "button";
     btn.addEventListener("click", function () {
       $("tg-lks").value = String(Math.round(y.total / 1e5) / 10);
+      // 由来を覚えておき、出所ラベルの横に出す（R4 Minor-9）
+      STATE.targetOrigin.lks = { kind: "yomi", yen: Math.round(y.total / 1e5) * 1e5 };
       onTargetInput();
       try { $("dt-targets").open = true; } catch (e) { /* noop */ }
     });
     wrap.appendChild(btn);
     cal.appendChild(wrap);
     box.appendChild(cal);
+  }
+
+  /**
+   * 目標入力の注意書き。
+   *  - 上限超え / 丸めて 0 になる入力を無視したこと（R4 Minor-1・Minor-2）
+   *  - 明示 total と 3 サービス合計の乖離（R4 Minor-4）
+   */
+  function renderTargetWarn(m) {
+    var host = $("tg-warn");
+    if (!host) return;
+    clear(host);
+    var msgs = [];
+    for (var i = 0; i < tgRejected.length; i++) {
+      var r = tgRejected[i];
+      msgs.push(r.kind === "max"
+        ? r.label + "は上限（" + r.max.toLocaleString("ja-JP") + " 百万円）を超えているため無視しました"
+        : r.label + "は小さすぎるため（丸めると 0 円）無視しました");
+    }
+    var mm = m.targets.faTotalMismatch;
+    if (mm) {
+      msgs.push("合計の目標 " + m1(m.targets.fa.total.value) + " 百万円 と 3サービスの合計 " +
+        m1(mm.sum) + " 百万円 が " + pctPlain(mm.rate) + " 食い違っています（合計欄を優先して表示中）");
+    }
+    // 通期目標の不整合は通期セクション側（#fy-warn）に出す
+    host.hidden = !msgs.length;
+    if (!msgs.length) return;
+    msgs.forEach(function (t2) {
+      var c = el("div", "chip is-warn");
+      c.style.marginRight = "6px";
+      c.appendChild(el("span", "dot"));
+      c.appendChild(document.createTextNode(t2));
+      host.appendChild(c);
+    });
   }
 
   function renderBreakdownTable(m) {
@@ -3070,6 +4009,245 @@ dl { margin: 0; }
     });
   }
 
+  /* ---------------- 通期達成シミュレーション（契約 v1.3） ---------------- */
+
+  /** STATE.sim（表示単位）→ fySim の入力（円）。 */
+  function simInputs() {
+    var s = STATE.sim || SIM_EMPTY;
+    var ovr = {};
+    for (var k in s.perMonthLksOverride) {
+      if (Object.prototype.hasOwnProperty.call(s.perMonthLksOverride, k)) ovr[k] = s.perMonthLksOverride[k];
+    }
+    return {
+      lksAdjPct: s.lksAdjPct,
+      mnyMonthly: s.mnyMonthly,
+      pdMonthly: s.pdMonthly,
+      perMonthLksOverride: ovr
+    };
+  }
+
+  var FY_STATUS = {
+    actual: { label: "確定", cls: "is-actual" },
+    current: { label: "当月（レンジ）", cls: "is-current" },
+    future: { label: "推定", cls: "is-future" }
+  };
+  var FY_BASIS = {
+    q1: "公式FA（確定）",
+    model: "当月モデル（①〜④）",
+    yomi: "ヨミ ÷ 補正 ÷ 構成比",
+    avg3: "直近3確定月の平均",
+    override: "手入力の上書き",
+    missing: "データなし"
+  };
+
+  var fySig = null;        // 組み立て済みテーブルの形（月と区分）
+  var fyCells = {};        // ym -> セル参照
+
+  function renderFy(m) {
+    var sec = $("sec-fy");
+    var fy;
+    try { fy = L.fySim(m, effectiveData(), simInputs()); }
+    catch (e) { sec.hidden = true; STATE.fy = null; return; }
+    STATE.fy = fy;
+    sec.hidden = !fy || !fy.available;
+    if (!fy || !fy.available) return;
+
+    $("fy-label").textContent = fy.fyLabel;
+    $("fy-head-note").textContent = "年度は 4月〜翌3月。実績 " + fy.counts.actual + " ヶ月 ／ 当月 1 ヶ月 ／ 将来 " +
+      fy.counts.future + " ヶ月";
+
+    var sig = fy.first + "|" + fy.last + "|" + fy.months.map(function (r) { return r.status; }).join(",");
+    if (sig !== fySig) { buildFyTable(fy); fySig = sig; }
+    updateFyValues(fy);
+    renderFyHero(fy);
+    renderFyTargets(m, fy);
+    renderFySimInputs(fy);
+    renderFyCaveat(fy);
+  }
+
+  function renderFyCaveat(fy) {
+    var host = $("fy-caveat-dyn"); clear(host);
+    var bits = [];
+    bits.push("ヨミの補正: central ÷ " + L.YOMI_BIAS.central + "・low ÷ " + L.YOMI_BIAS.low + "・high ÷ " + L.YOMI_BIAS.high +
+      "（確定3ヶ月のバックテストで +2.6〜3.8% の一貫過大）");
+    bits.push("オンライン構成比 " + pctPlain(fy.params.onlineShare) +
+      (fy.params.onlineShareFallback ? "（q4 が取れず 100% として計算）" : "（q4 当月）"));
+    if (fy.counts.floored) bits.push("前受計上分が推定を上回った月が " + fy.counts.floored + " ヶ月（フロア適用）");
+    if (fy.counts.overrides) bits.push("手入力で上書きした月が " + fy.counts.overrides + " ヶ月");
+    if (fy.counts.missingActual) bits.push("q1 に無い実績月が " + fy.counts.missingActual + " ヶ月あり 0 円として扱っている");
+    host.textContent = bits.join(" ／ ");
+  }
+
+  function renderFyHero(fy) {
+    var t = fy.goals.total;
+    $("fy-lede").textContent = "";
+    var lede = $("fy-lede"); clear(lede);
+    lede.appendChild(document.createTextNode(fy.fyLabel + "は "));
+    var fig = el("span", "fig", m1g(fy.fyTotal.total.central));
+    lede.appendChild(fig);
+    lede.appendChild(document.createTextNode(" 百万円 で着地見込み"));
+
+    var cmp = $("fy-cmp"); clear(cmp);
+    if (t.diff) {
+      var up = t.diff.met;
+      var c = el("div", "cmp " + (up ? "up" : "down"));
+      c.appendChild(el("span", "lb", "通期目標比"));
+      c.appendChild(el("span", "ar", up ? "▲" : "▼"));
+      c.appendChild(el("span", "vv", (up ? "+" : "-") + m1g(Math.abs(t.diff.diff)) + " 百万円"));
+      c.appendChild(el("span", "sub", "（達成率 " + pctPlain(t.diff.rate) + " ／ 目標 " + m1g(t.target) +
+        " 百万円" + targetSourceLabel(t.source) + "）"));
+      cmp.appendChild(c);
+    } else {
+      cmp.appendChild(el("div", "cmp none", "通期目標が未設定です — 前年度実績を基準線にしています"));
+    }
+    if (fy.prevFy.available) {
+      var up2 = fy.prevFy.yoyDiff >= 0;
+      var c2 = el("div", "cmp " + (up2 ? "up" : "down"));
+      c2.appendChild(el("span", "lb", "前年度比（" + fy.prevFy.label + "）"));
+      c2.appendChild(el("span", "ar", up2 ? "▲" : "▼"));
+      c2.appendChild(el("span", "vv", (up2 ? "+" : "-") + m1g(Math.abs(fy.prevFy.yoyDiff)) + " 百万円"));
+      c2.appendChild(el("span", "sub", "（" + pct(fy.prevFy.yoy) + " ／ 前年度 " + m1g(fy.prevFy.total) + " 百万円）"));
+      cmp.appendChild(c2);
+    }
+
+    var sub = $("fy-sub"); clear(sub);
+    var parts = [
+      "通期レンジ " + mRangeG(fy.fyTotal.total.low, fy.fyTotal.total.high) + " 百万円",
+      "実績 " + fy.counts.actual + " ヶ月 " + m1g(fy.actual.total) + "／当月 " + m1g(fy.currentBand.total.central) +
+      "／将来 " + fy.counts.future + " ヶ月 " + m1g(fy.future.total.central) + " 百万円"
+    ];
+    if (t.needPerFutureMonth !== null) {
+      parts.push("目標達成に必要な将来月あたり " + m1g(t.needPerFutureMonth) + " 百万円" +
+        "（将来月の見込み平均 " + m1g(fy.counts.future ? fy.future.total.central / fy.counts.future : 0) + "）");
+    } else if (t.target !== null && fy.counts.future === 0) {
+      parts.push("将来月は残っていない（当月で年度が終わる）");
+    }
+    if (!fy.prevFy.available) {
+      parts.push("前年度比は q1 に前年度（" + fy.prevFy.first + "〜" + fy.prevFy.last + "）が " +
+        fy.prevFy.present + "/12 ヶ月しか無いため非表示");
+    }
+    sub.textContent = parts.join(" ／ ");
+  }
+
+  function buildFyTable(fy) {
+    var tb = $("tbl-fy").querySelector("tbody"); clear(tb);
+    fyCells = {};
+    fy.months.forEach(function (r) {
+      var st = FY_STATUS[r.status];
+      var tr = el("tr", st.cls);
+      var th = el("td", null, r.label);
+      if (r.month === 1) th.setAttribute("title", r.ym + "（年をまたぐ）");
+      tr.appendChild(th);
+      tr.appendChild(el("td", null, st.label));
+
+      var tdL = el("td", "n");
+      if (r.editable) {
+        var inp = el("input");
+        inp.type = "number"; inp.min = "0"; inp.step = "0.1"; inp.inputMode = "decimal";
+        inp.id = "fy-m-" + r.ym;
+        inp.setAttribute("aria-label", r.ym + " の SHElikes を上書き（百万円）");
+        inp.addEventListener("input", onFyMonthInput);
+        tdL.appendChild(inp);
+        fyCells[r.ym] = { lksInput: inp, lksTd: tdL };
+      } else {
+        fyCells[r.ym] = { lksTd: tdL };
+      }
+      tr.appendChild(tdL);
+
+      ["mny", "pd", "total", "cum"].forEach(function (k) {
+        var td = el("td", "n");
+        fyCells[r.ym][k] = td;
+        tr.appendChild(td);
+      });
+      var tdB = el("td");
+      fyCells[r.ym].basis = tdB;
+      tr.appendChild(tdB);
+      tb.appendChild(tr);
+    });
+  }
+
+  function updateFyValues(fy) {
+    fy.months.forEach(function (r, i) {
+      var c = fyCells[r.ym];
+      if (!c) return;
+      if (c.lksInput) {
+        if (document.activeElement !== c.lksInput) {
+          var ovv = STATE.sim.perMonthLksOverride[r.ym];
+          c.lksInput.value = (ovv === undefined || ovv === null) ? "" : String(Math.round(ovv / 1e5) / 10);
+        }
+        c.lksInput.placeholder = m1(r.lks.central);
+        c.lksTd.className = "n" + (r.basis === "override" ? " ovr" : "");
+        c.lksInput.title = r.basis === "override"
+          ? "上書き中。空欄にすると推定（" + m1g(r.lks.central) + " 百万円）に戻ります。"
+          : "推定 " + m1g(r.lks.central) + " 百万円（レンジ " + mRangeG(r.lks.low, r.lks.high) + "）。数値を入れると上書きできます。";
+      } else {
+        c.lksTd.textContent = r.status === "current"
+          ? m1g(r.lks.central) + "（" + mRangeG(r.lks.low, r.lks.high) + "）"
+          : m1g(r.lks.central);
+      }
+      c.mny.textContent = m1g(r.mny.central);
+      c.pd.textContent = m1g(r.pd.central);
+      c.total.textContent = r.status === "current"
+        ? m1g(r.total.central) + "（" + mRangeG(r.total.low, r.total.high) + "）"
+        : m1g(r.total.central);
+      c.cum.textContent = m1g(fy.cumulative[i].central);
+      c.basis.textContent = FY_BASIS[r.basis] || r.basis || "";
+      if (r.floored) {
+        c.basis.textContent += "（前受 " + m1g(r.bookedForward.lks) + " がフロア）";
+      }
+    });
+    $("fy-table-note").textContent =
+      "金額は百万円・小数1桁。将来月の SHElikes 欄は上書きできます（空欄で推定に戻る）。" +
+      "当月は着地レンジを括弧で併記。累積は central の積み上げ。";
+  }
+
+  function renderFyTargets(m, fy) {
+    var t = m.targets;
+    FY_FIELDS.forEach(function (f) {
+      var inp = $(f[0]), slot = t.fy[f[1]];
+      if (!inp) return;
+      if (document.activeElement !== inp) {
+        inp.value = slot.value === null ? "" : String(Math.round(slot.value / 1e5) / 10);
+      }
+      $(f[0] + "-src").textContent = slot.value === null ? "未設定"
+        : "現在: " + m1g(slot.value) + " 百万円" + targetSourceLabel(slot.source);
+    });
+    $("dt-fy-targets-label").textContent = t.hasAnyFy ? "通期目標を変更する" : "通期目標を設定する（未設定）";
+    $("fy-targets-scope").textContent = STATE.targetSaved === false
+      ? "この端末に保存できませんでした（プライベートウィンドウ等）。入力はこのページを閉じるまで有効です。"
+      : "この端末のみの一時設定です。全員に反映する正の値はリポジトリの dashboard/data/targets.json（fy_targets）。空欄で戻ります。";
+    // 上限・不整合の注意は月次目標と同じ枠組みで出す
+    var warn = $("fy-warn");
+    if (warn) {
+      clear(warn);
+      var mm = t.fyTotalMismatch;
+      warn.hidden = !mm;
+      if (mm) {
+        var c = el("span", "chip is-warn");
+        c.appendChild(el("span", "dot"));
+        c.appendChild(document.createTextNode("通期 合計の目標 " + m1g(t.fy.total.value) +
+          " 百万円 と 3サービスの合計 " + m1g(mm.sum) + " 百万円 が " + pctPlain(mm.rate) + " 食い違っています"));
+        warn.appendChild(c);
+      }
+    }
+  }
+
+  function renderFySimInputs(fy) {
+    var a = $("in-fy-adj"), mn = $("in-fy-mny"), pdI = $("in-fy-pd");
+    if (document.activeElement !== a) a.value = STATE.sim.lksAdjPct === null ? "" : String(STATE.sim.lksAdjPct);
+    if (document.activeElement !== mn) mn.value = STATE.sim.mnyMonthly === null ? "" : String(Math.round(STATE.sim.mnyMonthly / 1e5) / 10);
+    if (document.activeElement !== pdI) pdI.value = STATE.sim.pdMonthly === null ? "" : String(Math.round(STATE.sim.pdMonthly / 1e5) / 10);
+    $("in-fy-adj-src").textContent = "既定 0%（ヨミ由来の推定をそのまま使う）。現在 " + (fy.inputs.lksAdjPct >= 0 ? "+" : "") + fy.inputs.lksAdjPct + "%";
+    $("in-fy-mny-src").textContent = "既定 " + m1g(fy.defaults.mnyMonthly) + " 百万円（直近" + fy.defaults.recentMonths + "確定月の平均）";
+    $("in-fy-pd-src").textContent = "既定 " + m1g(fy.defaults.pdMonthly) + " 百万円（直近" + fy.defaults.recentMonths + "確定月の平均）";
+    var n = Object.keys(STATE.sim.perMonthLksOverride).length;
+    $("dt-fy-sim-label").textContent = "将来月の前提を調整する" +
+      (simIsEmpty(STATE.sim) ? "" : "（この端末の調整あり" + (n ? "・月別上書き " + n + " 件" : "") + "）");
+    $("fy-sim-scope").textContent = STATE.simSaved === false
+      ? "この端末に保存できませんでした（プライベートウィンドウ等）。調整はこのページを閉じるまで有効です。"
+      : "調整はこの端末のみ（ブラウザに保存）。空欄にすると既定に戻ります。";
+  }
+
   function kvTable(table, rows) {
     var tb = table.querySelector("tbody"); clear(tb);
     rows.forEach(function (r) {
@@ -3146,7 +4324,16 @@ dl { margin: 0; }
       ["レンジと「約」", "low / central / high は「上振れの可能性」の織り込み率だけが違う3シナリオ。中央値には「約」を付けて点推定でないことを示す。"],
       ["画面の言葉と契約の記号", "「これから入る見込み」＝① 更新残、「反映待ち」＝② 既成約未計上、「これからの新規成約」＝③、「上振れの可能性」＝④ 滞納/処理ラグ。トップは平易な言葉、正確な定義は各項目のツールチップとこの表に置いている。"],
       ["目標（fa_targets）", "リポジトリの dashboard/data/targets.json が正。設定されていれば着地見込みとの差分・達成率を主表示し、未設定なら前月実績を基準線にする。画面から入れた値はこの端末のブラウザにだけ保存される一時設定で、出所を各欄に明示している。"],
-      ["成約件数の進捗", "オンラインの計画は q7（社内のヨミ件数、レギュラー＋スタライ）。実績は q6 の有効成約（n_valid）合計。必要ペース = max(0, 計画 − 実績) ÷ 残り日数。現ペース着地 = 実績 + 成約ペース × 残り日数。拠点の計画は BigQuery に無いため targets.json か画面入力で与える。"],
+      ["成約件数の進捗", "オンラインの計画は q7（社内のヨミ件数、レギュラー＋スタライ）。実績は q6 の有効成約（n_valid）合計。" +
+        "実績には基準日当日ぶんが入っているため、進捗の残り日数は当日を除く（" + m.conv.days + " 日）。" +
+        "必要ペース = max(0, 計画 − 実績) ÷ 残り日数。現ペース着地 = 実績 + 成約ペース × 残り日数。" +
+        "③（FA）側の残日数は当日を含む " + m.meta.remainingDays + " 日で、定義が別物なので数が 1 日ずれる。" +
+        "拠点の計画は BigQuery に無いため targets.json か画面入力で与える（0 は未設定扱い）。"],
+      ["通期シミュレーション", "年度は 4月〜翌3月。実績月は q1 の確定値、当月は ①〜④ の着地モデル（レンジつき）、将来月は " +
+        "max(すでに計上済みの前受分, 社内売上ヨミ ÷ バイアス補正 ÷ オンライン構成比 × (1 + 一括調整%))。" +
+        "バイアス補正は確定3ヶ月のバックテスト（ヨミがFA実績比 +2.6〜3.8% の一貫過大）に基づき central ÷ " + L.YOMI_BIAS.central +
+        "・low ÷ " + L.YOMI_BIAS.low + "・high ÷ " + L.YOMI_BIAS.high + "。ヨミが無い月と SHEmoney・プロデは直近3確定月の平均を既定にする。" +
+        "将来月は粗い推定であり、当月の積み上げモデルとは精度が別物。月別の上書き・一括調整はこの端末にだけ保存される。"],
       ["社内売上ヨミ（q8）", (m.yomi && m.yomi.comparable) ? "財務会計と突合可能と判定されているため、目標系列として扱っている。" : "オンライン売上のヨミ。財務会計とは定義が異なる可能性があるため既定では参考値として扱い、目標には自動反映しない（手動で目標欄に入れることは可能）。"]
     ].forEach(function (p) {
       var d = el("div", "d");
@@ -3336,7 +4523,9 @@ dl { margin: 0; }
     { host: "chart-breakdown", fn: chartBreakdown },
     { host: "chart-channel", fn: chartChannel },
     { host: "chart-conv", fn: chartConv },
-    { host: "chart-monthly", fn: chartMonthly }
+    { host: "chart-monthly", fn: chartMonthly },
+    { host: "chart-fy-monthly", fn: chartFyMonthly },
+    { host: "chart-fy-cum", fn: chartFyCum }
   ];
 
   function drawTotalBullet(host, m) { svcBullet(m.total, false)(host); }
@@ -3365,6 +4554,7 @@ dl { margin: 0; }
     renderPlanTable(m);
     renderChannelTable(m);
     renderMonthlyTable(m);
+    renderFy(m);
     renderMnyPd(m);
     renderDefs(m);
     renderScenario(m);
@@ -3378,6 +4568,7 @@ dl { margin: 0; }
       var host = $(c.host);
       if (host) c.fn(host, STATE.model);
     });
+    renderFyLegend();
     // サービスカードのミニブレット（カード再生成のたびに幅が確定する）
     var cardHosts = document.querySelectorAll("#cards .svc .chart");
     for (var i = 0; i < cardHosts.length; i++) {
@@ -3428,19 +4619,75 @@ dl { margin: 0; }
     if (tgDeb) clearTimeout(tgDeb);
     tgDeb = setTimeout(onTargetInput, 160);
   }
-  ["tg-total", "tg-lks", "tg-mny", "tg-pd", "tg-kyoten"].forEach(function (id) {
-    $(id).addEventListener("input", onTargetInputDebounced);
+  ALL_TG_IDS.forEach(function (id) {
+    var e2 = $(id);
+    if (e2) e2.addEventListener("input", onTargetInputDebounced);
   });
   $("btn-targets-reset").addEventListener("click", function () {
     STATE.targetOverride = null;
+    STATE.targetOrigin = {};
     STATE.targetSaved = saveLocalTargets(null);
-    ["tg-total", "tg-lks", "tg-mny", "tg-pd", "tg-kyoten"].forEach(function (id) { $(id).value = ""; });
+    ALL_TG_IDS.forEach(function (id) { if ($(id)) $(id).value = ""; });
     render();
   });
 
   $("btn-reset").addEventListener("click", function () {
     STATE.opts.paceOn = null; STATE.opts.paceKyoten = null;
     STATE.opts.lagWeight = L.DEFAULT_LAG_WEIGHT;
+    render();
+  });
+
+  /* ---- 通期シミュレーションのつまみ ---- */
+
+  /** 入力欄 → 円。空欄・数値でない・負は null（＝既定に戻す）。 */
+  function yenFromInput(inp, maxM) {
+    var raw = String(inp.value === null || inp.value === undefined ? "" : inp.value).trim();
+    if (raw === "") return null;
+    var v = parseFloat(raw);
+    if (!isFinite(v) || v < 0) return null;
+    if (maxM && v > maxM) return null;
+    return Math.round(v * 1e6);
+  }
+
+  var simDeb = null;
+  function onFySim() {
+    if (simDeb) clearTimeout(simDeb);
+    simDeb = setTimeout(function () {
+      var a = String($("in-fy-adj").value || "").trim();
+      var av = parseFloat(a);
+      STATE.sim.lksAdjPct = (a === "" || !isFinite(av)) ? null : Math.max(-100, Math.min(200, av));
+      STATE.sim.mnyMonthly = yenFromInput($("in-fy-mny"), 100000);
+      STATE.sim.pdMonthly = yenFromInput($("in-fy-pd"), 100000);
+      saveLocalSim();
+      render();
+    }, 160);
+  }
+  ["in-fy-adj", "in-fy-mny", "in-fy-pd"].forEach(function (id) {
+    var e2 = $(id);
+    if (e2) e2.addEventListener("input", onFySim);
+  });
+
+  var fyMonthDeb = null;
+  function onFyMonthInput(ev) {
+    var inp = ev.currentTarget;
+    var ym = String(inp.id).slice("fy-m-".length);
+    if (fyMonthDeb) clearTimeout(fyMonthDeb);
+    fyMonthDeb = setTimeout(function () {
+      var v = yenFromInput(inp, 1000000);
+      if (v === null) delete STATE.sim.perMonthLksOverride[ym];
+      else STATE.sim.perMonthLksOverride[ym] = v;
+      saveLocalSim();
+      render();
+    }, 200);
+  }
+
+  $("btn-fy-reset").addEventListener("click", function () {
+    STATE.sim = { lksAdjPct: null, mnyMonthly: null, pdMonthly: null, perMonthLksOverride: {} };
+    saveLocalSim();
+    ["in-fy-adj", "in-fy-mny", "in-fy-pd"].forEach(function (id) { if ($(id)) $(id).value = ""; });
+    for (var k in fyCells) {
+      if (Object.prototype.hasOwnProperty.call(fyCells, k) && fyCells[k].lksInput) fyCells[k].lksInput.value = "";
+    }
     render();
   });
 
@@ -3682,6 +4929,10 @@ dl { margin: 0; }
    * 7. 起動
    * ================================================================ */
   STATE.targetOverride = loadLocalTargets();
+  if (STATE.targetOverride && STATE.targetOverride.origin && typeof STATE.targetOverride.origin === "object") {
+    STATE.targetOrigin = STATE.targetOverride.origin;
+  }
+  STATE.sim = loadLocalSim();
   render();
   if (typeof ResizeObserver === "function") {
     try {

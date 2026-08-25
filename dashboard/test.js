@@ -580,14 +580,13 @@ describe("buildModel — 目標・成約進捗の統合", function () {
   eq(m.conv.online.src, "ヨミ", "出所はヨミ");
   eq(m.conv.online.asOf, "2026-08-09", "as_of");
   eq(m.conv.online.actual, 5, "q6 オンラインの n_valid 合計 = 5");
-  eq(m.conv.online.remainingDays, 22, "残り 22 日（basis 10日 / 31日）");
+  // 契約 v1.2.1: 成約進捗の残日数は基準日当日を除く（実績に当日ぶんが入っているため）
+  eq(m.conv.online.remainingDays, 21, "成約の残り 21 日（basis 10日 / 31日 → 当日を除く）");
+  eq(m.meta.remainingDays, 22, "③（FA）の残日数は当日を含む 22 日のまま");
+  eq(m.conv.days, 21, "conv.days = meta.remainingDays − 1");
   eq(m.conv.kyoten.plan, 8, "拠点は targets.kyoten_conv_target");
   eq(m.conv.kyoten.actual, 2, "拠点実績 2");
   eq(m.conv.hasPlan, true, "計画あり");
-
-  // 前月行の src が「実績」であること（計画でなく実績表記に使う）
-  var julRow = withTargets.queries.q7_conv_plan.rows[0];
-  eq(julRow.src_regular, "実績", "前月行は実績");
 
   // ヨミ
   eq(m.yomi.total, 3200, "q8 の当月ヨミ");
@@ -645,6 +644,366 @@ describe("フォールバック: q7 / q8 / targets が無い（データ層 未�
   var mt = L.buildModel(badT, {});
   eq(mt.targets.hasAnyFa, false, "壊れた targets → 目標なし扱い");
   ok(isFinite(mt.total.landing.central), "壊れた targets でもクラッシュしない");
+});
+
+/* ---------------------------------------------------------------- *
+ * 3.6 R4 レビュー指摘の修正（契約 v1.2.1）
+ * ---------------------------------------------------------------- */
+
+describe("R4 Important-1: 成約進捗の残日数は基準日当日を除く", function () {
+  // 月末日が基準日 → 成約の残日数は 0 になる（③ の残日数は 1 のまま）
+  var lastDay = clone(MINI);
+  lastDay.basis_date = "2026-08-31";
+  lastDay.queries.q7_conv_plan = { rows: [{ month: "2026-08", plan_regular: 6, plan_sutara: 4, src_regular: "ヨミ", src_sutara: "ヨミ", as_of: "2026-08-31" }] };
+  var ml = L.buildModel(lastDay, { paceOn: 2, paceKyoten: 4 });
+  eq(ml.meta.remainingDays, 1, "月末日: ③ の残日数は 1（当日を含む）");
+  eq(ml.conv.days, 0, "月末日: 成約の残日数は 0");
+  eq(ml.conv.online.noDaysLeft, true, "残 0 日フラグ");
+  eq(ml.conv.online.neededPace, null, "残 0 日で未達 → 必要ペースはゼロ除算せず null");
+  eq(ml.conv.online.unreachable, true, "残 0 日で未達 → unreachable");
+  near(ml.conv.online.projected, ml.conv.online.actual, 1e-9, "残 0 日なら現ペース着地 = 実績");
+
+  // 月初 1 日 → 残日数は末日 −1 = 30
+  var first = clone(MINI);
+  first.basis_date = "2026-08-01";
+  var mf = L.buildModel(first, {});
+  eq(mf.meta.remainingDays, 31, "1日: ③ の残日数は 31");
+  eq(mf.conv.days, 30, "1日: 成約の残日数は 30");
+  eq(mf.conv.online.noDaysLeft, false, "残日数あり");
+
+  // 計画を達成済みなら残 0 日でも必要ペース 0・unreachable ではない
+  var met = L.convProgress({ plan: 10, actual: 10, remainingDays: 0, pace: 1 });
+  eq(met.neededPace, 0, "残 0 日でも達成済みなら必要ペース 0");
+  eq(met.unreachable, false, "達成済みは unreachable ではない");
+  eq(met.noDaysLeft, true, "noDaysLeft は日数だけで決まる");
+
+  // 二重計上が消えていること: 実績 = 当日を含む / 残日数 = 当日を除く
+  var m10 = L.buildModel(clone(MINI), { paceOn: 2 });
+  near(m10.conv.online.projected, m10.conv.online.actual + m10.conv.online.pace * 21, 1e-9,
+    "現ペース着地 = 実績 + ペース × (残日数 − 1)");
+});
+
+describe("R4 Minor-4/5/11: 目標の正規化（v1.3 追補）", function () {
+  // Minor-5: 拠点の成約目標 0 は「未設定」
+  var z = L.normalizeTargets({ kyoten_conv_target: 0 }, null);
+  eq(z.kyotenConvTarget.value, null, "kyoten_conv_target=0 は未設定");
+  eq(z.kyotenConvTarget.source, null, "出所も null");
+  var zo = L.normalizeTargets({ kyoten_conv_target: 240 }, { kyoten_conv_target: 0 });
+  eq(zo.kyotenConvTarget.value, 240, "ローカルの 0 は上書きにならず repo 値が残る");
+
+  // Minor-4: 明示 total と Σ の乖離
+  var okT = L.normalizeTargets({ fa_targets: { lks: 300, mny: 20, pd: 5, total: 328 } }, null);
+  eq(okT.faTotalMismatch, null, "乖離 0.9% → 注意なし");
+  var badT = L.normalizeTargets({ fa_targets: { lks: 300, mny: 20, pd: 5, total: 500 } }, null);
+  ok(badT.faTotalMismatch !== null, "乖離 3% 超 → 注意あり");
+  eq(badT.faTotalMismatch.sum, 325, "Σ = 325");
+  near(badT.faTotalMismatch.diff, 175, 1e-9, "差 = total − Σ");
+  var derT = L.normalizeTargets({ fa_targets: { lks: 300, mny: 20, pd: 5 } }, null);
+  eq(derT.faTotalMismatch, null, "derived な total は定義上一致するので対象外");
+  var partial = L.normalizeTargets({ fa_targets: { lks: 300, total: 500 } }, null);
+  eq(partial.faTotalMismatch, null, "サービス目標が欠けていれば判定しない");
+
+  // Minor-11: hasLocalOverride は override の実キーで判定
+  eq(L.normalizeTargets({ yomi: { comparable: false } }, { yomi: { comparable: true } }).hasLocalOverride,
+    true, "yomi だけの上書きでも「この端末の設定あり」");
+  eq(L.normalizeTargets({ fa_targets: { lks: 100 } }, { fa_targets: { lks: 100 } }).hasLocalOverride,
+    true, "repo と同値でも override キーがあれば local 扱い");
+  eq(L.normalizeTargets({ fa_targets: { lks: 100 } }, { fa_targets: { lks: 0 } }).hasLocalOverride,
+    false, "無効値（0）だけの上書きは上書きと数えない");
+  eq(L.normalizeTargets({ fa_targets: { lks: 100 } }, null).hasLocalOverride, false, "上書きなし");
+
+  // fy_targets（契約 v1.3）
+  var fy = L.normalizeTargets({ fy_targets: { lks: 4000, mny: 50, pd: 100 }, fy_note: "note" }, null);
+  eq(fy.fy.total.value, 4150, "fy_targets も 3 サービスから total を導出");
+  eq(fy.fy.total.source, "derived", "出所 derived");
+  eq(fy.hasAnyFy, true, "通期目標あり");
+  eq(fy.fyNote, "note", "fy_note を通す");
+  var fyo = L.normalizeTargets({ fy_targets: { total: 4000 } }, { fy_targets: { total: 4500 } });
+  eq(fyo.fy.total.value, 4500, "通期目標もローカル上書きできる");
+  eq(fyo.fy.total.source, "local", "出所 local");
+  eq(L.normalizeTargets(null, null).hasAnyFy, false, "targets 無し → 通期目標なし");
+  eq(L.normalizeTargets({ fy_targets: "nope" }, null).fy.total.value, null, "壊れた fy_targets でもクラッシュしない");
+});
+
+/* ---------------------------------------------------------------- *
+ * 3.7 fySim — 通期達成シミュレーション（契約 v1.3）
+ * ---------------------------------------------------------------- */
+
+/**
+ * FY 検証用データ。MINI（当月モデルは手計算済み）に年度分の q1 と q8 を足したもの。
+ * オンライン構成比 = 600 / (600+300+100) = 0.6。
+ * ヨミ 618.6 → central = 618.6 ÷ 1.031 ÷ 0.6 = 1000（きっちり手計算できる値を選んだ）。
+ */
+var FYMINI = (function () {
+  var d = clone(MINI);
+  var q1 = [];
+  for (var i = 0; i < 12; i++) {                       // 前年度 2025-04〜2026-03
+    q1.push({ year_month: L.addMonths("2025-04", i), lks: 100, mny: 10, pd: 20 });
+  }
+  q1.push({ year_month: "2026-04", lks: 300, mny: 30, pd: 40 });
+  q1.push({ year_month: "2026-05", lks: 300, mny: 30, pd: 40 });
+  q1.push({ year_month: "2026-06", lks: 300, mny: 30, pd: 40 });
+  q1.push({ year_month: "2026-07", lks: 1000, mny: 200, pd: 300 });   // MINI の前月
+  q1.push({ year_month: "2026-08", lks: 2000, mny: 400, pd: 600 });   // MINI の当月
+  q1.push({ year_month: "2026-09", lks: 50, mny: 5, pd: 8 });         // 未来月の前受計上分
+  for (var j = 0; j < 6; j++) {
+    q1.push({ year_month: L.addMonths("2026-10", j), lks: 10, mny: 1, pd: 2 });
+  }
+  d.queries.q1_official_monthly = { rows: q1 };
+  var q8 = [];
+  for (var k = 0; k < 7; k++) q8.push({ month: L.addMonths("2026-09", k), yomi_total: 618.6, as_of: "2026-08-10" });
+  d.queries.q8_yomi = { rows: q8 };
+  return d;
+})();
+
+var FYM = L.buildModel(FYMINI, { paceOn: 2, paceKyoten: 4, lagWeight: 0.5 });
+
+describe("fySim — 年度の組み立てと区分", function () {
+  var s = L.fySim(FYM, FYMINI, {});
+  eq(s.available, true, "利用可");
+  eq(s.fyLabel, "2026年度", "年度ラベル");
+  eq(s.first, "2026-04", "年度開始は 4月");
+  eq(s.last, "2027-03", "年度末は 3月");
+  eq(s.months.length, 12, "12 ヶ月");
+  eq(s.counts.actual, 4, "実績月 4（4〜7月）");
+  eq(s.counts.current, 1, "当月 1");
+  eq(s.counts.future, 7, "将来月 7（9〜3月）");
+  eq(s.months[0].status, "actual", "4月は実績");
+  eq(s.months[4].status, "current", "8月は当月");
+  eq(s.months[5].status, "future", "9月は将来");
+  eq(s.months[5].editable, true, "将来月は編集可");
+  eq(s.months[0].editable, false, "実績月は編集不可");
+  near(s.params.onlineShare, 0.6, 1e-12, "オンライン構成比 = 600/1000");
+  eq(s.params.onlineShareFallback, false, "構成比は q4 から取れている");
+
+  // 年度境界（4月開始）の判定
+  eq(L.fyStartYearOf("2026-03"), 2025, "3月は前年度");
+  eq(L.fyStartYearOf("2026-04"), 2026, "4月から新年度");
+  eq(L.addMonths("2026-12", 1), "2027-01", "月送り（年またぎ）");
+  eq(L.addMonths("2026-01", -1), "2025-12", "月戻し（年またぎ）");
+});
+
+describe("fySim — 実績月・当月・将来月の値", function () {
+  var s = L.fySim(FYM, FYMINI, {});
+
+  // 実績月は q1 そのまま（band なし）
+  eq(s.actual.lks, 1900, "実績 LKS = 300+300+300+1000");
+  eq(s.actual.mny, 290, "実績 MNY = 30+30+30+200");
+  eq(s.actual.pd, 420, "実績 PD = 40+40+40+300");
+  eq(s.actual.total, 2610, "実績合計 2610");
+  eq(s.months[0].lks.low, s.months[0].lks.high, "実績月に band は無い");
+
+  // 当月は buildModel の着地そのもの
+  ["low", "central", "high"].forEach(function (b) {
+    near(s.currentBand.lks[b], FYM.lks.landing[b], 1e-9, "当月 LKS " + b + " = buildModel の着地");
+    near(s.currentBand.total[b], FYM.total.landing[b], 1e-9, "当月 合計 " + b + " = buildModel の着地");
+  });
+  eq(s.months[4].basis, "model", "当月の根拠は当月モデル");
+
+  // 将来月 LKS = ヨミ ÷ bias ÷ オンライン構成比
+  var sep = s.months[5];
+  eq(sep.basis, "yomi", "9月はヨミ由来");
+  near(sep.lks.central, 1000, 1e-9, "central = 618.6 ÷ 1.031 ÷ 0.6 = 1000");
+  near(sep.lks.low, 618.6 / 1.038 / 0.6, 1e-9, "low は 1.038 で割り戻す（保守側）");
+  near(sep.lks.high, 618.6 / 1.026 / 0.6, 1e-9, "high は 1.026");
+  ok(sep.lks.low < sep.lks.central && sep.lks.central < sep.lks.high, "low < central < high");
+  eq(sep.floored, false, "前受計上分 50 < 推定 → フロアは効かない");
+
+  // MNY / PD の将来月既定 = 直近3確定月平均
+  near(s.defaults.mnyMonthly, (200 + 30 + 30) / 3, 1e-9, "MNY 既定 = 直近3確定月平均");
+  near(s.defaults.pdMonthly, (300 + 40 + 40) / 3, 1e-9, "PD 既定 = 直近3確定月平均");
+  near(s.defaults.recentLks, (1000 + 300 + 300) / 3, 1e-9, "LKS の直近3確定月平均");
+  near(sep.mny.central, (200 + 30 + 30) / 3, 1e-9, "9月 MNY = 既定値（前受 5 より大きい）");
+  near(sep.pd.central, (300 + 40 + 40) / 3, 1e-9, "9月 PD = 既定値");
+  eq(s.inputs.mnyIsDefault, true, "MNY は既定値のまま");
+
+  // 通期合計 = 実績 + 当月 + 将来
+  ["low", "central", "high"].forEach(function (b) {
+    near(s.fyTotal.total[b], s.actual.total + s.currentBand.total[b] + s.future.total[b], 1e-6,
+      "通期 " + b + " = 実績 + 当月 + 将来");
+  });
+  ok(s.fyTotal.total.low <= s.fyTotal.total.central && s.fyTotal.total.central <= s.fyTotal.total.high,
+    "通期 low ≤ central ≤ high");
+  near(s.fyTotal.lks.central + s.fyTotal.mny.central + s.fyTotal.pd.central, s.fyTotal.total.central, 1e-6,
+    "サービス別の合計 = 通期合計");
+
+  // 累積
+  eq(s.cumulative.length, 12, "累積は 12 点");
+  near(s.cumulative[11].central, s.fyTotal.total.central, 1e-6, "累積の最終値 = 通期合計");
+  near(s.cumulative[0].central, s.months[0].total.central, 1e-9, "累積の初項 = 4月");
+});
+
+describe("fySim — 調整つまみ（一括%・月次値・月別上書き）", function () {
+  var base = L.fySim(FYM, FYMINI, {});
+
+  // LKS 一括調整
+  var up = L.fySim(FYM, FYMINI, { lksAdjPct: 10 });
+  near(up.months[5].lks.central, 1100, 1e-9, "+10% で 1000 → 1100");
+  near(up.months[0].lks.central, base.months[0].lks.central, 1e-9, "実績月は動かさない");
+  near(up.currentBand.lks.central, base.currentBand.lks.central, 1e-9, "当月も動かさない");
+  var down = L.fySim(FYM, FYMINI, { lksAdjPct: -100 });
+  near(down.months[5].lks.central, 50, 1e-9, "−100% でも前受計上分（フロア）は残る");
+  eq(down.months[5].floored, true, "フロアが効いたことを記録する");
+
+  // 月別上書き（band 無し）
+  var ov = L.fySim(FYM, FYMINI, { perMonthLksOverride: { "2026-09": 12345 } });
+  eq(ov.months[5].basis, "override", "上書きした月の根拠は override");
+  eq(ov.months[5].lks.central, 12345, "上書き値をそのまま使う");
+  eq(ov.months[5].lks.low, 12345, "上書き月に band は無い");
+  eq(ov.months[5].lks.high, 12345, "同上");
+  eq(ov.counts.overrides, 1, "上書き件数");
+  near(ov.months[6].lks.central, base.months[6].lks.central, 1e-9, "他の月は変わらない");
+  var ovNeg = L.fySim(FYM, FYMINI, { perMonthLksOverride: { "2026-09": -5 } });
+  eq(ovNeg.months[5].lks.central, 0, "負の上書きは 0 に丸める");
+  var ovBad = L.fySim(FYM, FYMINI, { perMonthLksOverride: { "2026-09": "abc" } });
+  eq(ovBad.months[5].basis, "yomi", "数値でない上書きは無視（ヨミに戻る）");
+
+  // MNY / PD の月次値
+  var mp = L.fySim(FYM, FYMINI, { mnyMonthly: 500, pdMonthly: 700 });
+  eq(mp.months[5].mny.central, 500, "MNY 月次値を反映");
+  eq(mp.months[5].pd.central, 700, "PD 月次値を反映");
+  eq(mp.inputs.mnyIsDefault, false, "既定ではない");
+  near(mp.future.mny.central, 500 * 7, 1e-9, "将来 7 ヶ月ぶん");
+  var mz = L.fySim(FYM, FYMINI, { mnyMonthly: 0 });
+  eq(mz.months[5].mny.central, 5, "0 でも前受計上分（フロア）は残る");
+  eq(mz.months[6].mny.central, 1, "10月の前受 1");
+});
+
+describe("fySim — ヨミ欠損・前受フロア", function () {
+  // 12月のヨミだけ落とす → 直近3確定月平均へフォールバック
+  var noYomi = clone(FYMINI);
+  noYomi.queries.q8_yomi.rows = noYomi.queries.q8_yomi.rows.filter(function (r) { return r.month !== "2026-12"; });
+  var m2 = L.buildModel(noYomi, { paceOn: 2, paceKyoten: 4, lagWeight: 0.5 });
+  var s = L.fySim(m2, noYomi, {});
+  var dec = s.months[8];
+  eq(dec.ym, "2026-12", "12月の行");
+  eq(dec.basis, "avg3", "ヨミ欠損 → 直近3確定月平均");
+  near(dec.lks.central, (1000 + 300 + 300) / 3, 1e-9, "= 533.33");
+  eq(dec.lks.low, dec.lks.high, "フォールバック月に band は無い");
+  eq(s.months[5].basis, "yomi", "他の月はヨミのまま");
+
+  // q8 が丸ごと無い
+  var noQ8 = clone(FYMINI);
+  delete noQ8.queries.q8_yomi;
+  var s2 = L.fySim(L.buildModel(noQ8, {}), noQ8, {});
+  eq(s2.available, true, "q8 が無くても SIM は出せる");
+  s2.months.forEach(function (r) {
+    if (r.status === "future") ok(r.basis === "avg3", r.ym + " は平均フォールバック");
+  });
+
+  // 前受計上分が推定を上回る月（フロア発動）
+  var floored = clone(FYMINI);
+  floored.queries.q1_official_monthly.rows.forEach(function (r) { if (r.year_month === "2027-03") r.lks = 5000; });
+  var s3 = L.fySim(L.buildModel(floored, { paceOn: 2, paceKyoten: 4 }), floored, {});
+  var mar = s3.months[11];
+  eq(mar.ym, "2027-03", "3月の行");
+  eq(mar.floored, true, "前受 5000 > 推定 1000 → フロア発動");
+  eq(mar.lks.central, 5000, "フロア値をそのまま使う");
+  eq(mar.lks.low, 5000, "low もフロアで押し上げられる");
+  eq(s3.counts.floored, 1, "フロア発動月の数");
+});
+
+describe("fySim — 目標と前年度比", function () {
+  // 目標なし
+  var noT = L.fySim(FYM, FYMINI, {});
+  eq(noT.goals.total.target, null, "通期目標なし");
+  eq(noT.goals.total.diff, null, "差分も null");
+  eq(noT.goals.total.needPerFutureMonth, null, "必要額も null");
+
+  // 目標あり（total = 8000）
+  var withT = clone(FYMINI);
+  withT.targets = { fy_targets: { total: 8000 } };
+  var mT = L.buildModel(withT, { paceOn: 2, paceKyoten: 4, lagWeight: 0.5 });
+  var s = L.fySim(mT, withT, {});
+  eq(s.goals.total.target, 8000, "通期目標を読む");
+  eq(s.goals.total.source, "repo", "出所 repo");
+  near(s.goals.total.diff.diff, s.fyTotal.total.central - 8000, 1e-6, "差分 = 見込み − 目標");
+  near(s.goals.total.diff.rate, s.fyTotal.total.central / 8000, 1e-9, "達成率");
+  near(s.goals.total.needPerFutureMonth,
+    Math.max(0, 8000 - s.actual.total - s.currentBand.total.central) / 7, 1e-6,
+    "残り将来月あたり必要FA = max(0, 目標 − 実績 − 当月central) ÷ 7");
+  // 目標を大きく下回る額にすると必要額は 0 に張り付く
+  var lowT = clone(withT); lowT.targets = { fy_targets: { total: 1 } };
+  var sl = L.fySim(L.buildModel(lowT, { paceOn: 2, paceKyoten: 4 }), lowT, {});
+  eq(sl.goals.total.needPerFutureMonth, 0, "すでに超過なら必要額は 0（負にしない）");
+
+  // UI 上書き
+  var sOv = L.fySim(mT, withT, { targets: { fy_targets: { total: 9000 } } });
+  eq(sOv.goals.total.target, 8000, "model.targets が優先（buildModel 側で畳んだ結果を使う）");
+  var sOv2 = L.fySim({ meta: FYM.meta, history: FYM.history, lks: FYM.lks, mny: FYM.mny, pd: FYM.pd, total: FYM.total },
+    withT, { targets: { fy_targets: { total: 9000 } } });
+  eq(sOv2.goals.total.target, 9000, "model.targets が無ければ sim.targets で畳む");
+
+  // 前年度通期
+  eq(noT.prevFy.available, true, "前年度 12 ヶ月そろっている");
+  eq(noT.prevFy.total, 12 * 130, "前年度通期 = 12 × 130");
+  eq(noT.prevFy.label, "2025年度", "前年度ラベル");
+  near(noT.prevFy.yoy, noT.fyTotal.total.central / 1560 - 1, 1e-12, "前年度比");
+
+  // 前年度が欠けている（q1 未拡張のデータ層）→ 前年度比だけ落とす
+  var short = clone(FYMINI);
+  short.queries.q1_official_monthly = {
+    rows: short.queries.q1_official_monthly.rows.filter(function (r) { return r.year_month >= "2025-08"; })
+  };
+  var ss = L.fySim(L.buildModel(short, { paceOn: 2, paceKyoten: 4 }), short, {});
+  eq(ss.available, true, "SIM 本体は出せる");
+  eq(ss.prevFy.available, false, "前年度比は出せない");
+  eq(ss.prevFy.total, null, "前年度合計は null");
+  eq(ss.prevFy.yoy, null, "前年度比も null");
+  eq(ss.prevFy.present, 8, "そろっている月数を報告する");
+  near(ss.fyTotal.total.central, noT.fyTotal.total.central, 1e-6, "当年度の見込みは前年度欠損に影響されない");
+});
+
+describe("fySim — 年度境界・退化ケース", function () {
+  // 年度初日（4月1日）: 実績月 0・将来月 11
+  var apr = clone(FYMINI);
+  apr.basis_date = "2026-04-01";
+  apr.target_month = "2026-04";
+  apr.queries.q8_yomi.rows = apr.queries.q8_yomi.rows.concat(
+    [{ month: "2026-05", yomi_total: 618.6, as_of: "2026-04-01" },
+    { month: "2026-06", yomi_total: 618.6, as_of: "2026-04-01" },
+    { month: "2026-07", yomi_total: 618.6, as_of: "2026-04-01" },
+    { month: "2026-08", yomi_total: 618.6, as_of: "2026-04-01" }]);
+  var sa = L.fySim(L.buildModel(apr, {}), apr, {});
+  eq(sa.fyLabel, "2026年度", "4月1日は当年度の初日");
+  eq(sa.counts.actual, 0, "実績月 0");
+  eq(sa.counts.current, 1, "当月 1");
+  eq(sa.counts.future, 11, "将来月 11");
+  eq(sa.actual.total, 0, "実績合計 0");
+  eq(sa.months[0].status, "current", "4月が当月");
+  ok(isFinite(sa.fyTotal.total.central), "通期見込みは出せる");
+  eq(sa.prevFy.available, true, "前年度は 2025-04〜2026-03 でそろっている");
+
+  // 年度末日（3月31日）: 将来月 0 → 必要額はゼロ除算せず null
+  var mar = clone(FYMINI);
+  mar.basis_date = "2027-03-31";
+  mar.target_month = "2027-03";
+  mar.targets = { fy_targets: { total: 99999 } };
+  var sm = L.fySim(L.buildModel(mar, {}), mar, {});
+  eq(sm.fyLabel, "2026年度", "3月31日はまだ 2026年度");
+  eq(sm.counts.actual, 11, "実績月 11");
+  eq(sm.counts.future, 0, "将来月 0");
+  eq(sm.months[11].status, "current", "3月が当月");
+  eq(sm.goals.total.needPerFutureMonth, null, "将来月 0 → 必要額は null（ゼロ除算しない）");
+  ok(sm.goals.total.diff !== null, "達成率は出せる");
+  near(sm.fyTotal.total.central, sm.actual.total + sm.currentBand.total.central, 1e-6,
+    "通期 = 実績 + 当月（将来なし）");
+
+  // 引数の退化
+  var empty = L.fySim({}, {}, {});
+  eq(empty.available, false, "対象月が取れなければ available=false");
+  eq(empty.months.length, 0, "月リストは空");
+  ok(L.fySim(null, null, null).available === false, "null 引数でもクラッシュしない");
+  var noSim = L.fySim(FYM, FYMINI);
+  near(noSim.fyTotal.total.central, L.fySim(FYM, FYMINI, {}).fyTotal.total.central, 1e-9, "sim 省略でも同じ");
+
+  // q1 が空（当月モデルだけある）
+  var noQ1 = clone(FYMINI);
+  noQ1.queries.q1_official_monthly = { rows: [] };
+  var sn = L.fySim(L.buildModel(noQ1, {}), noQ1, {});
+  eq(sn.available, true, "q1 が空でも落ちない");
+  eq(sn.counts.missingActual, 4, "実績月が欠けていることを報告する");
+  eq(sn.actual.total, 0, "実績は 0 扱い");
 });
 
 /* ---------------------------------------------------------------- *
@@ -777,11 +1136,19 @@ describe("契約の不変条件（フィクスチャ / スナップショット�
   });
 
   // 不変条件 3: q1 の 2026-07 実績
+  // 契約の検証値は 2026-08-25 断面のもの。公式FAはバッチ更新で確定後も数万〜数十万円
+  // 動く（契約「既知の注意点」/ 8/20 実例 差 ¥68,287）ため、生データ側は 0.05% の
+  // 許容で見る。桁・列取り違えのような本物の回帰はこの幅では通らない。
+  // 断面固定の厳密一致は testdata/snapshot-2026-08-25.json の凍結ブロックが担保する。
   var jul = q1.filter(function (r) { return r.year_month === "2026-07"; })[0];
   if (jul) {
-    eq(Number(jul.lks), 356607091, "③ 2026-07 lks = 356,607,091");
-    eq(Number(jul.mny), 4619550, "③ 2026-07 mny = 4,619,550");
-    eq(Number(jul.pd), 9080741, "③ 2026-07 pd = 9,080,741");
+    [["lks", 356607091], ["mny", 4619550], ["pd", 9080741]].forEach(function (p) {
+      var got = Number(jul[p[0]]), want = p[1], drift = got - want;
+      ok(Math.abs(drift) <= want * 0.0005,
+        "③ 2026-07 " + p[0] + " ≒ " + want.toLocaleString("ja-JP") + "（バッチ更新差 ±0.05%）",
+        "actual=" + got + " drift=" + drift);
+      if (drift !== 0) console.log("    note: 2026-07 " + p[0] + " は契約検証値から " + drift + " 円ずれている（バッチ更新差）");
+    });
   } else { skipped("③ q1 に 2026-07 が無い"); }
 
   // 不変条件 4: MNY の単価が 500〜900 円/日
