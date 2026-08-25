@@ -22,6 +22,7 @@ dashboard/
 │   ├── q4_lks_channel_booked.sql LKS 計上済みFAのチャネル(オンライン/拠点)按分
 │   ├── q5_conv_profile.sql       成約日別・1件あたり当月FA プロファイル(前月実測)
 │   └── q6_conv_actuals.sql       当月の成約実績(channel×日、有効/無効件数)
+├── build_snapshot.py             生のBigQuery RESTレスポンス(raw/q*.json相当)→ data/latest.json への型付き変換+不変条件チェッカー
 ├── data/
 │   └── latest.json               6クエリの結果を型付きで格納したスナップショット
 ├── template.html                 /*__DATA__*/ プレースホルダを持つダッシュボードのHTML雛形
@@ -31,6 +32,8 @@ dashboard/
 └── out/
     └── dashboard.html            ビルド成果物。Claude Artifactとして公開する対象
 ```
+
+`build_snapshot.py` は、6クエリ実行で得た生のBigQuery RESTレスポンス(`raw/q1_official_monthly.json` 等)を読み込み、型付き変換を行って `data/latest.json` を生成し、続けてデータ契約の不変条件チェックを実行するスクリプト。次の2つのガードを持つ: (1) JST 00:00〜00:10の実行を中断する(月境界レースの回避)、(2) 生レスポンスの取得月と基準日の月が一致しない場合に中断する。
 
 各SQLの要点:
 
@@ -99,10 +102,10 @@ sql/q6_conv_actuals.sql ─────┘         │ /*__DATA__*/ プレース
 
 ### Claudeセッションが行う場合(自動)
 
-1. `sql/` 配下の6クエリを `shelikes-001` プロジェクト(読み取り専用)に対して実行する。`CURRENT_DATE('Asia/Tokyo')` 基準で自己完結しているため、パラメータの変更は不要。
-2. 結果を `latest.json` のスキーマ(`generated_at`/`basis_date`/`target_month`/`queries.*.rows`/`meta.bytes_processed`)に変換して `data/latest.json` を更新する。BigQuery REST形式(`rows[].f[].v`)からの変換は `logic.js` の `parseBqResult` と同一ロジックを使う。
-3. `build.py` を実行して `out/dashboard.html` を再生成する。
-4. `test.js` を実行し、下記「検証」の不変条件がすべて満たされることを確認する。失敗した場合は生成物を公開せず、原因を調査する。
+1. `sql/` 配下の6クエリを `shelikes-001` プロジェクト(読み取り専用)に対して実行する。`CURRENT_DATE('Asia/Tokyo')` 基準で自己完結しているため、パラメータの変更は不要。**6クエリは必ず1パスでまとめて取得し、クエリ間で時間を空けないこと**(基準日の断面の一貫性を保つため)。
+2. 各クエリの生のBigQuery RESTレスポンスを保存する(`raw/q1_official_monthly.json` 等)。
+3. `build_snapshot.py` を実行する。生レスポンスを `latest.json` のスキーマ(`generated_at`/`basis_date`/`target_month`/`queries.*.rows`/`meta.bytes_processed`)に型付き変換して `data/latest.json` を生成し(変換ロジックは `logic.js` の型変換処理と同一)、続けてデータ契約の不変条件チェックを実行して結果を出力する(下記「検証」参照)。**JST深夜0時台(00:00〜00:10)の実行は避けること**(月境界レース回避のガードにより中断される)。生レスポンスの取得月と基準月が一致しない場合も中断される。
+4. `build.py` を実行して `out/dashboard.html` を再生成する。
 5. `out/dashboard.html` の内容でArtifactを再公開する(同一URLへの再デプロイ)。
 6. (日次Routineの場合)次回実行時刻まで待機する。
 
@@ -111,10 +114,10 @@ sql/q6_conv_actuals.sql ─────┘         │ /*__DATA__*/ プレース
 
 ### 人間が手動で行う場合
 
-1. BigQueryコンソールまたは `bq` コマンドで、`sql/` 配下の6本のSQLを `shelikes-001` プロジェクトに対して実行する(要・認証情報)。
-2. 各クエリ結果を `latest.json` のスキーマに合わせて整形し、`data/latest.json` を更新する。
-3. `python build.py` を実行して `out/dashboard.html` を生成する。
-4. `node test.js`(またはリポジトリのテスト実行手順)で不変条件を確認する。
+1. BigQueryコンソールまたは `bq` コマンドで、`sql/` 配下の6本のSQLを `shelikes-001` プロジェクトに対して実行する(要・認証情報)。**6クエリは必ず1パスでまとめて取得し、クエリ間で時間を空けないこと**(基準日の断面の一貫性を保つため)。
+2. 各クエリの生のBigQuery RESTレスポンスを保存する(`raw/q1_official_monthly.json` 等)。
+3. `python build_snapshot.py` を実行して `data/latest.json` を生成する(データ契約の不変条件チェックも同時に実行される)。**JST深夜0時台(00:00〜00:10)の実行は避けること**(月境界レース回避のガードにより中断される)。
+4. `python build.py` を実行して `out/dashboard.html` を生成する。
 5. `out/dashboard.html` の内容を、既存のArtifact URL({{ARTIFACT_URL}})に再公開する、または当該URLを管理しているClaudeセッションに更新を依頼する。
 
 ## 検証(test.js と不変条件)
