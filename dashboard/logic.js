@@ -639,6 +639,8 @@
       }
     ];
 
+    var isMonthStart = basisDom <= MONTH_START_DOM;
+
     var meta = {
       generatedAt: data.generated_at || "",
       basisDate: basisDate,
@@ -649,10 +651,54 @@
       remainingDays: Math.max(0, lastDom - basisDom + 1),
       elapsedDays: Math.max(0, basisDom - 1),
       monthProgress: lastDom > 0 ? clamp((basisDom - 1) / lastDom, 0, 1) : 0,
+      isMonthStart: isMonthStart,
+      monthStartDom: MONTH_START_DOM,
       bytesProcessed: (data.meta && data.meta.bytes_processed) || {},
       source: (data.meta && data.meta.source) || "",
       isFixture: !!(data.meta && data.meta.fixture)
     };
+
+    /* ---------------- 読み手への注意（データ由来） ---------------- */
+
+    var notices = [];
+    if (isMonthStart) {
+      notices.push({
+        id: "month_start",
+        level: "warn",
+        title: "月初のため着地見込みは過少に出やすい",
+        body: "基準日が " + basisDom + " 日（月初 " + MONTH_START_DOM + " 日以内）のため、" +
+          "② 既成約未計上と ③ 今後の成約がほぼ 0 になり、当月トークンも月内に順次生成される。" +
+          "この時点の着地見込みは構造的に低めに出る。前月実績（" + pm + "：" +
+          fmtMillion(prv.total) + " 百万円）も目安に読むこと。"
+      });
+    }
+    if (!profile.hasOnline) {
+      notices.push({
+        id: "no_profile",
+        level: "warn",
+        title: "成約プロファイル（q5）が空",
+        body: "前月の成約日別プロファイルが取れていないため、② と ③ は 0 として扱っている。" +
+          "拠点の係数 k も実務値 " + K_FALLBACK + " を使用。"
+      });
+    }
+    if (q6.length === 0) {
+      notices.push({
+        id: "no_conv",
+        level: "warn",
+        title: "当月の成約実績（q6）が空",
+        body: "当月の成約が 1 件も取れていないため、成約ペースの既定値は 0、② も 0 になる。"
+      });
+    }
+    var negFuture = hist.filter(function (h) { return h.isFuture && (h.lks < 0 || h.mny < 0 || h.pd < 0); });
+    if (negFuture.length) {
+      notices.push({
+        id: "negative_future",
+        level: "info",
+        title: "未来月にマイナス計上がある",
+        body: negFuture.length + " ヶ月（" + negFuture[0].ym + " 以降）で先行計上額がマイナス。" +
+          "返金・取消の戻し計上によるもので、当月の着地見込みには影響しない。"
+      });
+    }
 
     return {
       meta: meta,
@@ -668,6 +714,7 @@
       total: total,
       history: hist,
       checks: checks,
+      notices: notices,
       rowCounts: {
         q1_official_monthly: q1.length, q2_lks_pending: q2.length, q3_mny_pd_pending: q3.length,
         q4_lks_channel_booked: q4.length, q5_conv_profile: q5.length, q6_conv_actuals: q6.length
@@ -720,6 +767,7 @@
     QUERY_KEYS: QUERY_KEYS,
     K_FALLBACK: K_FALLBACK,
     DEFAULT_LAG_WEIGHT: DEFAULT_LAG_WEIGHT,
+    MONTH_START_DOM: MONTH_START_DOM,
     rateOf: rateOf,
     buildProfile: buildProfile,
     defaultPaces: defaultPaces,

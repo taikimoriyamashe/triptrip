@@ -396,10 +396,12 @@ dl { margin: 0; }
       <div class="sub" id="hd-sub"></div>
     </div>
     <div class="hd-right">
+      <span class="chip is-warn" id="chip-monthstart" hidden><span class="dot"></span>月初 — 過少に出やすい</span>
       <span class="chip" id="freshness"><span class="dot"></span><span id="freshness-txt">読み込み中</span></span>
       <button class="btn primary" id="btn-live" hidden>ライブ更新</button>
     </div>
   </header>
+  <div id="notice-banner" class="banner"></div>
   <div id="live-banner" class="banner" hidden></div>
 
   <!-- ================= サービス別サマリー ================= -->
@@ -1361,7 +1363,8 @@ dl { margin: 0; }
     $("total-mid").style.left = "calc(" + ppos(ce) + "% - 1px)";
     $("total-lo").textContent = "low " + m1(lo) + " 百万円";
     $("total-hi").textContent = "high " + m1(hi) + " 百万円";
-    $("total-note").textContent = "基準日 " + m.meta.basisDate + " ／ 残り " + m.meta.remainingDays + " 日";
+    $("total-note").textContent = "基準日 " + m.meta.basisDate + " ／ 残り " + m.meta.remainingDays + " 日"
+      + (m.meta.isMonthStart ? " ／ 月初のため過少に出やすい（前月合計 " + m1(m.total.prev) + " 百万円も目安に）" : "");
 
     var ck = $("checks"); clear(ck);
     m.checks.forEach(function (c) {
@@ -1670,6 +1673,43 @@ dl { margin: 0; }
     return c;
   }
 
+  function renderNotices(m) {
+    var host = $("notice-banner"); clear(host);
+    var ns = m.notices || [];
+    if (!ns.length) return;
+
+    if (ns.length === 1) {
+      var n0 = ns[0];
+      var c1 = el("div", "callout" + (n0.level === "info" ? " info" : ""));
+      var h1 = el("div", "h");
+      h1.appendChild(el("span", "ic", n0.level === "info" ? "●" : "▲"));
+      h1.appendChild(document.createTextNode(n0.title));
+      c1.appendChild(h1);
+      c1.appendChild(document.createTextNode(n0.body));
+      host.appendChild(c1);
+      return;
+    }
+
+    // 複数はひとつの箱にまとめる（バナーが積み上がって本文を押し下げないように）
+    var worstWarn = ns.some(function (n) { return n.level !== "info"; });
+    var c = el("div", "callout" + (worstWarn ? "" : " info"));
+    var h = el("div", "h");
+    h.appendChild(el("span", "ic", worstWarn ? "▲" : "●"));
+    h.appendChild(document.createTextNode("読み取り上の注意（" + ns.length + " 件）"));
+    c.appendChild(h);
+    var ul = el("ul");
+    ul.style.marginTop = "6px";
+    ul.style.marginBottom = "0";
+    ns.forEach(function (n) {
+      var li = el("li");
+      li.appendChild(el("b", null, n.title));
+      li.appendChild(document.createTextNode(" — " + n.body));
+      ul.appendChild(li);
+    });
+    c.appendChild(ul);
+    host.appendChild(c);
+  }
+
   function renderHeader(m) {
     var sub = $("hd-sub"); clear(sub);
     sub.appendChild(document.createTextNode("対象月 "));
@@ -1677,6 +1717,7 @@ dl { margin: 0; }
     sub.appendChild(document.createTextNode("　基準日 "));
     sub.appendChild(el("b", null, m.meta.basisDate));
     sub.appendChild(document.createTextNode("（" + m.meta.basisDom + "日目 / " + m.meta.lastDom + "日、残り " + m.meta.remainingDays + "日）"));
+    $("chip-monthstart").hidden = !m.meta.isMonthStart;
 
     var okCount = 0, errCount = 0;
     QK.forEach(function (k) {
@@ -1721,6 +1762,7 @@ dl { margin: 0; }
     }
     STATE.model = m;
     renderHeader(m);
+    renderNotices(m);
     renderCards(m);
     renderTotal(m);
     renderBreakdownTable(m);

@@ -35,7 +35,7 @@ dashboard/
 各SQLの要点:
 
 - **q1_official_monthly**: ソースは `sheinc_marts_output_spreadsheet_official_monitoring.monthly_financial_accounting`。当月の12ヶ月前〜テーブル上の未来月まで、`year_month`/`lks`/`mny`/`pd` を返す。全計算の起点(「現時点計上済み額」)。
-- **q2_lks_pending**: `int_membership_tokens` × `all_orders` に `int_likes_financial_accounting` のFAを突き合わせ、プラン(レギュラー/スタンダード/ライト/卒業生)×支払種別ごとに1日単価・①(未計上の残日数/件数)・④(滞納/処理ラグの残日数/件数)を出す。当月に最初の有効成約をした会員のオーダーは、②③との二重計上を避けるため window 集計から除外を試みる(`all_orders` にユーザーIDが引けることが前提。引けない場合は除外なしで実装し、その旨をT1の検証結果に明記する)。
+- **q2_lks_pending**: `int_membership_tokens` × `all_orders` に `int_likes_financial_accounting` のFAを突き合わせ、プラン(レギュラー/スタンダード/ライト/卒業生)×支払種別ごとに1日単価・①(未計上の残日数/件数)・④(滞納/処理ラグの残日数/件数)を出す。当月に最初の有効成約をした会員のオーダーは、②③との二重計上を避けるため①④の両方(window集計・early/lag集計)から除外を試みる(`all_orders` にユーザーIDが引けることが前提。引けない場合は除外なしで実装し、その旨をT1の検証結果に明記する)。
 - **q3_mny_pd_pending**: q2と同じロジックだが `service_key IN ('money','multicreator')`、FAは `sheinc_marts_accounting.monthly_accounting` から取る。multicreator(プロデ)はこのテーブルにFAが載らない別パイプラインのため、`fa_per_day` がNULL/0になるのが仕様通りの挙動。件数列(`n_window`等)だけが意味を持つ。
 - **q4_lks_channel_booked**: `likes_conversions` の入会時(最初の有効成約)`trial_lesson_type` から `channel`(オンライン/拠点/分類不能)を判定し、`int_likes_financial_accounting` の当月FAをchannel別に集計する。成約記録が無いユーザーは「成約記録なし」。
 - **q5_conv_profile**: 前月に最初の有効成約をした会員について、成約日(dom)×channelごとの件数と1件あたり前月FA平均を出す。②・③の単価カーブの元になる。

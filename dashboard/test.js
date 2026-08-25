@@ -316,6 +316,80 @@ describe("エッジケース", function () {
   ok(mc.lks.components.p3 >= 0, "③ は非負");
 });
 
+describe("実データ特性 — 未来月の負値 / 0（R1 レビュー由来）", function () {
+  var neg = clone(MINI);
+  neg.queries.q1_official_monthly.rows.push(
+    { year_month: "2026-09", lks: 500, mny: 10, pd: 0 },
+    { year_month: "2026-10", lks: 120, mny: -350, pd: 0 },
+    { year_month: "2026-11", lks: 30, mny: -420, pd: 0 }
+  );
+  var m = L.buildModel(neg, { paceOn: 2, paceKyoten: 4 });
+  var fut = m.history.filter(function (h) { return h.isFuture; });
+  eq(fut.length, 3, "未来月が 3 行");
+  eq(fut[1].mny, -350, "未来月の負の mny がそのまま保持される");
+  eq(fut[1].pd, 0, "未来月の pd = 0 がそのまま保持される");
+  near(fut[1].total, 120 - 350 + 0, 1e-9, "負値を含む合計が正しい");
+  ok(m.history.every(function (h) { return isFinite(h.lks) && isFinite(h.mny) && isFinite(h.pd); }),
+    "履歴の全値が有限（負値・0 を含む）");
+  // 当月の着地は未来月に影響されない
+  var base = L.buildModel(MINI, { paceOn: 2, paceKyoten: 4 });
+  near(m.total.landing.central, base.total.landing.central, 1e-9, "未来月の行は当月の着地に影響しない");
+  var nn = m.notices.filter(function (n) { return n.id === "negative_future"; });
+  eq(nn.length, 1, "未来月マイナスの注意が 1 件出る");
+  eq(nn[0].level, "info", "未来月マイナスは info レベル");
+  // すべての未来月が 0 のケース
+  var zero = clone(MINI);
+  zero.queries.q1_official_monthly.rows.push({ year_month: "2026-09", lks: 0, mny: 0, pd: 0 });
+  var mz = L.buildModel(zero, {});
+  eq(mz.history[mz.history.length - 1].total, 0, "全部 0 の未来月でも壊れない");
+  eq(mz.notices.filter(function (n) { return n.id === "negative_future"; }).length, 0, "0 は負値扱いしない");
+});
+
+describe("月初（basis_dom ≤ 5）の注意喚起", function () {
+  eq(L.MONTH_START_DOM, 5, "月初のしきい値は 5 日");
+
+  var d1 = clone(MINI);
+  d1.basis_date = "2026-08-01";
+  d1.queries.q5_conv_profile.rows = [];   // 月初は前月プロファイルが未生成のことがある
+  d1.queries.q6_conv_actuals.rows = [];   // 当月の成約もまだ 0 件
+  var m1 = L.buildModel(d1, {});
+  eq(m1.meta.basisDom, 1, "1日 → basis_dom = 1");
+  eq(m1.meta.isMonthStart, true, "1日は月初判定");
+  near(m1.lks.components.p2, 0, 1e-9, "月初は ② が 0");
+  near(m1.lks.components.p3, 0, 1e-9, "q5/q6 空なので ③ も 0");
+  ok(isFinite(m1.total.landing.central), "q5/q6 が両方空でもクラッシュしない");
+  ok(isFinite(m1.total.landing.low) && isFinite(m1.total.landing.high), "low / high も有限");
+  eq(m1.lks.channels.length, 4, "チャネルは 4 種そろう");
+  eq(m1.lks.conv.byDom.length, 0, "日別成約は 0 行");
+  eq(m1.inputs.kSource, "fallback", "q5 空 → k はフォールバック");
+
+  var ids = m1.notices.map(function (n) { return n.id; });
+  ok(ids.indexOf("month_start") >= 0, "月初の注意が出る", JSON.stringify(ids));
+  ok(ids.indexOf("no_profile") >= 0, "q5 空の注意が出る", JSON.stringify(ids));
+  ok(ids.indexOf("no_conv") >= 0, "q6 空の注意が出る", JSON.stringify(ids));
+  var ms = m1.notices.filter(function (n) { return n.id === "month_start"; })[0];
+  ok(/前月実績/.test(ms.body), "月初の注意文が前月実績への参照を含む");
+  ok(ms.body.indexOf("2026-07") >= 0, "月初の注意文に前月が入る");
+
+  [1, 2, 5].forEach(function (dom) {
+    var dd = clone(MINI);
+    dd.basis_date = "2026-08-0" + dom;
+    eq(L.buildModel(dd, {}).meta.isMonthStart, true, dom + "日は月初判定");
+  });
+  [6, 10].forEach(function (dom) {
+    var dd = clone(MINI);
+    dd.basis_date = "2026-08-" + (dom < 10 ? "0" + dom : dom);
+    eq(L.buildModel(dd, {}).meta.isMonthStart, false, dom + "日は月初ではない");
+  });
+  eq(L.buildModel(MINI, {}).meta.isMonthStart, false, "10日基準は月初ではない");
+
+  // q5 だけ空 / q6 だけ空 でも落ちない（月初1日に実際に起きる組み合わせ）
+  var only5 = clone(MINI); only5.basis_date = "2026-08-01"; only5.queries.q5_conv_profile.rows = [];
+  ok(isFinite(L.buildModel(only5, {}).total.landing.high), "q5 のみ空でもクラッシュしない");
+  var only6 = clone(MINI); only6.basis_date = "2026-08-01"; only6.queries.q6_conv_actuals.rows = [];
+  ok(isFinite(L.buildModel(only6, {}).total.landing.high), "q6 のみ空でもクラッシュしない");
+});
+
 /* ---------------------------------------------------------------- *
  * 4. フィクスチャに対する契約の不変条件
  * ---------------------------------------------------------------- */

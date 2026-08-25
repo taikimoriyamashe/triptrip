@@ -3,8 +3,11 @@
 --   effective_at < 基準日 → 'early' / それ以外 → 'window' に分け、order別の当月FA(int_likes_financial_accounting)と突合。
 -- 単価: fa_per_day_cur = Σ early FA ÷ Σ early 当月内有効日数。fa_per_day_prev = 前月トークン全体の同計算
 --   (月初で early が空 = fa_per_day_cur が NULL のときのフォールバック用。前月は全日 early 扱いなので全体で計算)。
--- 新規会員除外: 当月に最初の有効成約をした user(likes_conversions rn=1 が当月)の order は
---   window 集計(n_window / window_days)から除外する。①課金更新残と②③新規成約分の二重計上防止。
+-- 新規会員除外 [契約v1.1・R1裁定]: 当月に最初の有効成約をした user(likes_conversions rn=1 が当月)の order は
+--   window(①: n_window/window_days)と lag(④: n_lag/lag_days)の両方から除外する。
+--   ①④=既存会員のみ / ②③(q5×q6)=当月新規のみ、という対称な切り分けで二重計上を防止。
+-- 防御 [契約v1.1]: all_orders は JOIN 前に order_id で1行化(重複ファンアウト防止)。
+--   m_days は COALESCE(GREATEST(...,0),0) で NULL を 0 に正規化(COUNTIF/SUM の非対称防止)。
 -- 出力列: plan_name STRING / payment_type STRING / fa_per_day_cur FLOAT(NULL可) / fa_per_day_prev FLOAT(NULL可)
 --         / n_window INT(window かつ FA=0 の件数) / window_days INT / n_lag INT(early かつ FA=0 の件数) / lag_days INT
 WITH params AS (
@@ -14,6 +17,12 @@ WITH params AS (
     DATE_SUB(DATE_TRUNC(basis_date, MONTH), INTERVAL 1 MONTH) AS pm_start,
     DATE_SUB(DATE_TRUNC(basis_date, MONTH), INTERVAL 1 DAY) AS pm_end
   FROM (SELECT CURRENT_DATE('Asia/Tokyo') AS basis_date)
+),
+orders AS (
+  -- order_id で1行化(all_orders の重複行による将来ファンアウト防止。MAXで決定的に代表値を選ぶ)
+  SELECT order_id, MAX(payment_type) AS payment_type, MAX(user_id) AS user_id
+  FROM `shelikes-001.sheinc_marts_accounting.all_orders`
+  GROUP BY order_id
 ),
 new_users AS (
   SELECT e.user_id
@@ -28,11 +37,11 @@ new_users AS (
 ),
 tok_cur AS (
   SELECT t.order_id, t.plan_name, o.payment_type,
-    GREATEST(DATE_DIFF(LEAST(t.expires_at, p.m_end), GREATEST(t.effective_at, p.m_start), DAY) + 1, 0) AS m_days,
+    COALESCE(GREATEST(DATE_DIFF(LEAST(t.expires_at, p.m_end), GREATEST(t.effective_at, p.m_start), DAY) + 1, 0), 0) AS m_days,
     IF(t.effective_at < p.basis_date, 'early', 'window') AS grp,
     (nu.user_id IS NOT NULL) AS is_new_user
   FROM `shelikes-001.sheinc_intermediate.int_membership_tokens` t
-  JOIN `shelikes-001.sheinc_marts_accounting.all_orders` o USING (order_id)
+  JOIN orders o USING (order_id)
   CROSS JOIN params p
   LEFT JOIN new_users nu ON o.user_id = nu.user_id
   WHERE t.target_month = p.m_start
@@ -56,16 +65,16 @@ cur_agg AS (
     SAFE_DIVIDE(SUM(IF(grp='early', m_fa, 0)), NULLIF(SUM(IF(grp='early', m_days, 0)), 0)) AS fa_per_day_cur,
     COUNTIF(grp='window' AND m_fa = 0 AND NOT is_new_user) AS n_window,
     SUM(IF(grp='window' AND m_fa = 0 AND NOT is_new_user, m_days, 0)) AS window_days,
-    COUNTIF(grp='early' AND m_fa = 0) AS n_lag,
-    SUM(IF(grp='early' AND m_fa = 0, m_days, 0)) AS lag_days
+    COUNTIF(grp='early' AND m_fa = 0 AND NOT is_new_user) AS n_lag,
+    SUM(IF(grp='early' AND m_fa = 0 AND NOT is_new_user, m_days, 0)) AS lag_days
   FROM j_cur
   GROUP BY 1, 2
 ),
 tok_prev AS (
   SELECT t.order_id, t.plan_name, o.payment_type,
-    GREATEST(DATE_DIFF(LEAST(t.expires_at, p.pm_end), GREATEST(t.effective_at, p.pm_start), DAY) + 1, 0) AS m_days
+    COALESCE(GREATEST(DATE_DIFF(LEAST(t.expires_at, p.pm_end), GREATEST(t.effective_at, p.pm_start), DAY) + 1, 0), 0) AS m_days
   FROM `shelikes-001.sheinc_intermediate.int_membership_tokens` t
-  JOIN `shelikes-001.sheinc_marts_accounting.all_orders` o USING (order_id)
+  JOIN orders o USING (order_id)
   CROSS JOIN params p
   WHERE t.target_month = p.pm_start
     AND t.order_status = 1

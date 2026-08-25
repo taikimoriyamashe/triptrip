@@ -3,6 +3,9 @@
 -- FA は sheinc_marts_accounting.monthly_accounting(order_id別 当月SUM: without_tax + discount + own_expense)。
 -- 既知の仕様: multicreator の FA は marts monthly_accounting に載らない別パイプライン
 --   → fa_per_day_cur/prev は 0 または NULL になる(正しい挙動)。件数列(n_window, n_active_*)だけ意味を持つ。
+-- 新規会員除外は行わない [契約v1.1]: MNY/プロデには②③(新規成約プロファイル成分)が存在しないため。
+-- 防御 [契約v1.1]: all_orders は JOIN 前に order_id で1行化(重複ファンアウト防止)。
+--   m_days は COALESCE(GREATEST(...,0),0) で NULL を 0 に正規化(COUNTIF/SUM の非対称防止)。
 -- 出力列: service_key STRING / fa_per_day_cur FLOAT(NULL可) / fa_per_day_prev FLOAT(NULL可)
 --         / n_window INT / window_days INT / n_lag INT / lag_days INT
 --         / n_active_cur INT(当月トークン件数) / n_active_prev INT(前月トークン件数)
@@ -14,12 +17,18 @@ WITH params AS (
     DATE_SUB(DATE_TRUNC(basis_date, MONTH), INTERVAL 1 DAY) AS pm_end
   FROM (SELECT CURRENT_DATE('Asia/Tokyo') AS basis_date)
 ),
+orders AS (
+  -- order_id で1行化(all_orders の重複行による将来ファンアウト防止。MAXで決定的に代表値を選ぶ)
+  SELECT order_id, MAX(service_key) AS service_key
+  FROM `shelikes-001.sheinc_marts_accounting.all_orders`
+  GROUP BY order_id
+),
 tok_cur AS (
   SELECT t.order_id, o.service_key,
-    GREATEST(DATE_DIFF(LEAST(t.expires_at, p.m_end), GREATEST(t.effective_at, p.m_start), DAY) + 1, 0) AS m_days,
+    COALESCE(GREATEST(DATE_DIFF(LEAST(t.expires_at, p.m_end), GREATEST(t.effective_at, p.m_start), DAY) + 1, 0), 0) AS m_days,
     IF(t.effective_at < p.basis_date, 'early', 'window') AS grp
   FROM `shelikes-001.sheinc_intermediate.int_membership_tokens` t
-  JOIN `shelikes-001.sheinc_marts_accounting.all_orders` o USING (order_id)
+  JOIN orders o USING (order_id)
   CROSS JOIN params p
   WHERE t.target_month = p.m_start
     AND t.order_status = 1
@@ -50,9 +59,9 @@ cur_agg AS (
 ),
 tok_prev AS (
   SELECT t.order_id, o.service_key,
-    GREATEST(DATE_DIFF(LEAST(t.expires_at, p.pm_end), GREATEST(t.effective_at, p.pm_start), DAY) + 1, 0) AS m_days
+    COALESCE(GREATEST(DATE_DIFF(LEAST(t.expires_at, p.pm_end), GREATEST(t.effective_at, p.pm_start), DAY) + 1, 0), 0) AS m_days
   FROM `shelikes-001.sheinc_intermediate.int_membership_tokens` t
-  JOIN `shelikes-001.sheinc_marts_accounting.all_orders` o USING (order_id)
+  JOIN orders o USING (order_id)
   CROSS JOIN params p
   WHERE t.target_month = p.pm_start
     AND t.order_status = 1
