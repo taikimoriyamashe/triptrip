@@ -196,11 +196,7 @@ def sanity(html: str, out_path: str) -> int:
         if re.search(r"</\s*script", body, re.I):
             problems.append("script 内に生の </script> がある")
 
-    # 外部ホストは Google Fonts のみ
-    for m in re.finditer(r'(?:href|src)\s*=\s*"(https?://[^"]+)"', html, re.I):
-        host = m.group(1).split("/")[2].lower()
-        if host not in ("fonts.googleapis.com", "fonts.gstatic.com"):
-            problems.append(f"外部ホストへの参照: {host}")
+    problems.extend(external_host_scan(html))
 
     tb = TagBalance()
     tb.feed(html)
@@ -221,6 +217,46 @@ def sanity(html: str, out_path: str) -> int:
     print(f"  sanity   : OK（{len(html):,} bytes）")
     print(f"  out      : {out_path}")
     return 0
+
+
+# CSP で許されるのは Google Fonts のみ。www.w3.org は SVG 名前空間 URI だけ許可する
+# （ネットワークアクセスではなく createElementNS に渡す識別子）。
+ALLOWED_FONT_HOSTS = {"fonts.googleapis.com", "fonts.gstatic.com"}
+ALLOWED_EXACT_URLS = {
+    "http://www.w3.org/2000/svg",
+    "https://www.w3.org/2000/svg",
+}
+URL_RE = re.compile(r'https?://[^\s"\'`<>()\\]+', re.I)
+
+
+def external_host_scan(html: str):
+    """出力HTML全体の https?:// を総当たりし、ホワイトリスト外があれば失敗させる。
+
+    href/src 属性に限らず、CSS の url()、JS の文字列リテラル、コメントまで含めて見る。
+    """
+    problems = []
+    seen = {}
+    for m in URL_RE.finditer(html):
+        url = m.group(0).rstrip(".,;:")
+        try:
+            host = url.split("/", 3)[2].lower()
+        except IndexError:
+            problems.append(f"解析できない URL: {url[:80]}")
+            continue
+
+        if host in ALLOWED_FONT_HOSTS:
+            continue
+        if host == "www.w3.org":
+            # SVG 名前空間 URI だけ許可（それ以外の w3.org 参照は外部取得になりうる）
+            if url in ALLOWED_EXACT_URLS:
+                continue
+            problems.append(f"www.w3.org への SVG 名前空間以外の参照: {url[:100]}")
+            continue
+        seen.setdefault(host, url)
+
+    for host, sample in sorted(seen.items()):
+        problems.append(f"許可されていない外部ホストへの参照: {host}（例: {sample[:100]}）")
+    return problems
 
 
 def theme_scan(html: str):

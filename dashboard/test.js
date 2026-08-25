@@ -390,8 +390,118 @@ describe("月初（basis_dom ≤ 5）の注意喚起", function () {
   ok(isFinite(L.buildModel(only6, {}).total.landing.high), "q6 のみ空でもクラッシュしない");
 });
 
+describe("ペース入力の未指定は既定値・明示 0 は 0", function () {
+  var def = L.defaultPaces(MINI.queries.q6_conv_actuals.rows, 10);   // on 0.6 / kyoten 0.2
+
+  [["null", null], ["undefined", undefined], ["空文字", ""], ["NaN", NaN]].forEach(function (c) {
+    var m = L.buildModel(MINI, { paceOn: c[1], paceKyoten: c[1] });
+    near(m.inputs.paceOn, def.paceOn, 1e-12, "paceOn = " + c[0] + " → 既定値 " + def.paceOn + " にフォールバック");
+    near(m.inputs.paceKyoten, def.paceKyoten, 1e-12, "paceKyoten = " + c[0] + " → 既定値 " + def.paceKyoten);
+  });
+
+  // opts ごと省略しても既定値
+  var mOmit = L.buildModel(MINI, {});
+  near(mOmit.inputs.paceOn, def.paceOn, 1e-12, "opts に paceOn を含めない → 既定値");
+
+  // 明示的な 0 は 0 のまま（③ を見込まないシナリオ）
+  var mZero = L.buildModel(MINI, { paceOn: 0, paceKyoten: 0 });
+  eq(mZero.inputs.paceOn, 0, "paceOn = 0（明示）→ 0 のまま");
+  eq(mZero.inputs.paceKyoten, 0, "paceKyoten = 0（明示）→ 0 のまま");
+  near(mZero.lks.components.p3, 0, 1e-9, "明示 0 なら ③ = 0");
+  ok(mOmit.lks.components.p3 > 0, "既定値なら ③ > 0（0 と既定が区別できている）");
+
+  // 文字列で来ても数値として扱う（入力欄由来）
+  var mStr = L.buildModel(MINI, { paceOn: "3.5", paceKyoten: "0" });
+  near(mStr.inputs.paceOn, 3.5, 1e-12, "文字列 \"3.5\" → 3.5");
+  eq(mStr.inputs.paceKyoten, 0, "文字列 \"0\" → 0（既定値に戻さない）");
+
+  // 片方だけ 0、片方は既定
+  var mMix = L.buildModel(MINI, { paceOn: 0 });
+  eq(mMix.inputs.paceOn, 0, "片方だけ明示 0 → 0");
+  near(mMix.inputs.paceKyoten, def.paceKyoten, 1e-12, "もう片方は既定値のまま");
+});
+
 /* ---------------------------------------------------------------- *
- * 4. フィクスチャに対する契約の不変条件
+ * 4. 実データ固定の回帰テスト（凍結スナップショット）
+ * ---------------------------------------------------------------- *
+ * dashboard/data/latest.json は日々更新されうるので、このテストは必ず
+ * dashboard/testdata/snapshot-2026-08-25.json（凍結コピー）だけを参照する。
+ * 基準値は 2026-08-25 のデータで検証済みの値。丸め誤差 ±1 円まで許容。
+ */
+describe("回帰: 凍結スナップショット 2026-08-25 の検証済み基準値", function () {
+  var FROZEN = path.join(__dirname, "testdata", "snapshot-2026-08-25.json");
+  var raw;
+  try { raw = fs.readFileSync(FROZEN, "utf8"); }
+  catch (e) { skipped("凍結スナップショットが無い: " + FROZEN); return; }
+
+  var data = JSON.parse(raw);
+  eq(data.basis_date, "2026-08-25", "凍結スナップショットの基準日");
+  eq(data.target_month, "2026-08", "凍結スナップショットの対象月");
+
+  var m = L.buildModel(data, {});   // 既定ペース・既定 lagWeight 0.5
+  var YEN = 1;   // 丸め誤差の許容（円）
+
+  [
+    ["① 更新残 P1", m.lks.components.p1, 1507220],
+    ["② 既成約未計上 P2", m.lks.components.p2, 566607],
+    ["③ 今後の成約 P3", m.lks.components.p3, 251826],
+    ["④ 滞納・処理ラグ P4", m.lks.components.p4, 6317361],
+    ["LKS pending low", m.lks.pending.low, 2325654],
+    ["LKS pending central", m.lks.pending.central, 5484334],
+    ["LKS pending high", m.lks.pending.high, 8643015],
+    ["LKS 着地 central", m.lks.landing.central, 356685140],
+    ["MNY ① P1m", m.mny.components.p1, 65886],
+    ["MNY ④ P4m", m.mny.components.p4, 78471],
+    ["プロデ 着地 central", m.pd.landing.central, 10160505],
+    ["プロデ upside", m.pd.upside, 0]
+  ].forEach(function (r) {
+    near(r[1], r[2], YEN, "固定値 " + r[0] + " = " + r[2].toLocaleString("ja-JP") + " 円（±1円）");
+  });
+
+  near(m.inputs.k, 1.0482, 5e-5, "拠点係数 k ≈ 1.0482");
+  eq(m.inputs.kSource, "q5", "k は q5 から算出");
+  eq(m.inputs.lagWeight, 0.5, "既定の織り込み率は 0.5");
+
+  // 導出関係が壊れていないこと
+  near(m.lks.pending.low, m.lks.components.p1 + m.lks.components.p2 + m.lks.components.p3, YEN,
+    "low = ① + ② + ③");
+  near(m.lks.pending.central, m.lks.pending.low + 0.5 * m.lks.components.p4, YEN,
+    "central = low + 0.5 × ④");
+  near(m.lks.pending.high, m.lks.pending.low + m.lks.components.p4, YEN, "high = low + ④");
+  near(m.lks.landing.central, m.lks.booked + m.lks.pending.central, YEN, "着地 = 計上済み + pending");
+  near(m.pd.landing.high, m.pd.landing.central + m.pd.upside, YEN, "プロデ high = central + upside");
+
+  // シナリオを既定に固定した状態のスカラー
+  near(m.inputs.paceOn, 27.4, 1e-9, "既定ペース（オンライン）= 27.4 件/日");
+  near(m.inputs.paceKyoten, 3.7, 1e-9, "既定ペース（拠点）= 3.7 件/日");
+  eq(m.lks.booked, 351200806, "LKS 計上済み");
+  eq(m.mny.booked, 4492633, "MNY 計上済み");
+  eq(m.pd.booked, 10160505, "プロデ 計上済み");
+
+  // 内蔵チェックが全て通ること
+  m.checks.forEach(function (c) { ok(c.ok, "凍結スナップショットで内蔵チェック: " + c.label, c.detail); });
+
+  // ライブ経路（BQ REST → parseBqResult）でも同じ着地になること
+  var q1 = data.queries.q1_official_monthly.rows;
+  var fields = [
+    { name: "year_month", type: "STRING" }, { name: "lks", type: "INTEGER" },
+    { name: "mny", type: "INTEGER" }, { name: "pd", type: "INTEGER" }
+  ];
+  var live = JSON.parse(raw);
+  live.queries.q1_official_monthly = {
+    rows: L.parseBqResult(JSON.stringify({
+      jobComplete: true, schema: { fields: fields },
+      rows: q1.map(function (r) {
+        return { f: [{ v: r.year_month }, { v: String(r.lks) }, { v: String(r.mny) }, { v: String(r.pd) }] };
+      })
+    }))
+  };
+  near(L.buildModel(live, {}).lks.landing.central, 356685140, YEN,
+    "ライブ経路でも LKS 着地 central = 356,685,140 円");
+});
+
+/* ---------------------------------------------------------------- *
+ * 5. フィクスチャに対する契約の不変条件
  * ---------------------------------------------------------------- */
 var candidates = [
   process.argv[2],
@@ -506,7 +616,7 @@ describe("契約の不変条件（フィクスチャ / スナップショット�
 });
 
 /* ---------------------------------------------------------------- *
- * 5. フォーマッタ
+ * 6. フォーマッタ
  * ---------------------------------------------------------------- */
 describe("フォーマッタ", function () {
   eq(L.fmtYen(356607091), "356,607,091", "円 3桁区切り");

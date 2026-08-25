@@ -24,7 +24,7 @@
   /* 文字 */
   --ink:         #10151a;
   --ink-2:       #454f58;
-  --ink-3:       #6b7681;   /* 軸・補助ラベル */
+  --ink-3:       #606a74;   /* 軸・補助ラベル（.note/.hint 用に AA 4.5:1 を確保: surface 5.26 / plane 4.60 / surface-2 4.86） */
   --ink-inverse: #f6f8f9;   /* 反転ボタンの文字 */
 
   /* 罫 */
@@ -1597,8 +1597,8 @@ dl { margin: 0; }
     if (document.activeElement !== a) a.value = String(m.inputs.paceOn);
     if (document.activeElement !== b) b.value = String(m.inputs.paceKyoten);
     var d = m.inputs.paceDefaults;
-    $("hint-pace-on").textContent = "既定 " + d.paceOn + "（当月 有効成約 " + d.validTotals["オンライン"] + " 件 ÷ " + d.denom + " 日）";
-    $("hint-pace-ky").textContent = "既定 " + d.paceKyoten + "（当月 有効成約 " + d.validTotals["拠点"] + " 件 ÷ " + d.denom + " 日）";
+    $("hint-pace-on").textContent = "既定 " + d.paceOn + "（当月 有効成約 " + d.validTotals["オンライン"] + " 件 ÷ " + d.denom + " 日）／空欄にすると既定に戻る";
+    $("hint-pace-ky").textContent = "既定 " + d.paceKyoten + "（当月 有効成約 " + d.validTotals["拠点"] + " 件 ÷ " + d.denom + " 日）／空欄にすると既定に戻る";
     $("hint-reset").textContent = "分類不能チャネルのペースは既定 0 のまま";
     var seg = $("seg-lag");
     if (!seg.childNodes.length) {
@@ -1809,19 +1809,38 @@ dl { margin: 0; }
   /* ================================================================
    * 5. 入力
    * ================================================================ */
+  /**
+   * 入力欄の値をシナリオ値に変換する。
+   * 空欄・数値でない入力は null を返し、buildModel 側の既定値（実績ペース）に戻す。
+   * 明示的に 0 と入力したときだけ 0（＝今後の成約を見込まない）になる。
+   */
+  function paceFromInput(input) {
+    var raw = String(input.value === null || input.value === undefined ? "" : input.value).trim();
+    if (raw === "") return null;
+    var v = parseFloat(raw);
+    if (!isFinite(v)) return null;
+    return v < 0 ? 0 : v;
+  }
+
   var deb = null;
   function onPace() {
     if (deb) clearTimeout(deb);
     deb = setTimeout(function () {
-      var a = parseFloat($("in-pace-on").value);
-      var b = parseFloat($("in-pace-ky").value);
-      STATE.opts.paceOn = isFinite(a) && a >= 0 ? a : 0;
-      STATE.opts.paceKyoten = isFinite(b) && b >= 0 ? b : 0;
+      STATE.opts.paceOn = paceFromInput($("in-pace-on"));
+      STATE.opts.paceKyoten = paceFromInput($("in-pace-ky"));
       render();
     }, 130);
   }
   $("in-pace-on").addEventListener("input", onPace);
   $("in-pace-ky").addEventListener("input", onPace);
+  // 空欄のままフォーカスを外したら、実際に使われている既定値を欄に書き戻す
+  ["in-pace-on", "in-pace-ky"].forEach(function (id) {
+    $(id).addEventListener("blur", function () {
+      if (String(this.value).trim() === "" && STATE.model) {
+        this.value = String(id === "in-pace-on" ? STATE.model.inputs.paceOn : STATE.model.inputs.paceKyoten);
+      }
+    });
+  });
   $("btn-reset").addEventListener("click", function () {
     STATE.opts.paceOn = null; STATE.opts.paceKyoten = null;
     STATE.opts.lagWeight = L.DEFAULT_LAG_WEIGHT;
@@ -1848,6 +1867,18 @@ dl { margin: 0; }
    * ================================================================ */
   var RETRACT = { needs_reauth: 1, server_not_connected: 1, blocked_by_policy: 1, approval_required: 1, selection_required: 1 };
 
+  /**
+   * コネクタ未接続時の案内。claude.use("mcp") の解決結果と listTools の結果は
+   * このビューの読み込み時に確定する（use() はメモ化される）ため、コネクタを
+   * 追加しても「再読み込み」しないとこのページからは見えない。行き止まりにしない
+   * ためにその手順まで書く。
+   */
+  var RECONNECT_HINT =
+    "claude.ai の 設定 → コネクタ で「Google Cloud BigQuery」を追加してください。" +
+    "追加したあと、このページを再読み込みするとライブ更新が有効になります" +
+    "（コネクタの状態はページ読み込み時に確定するため、再読み込みが必要です）。" +
+    "それまでは埋め込みスナップショットを表示します。";
+
   function errTitle(code) {
     switch (code) {
       case "needs_reauth": return "コネクタの再認証が必要";
@@ -1869,8 +1900,8 @@ dl { margin: 0; }
   function errBody(err) {
     var code = err && err.code;
     switch (code) {
-      case "needs_reauth": return "claude.ai の 設定 → コネクタ で「Google Cloud BigQuery」を再接続してください。表示中の数値はスナップショットのままです。";
-      case "server_not_connected": return "claude.ai の 設定 → コネクタ で「Google Cloud BigQuery」を追加してください。追加するまではスナップショット表示になります。";
+      case "needs_reauth": return "claude.ai の 設定 → コネクタ で「Google Cloud BigQuery」を再接続し、このページを再読み込みしてください。表示中の数値はスナップショットのままです。";
+      case "server_not_connected": return RECONNECT_HINT;
       case "selection_required": return "同名の BigQuery コネクタが複数あります。どれを使うかを選択すると再実行できます。";
       case "server_not_found": return "接続先の BigQuery コネクタが上流に存在しません。管理者に確認してください。";
       case "server_unavailable": return "一時的な障害の可能性があります。少し待ってからもう一度「ライブ更新」を押してください。";
@@ -1885,7 +1916,7 @@ dl { margin: 0; }
     }
   }
 
-  function setBanner(kind, title, body) {
+  function setBanner(kind, title, body, action) {
     var host = $("live-banner");
     clear(host);
     if (!kind) { host.hidden = true; return; }
@@ -1896,6 +1927,15 @@ dl { margin: 0; }
     h.appendChild(document.createTextNode(title));
     c.appendChild(h);
     c.appendChild(document.createTextNode(body));
+    if (action && action.label) {
+      var wrap = el("div");
+      wrap.style.marginTop = "8px";
+      var b = el("button", "btn sm", action.label);
+      b.type = "button";
+      b.addEventListener("click", action.onClick);
+      wrap.appendChild(b);
+      c.appendChild(wrap);
+    }
     host.appendChild(c);
   }
 
@@ -2025,8 +2065,13 @@ dl { margin: 0; }
         var srv = null;
         ((lt && lt.servers) || []).forEach(function (s) { if (s.server === SERVER) srv = s; });
         if (!srv) {
-          setBanner("warn", errTitle("server_not_connected"), errBody({ code: "server_not_connected" }));
+          // 押しても失敗するだけなので無効化するが、「再読み込みで有効になる」導線を必ず添える
+          setBanner("warn", errTitle("server_not_connected"), RECONNECT_HINT, {
+            label: "ページを再読み込み",
+            onClick: function () { location.reload(); }
+          });
           btn.disabled = true;
+          btn.title = RECONNECT_HINT;
         } else if (srv.authStatus === "needs_reauth") {
           setBanner("warn", errTitle("needs_reauth"), errBody({ code: "needs_reauth" }));
         } else if (!(srv.tools || []).some(function (t) { return t.name === TOOL; })) {

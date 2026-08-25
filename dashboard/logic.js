@@ -4,7 +4,7 @@
  * 純関数のみ / DOM 非依存。スナップショット経路(build.py が埋め込んだ latest.json)と
  * ライブ経路(BigQuery MCP の実行結果)が同じ関数を通る。
  *
- * 契約: dashboard/data-contract.md v1 （列名・計算式は契約どおり。変更しないこと）
+ * 契約: data-contract v1.1（リポジトリ外の設計文書）。列名・計算式は契約どおり。変更しないこと。
  *
  * export:
  *   parseBqResult(bqJson[, rows])  -> 型付き rows[]
@@ -669,7 +669,7 @@
         body: "基準日が " + basisDom + " 日（月初 " + MONTH_START_DOM + " 日以内）のため、" +
           "② 既成約未計上と ③ 今後の成約がほぼ 0 になり、当月トークンも月内に順次生成される。" +
           "この時点の着地見込みは構造的に低めに出る。前月実績（" + pm + "：" +
-          fmtMillion(prv.total) + " 百万円）も目安に読むこと。"
+          fmtMillionNum(prv.total) + " 百万円）も目安に読むこと。"
       });
     }
     if (!profile.hasOnline) {
@@ -726,11 +726,21 @@
    * 表示フォーマッタ（純関数・logic 側に置いてテストからも使う）
    * ------------------------------------------------------------------ */
 
-  /** 百万円・小数1桁（既定表示）。 */
+  /** 百万円・小数1桁。単位記号 "M" 付き（チェック詳細など英字併記の文脈用）。 */
   function fmtMillion(v, digits) {
     var d = digits === undefined ? 1 : digits;
     if (v === null || v === undefined || !isFinite(v)) return "—";
     return (v / 1e6).toFixed(d) + "M";
+  }
+
+  /**
+   * 百万円・小数1桁。単位記号なしの数値だけ。
+   * 日本語の「百万円」を後ろに付ける文脈で使う（"370.3M 百万円" のような単位二重を避ける）。
+   */
+  function fmtMillionNum(v, digits) {
+    var d = digits === undefined ? 1 : digits;
+    if (v === null || v === undefined || !isFinite(v)) return "—";
+    return (v / 1e6).toFixed(d);
   }
 
   /** 円・3桁区切り（詳細表）。 */
@@ -774,6 +784,7 @@
     lastDayOfMonth: lastDayOfMonth,
     prevMonth: prevMonth,
     fmtMillion: fmtMillion,
+    fmtMillionNum: fmtMillionNum,
     fmtYen: fmtYen,
     fmtPct: fmtPct,
     fmtBytes: fmtBytes
