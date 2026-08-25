@@ -35,7 +35,7 @@ dashboard/
 各SQLの要点:
 
 - **q1_official_monthly**: ソースは `sheinc_marts_output_spreadsheet_official_monitoring.monthly_financial_accounting`。当月の12ヶ月前〜テーブル上の未来月まで、`year_month`/`lks`/`mny`/`pd` を返す。全計算の起点(「現時点計上済み額」)。
-- **q2_lks_pending**: `int_membership_tokens` × `all_orders` に `int_likes_financial_accounting` のFAを突き合わせ、プラン(レギュラー/スタンダード/ライト/卒業生)×支払種別ごとに1日単価・①(未計上の残日数/件数)・④(滞納/処理ラグの残日数/件数)を出す。当月に最初の有効成約をした会員のオーダーは、③との二重計上を避けるため window 集計から除外を試みる(`all_orders` にユーザーIDが引けることが前提。引けない場合は除外なしで実装し、その旨をT1の検証結果に明記する)。
+- **q2_lks_pending**: `int_membership_tokens` × `all_orders` に `int_likes_financial_accounting` のFAを突き合わせ、プラン(レギュラー/スタンダード/ライト/卒業生)×支払種別ごとに1日単価・①(未計上の残日数/件数)・④(滞納/処理ラグの残日数/件数)を出す。当月に最初の有効成約をした会員のオーダーは、②③との二重計上を避けるため window 集計から除外を試みる(`all_orders` にユーザーIDが引けることが前提。引けない場合は除外なしで実装し、その旨をT1の検証結果に明記する)。
 - **q3_mny_pd_pending**: q2と同じロジックだが `service_key IN ('money','multicreator')`、FAは `sheinc_marts_accounting.monthly_accounting` から取る。multicreator(プロデ)はこのテーブルにFAが載らない別パイプラインのため、`fa_per_day` がNULL/0になるのが仕様通りの挙動。件数列(`n_window`等)だけが意味を持つ。
 - **q4_lks_channel_booked**: `likes_conversions` の入会時(最初の有効成約)`trial_lesson_type` から `channel`(オンライン/拠点/分類不能)を判定し、`int_likes_financial_accounting` の当月FAをchannel別に集計する。成約記録が無いユーザーは「成約記録なし」。
 - **q5_conv_profile**: 前月に最初の有効成約をした会員について、成約日(dom)×channelごとの件数と1件あたり前月FA平均を出す。②・③の単価カーブの元になる。
@@ -62,7 +62,7 @@ SQLはすべて `CURRENT_DATE('Asia/Tokyo')` 基準で自己完結しており�
 }
 ```
 
-`rows` は型付きオブジェクト(数値はnumber、NULLはnull)。BigQuery REST形式(`rows[].f[].v`)からの変換は、スナップショット生成時とページのライブ経路(`logic.js` の `parseBqResult(schema, rows)`)の双方で同一の結果になるようにする。
+`rows` は型付きオブジェクト(数値はnumber、NULLはnull)。BigQuery REST形式(`rows[].f[].v`)からの変換は、スナップショット生成時とページのライブ経路(`logic.js` が提供する、BigQuery RESTレスポンス→型付き行配列に変換する関数)の双方で同一の結果になるようにする。
 
 ## データフロー図
 
@@ -133,6 +133,6 @@ sql/q6_conv_actuals.sql ─────┘         │ /*__DATA__*/ プレース
 ## 制約
 
 - 全SQLは読み取り専用(SELECT文のみ)。更新・DDLは一切発行しない。BigQuery scripting(`DECLARE`)は使用不可 — 単一SELECT文(`WITH`可)のみ。
-- コスト目安: Slackスレッドでの都度のDevin依頼は、1回のやり取り(本体回答+ナレッジ追記)あたり実測¥480〜¥1,760(1.5〜5.5 ACU)+数分〜10分の待ち時間が発生していた。本ダッシュボードはこれを、閲覧のみ(スナップショット経路)またはBigQueryのクエリ課金のみ(ライブ経路)に置き換える。クエリ課金(bytes_processed)は `latest.json` の `meta` に記録する。
+- コスト目安: Slackスレッドでの都度のDevin依頼は、1メッセージ(本体回答またはナレッジ追記)あたり実測¥480〜¥1,760(1.5〜5.5 ACU)を消費し、これに加えて数分〜10分の待ち時間が発生していた。1回の依頼で複数メッセージ(本体回答+ナレッジ追記等)が発生する場合はコストが合算になる(例: 2026-08-11の依頼は本体回答¥1,300+ナレッジ追記¥1,760=合計約¥3,060)。本ダッシュボードはこれを、閲覧のみ(スナップショット経路)またはBigQueryのクエリ課金のみ(ライブ経路)に置き換える。クエリ課金(bytes_processed)は `latest.json` の `meta` に記録する。
 - 閲覧者がBigQueryコネクタを持たない場合、表示されるのは直近の日次スナップショット時点の数値であり、リアルタイムではない。
 - 数値はあくまで着地予測であり確定値ではない。手法・限界の詳細は `docs/fa-forecast-dashboard.md` を参照。

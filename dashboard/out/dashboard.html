@@ -25,7 +25,6 @@
   --ink:         #10151a;
   --ink-2:       #454f58;
   --ink-3:       #6b7681;   /* 軸・補助ラベル */
-  --ink-on-fill: #ffffff;   /* 濃い塗りの上の文字 */
   --ink-inverse: #f6f8f9;   /* 反転ボタンの文字 */
 
   /* 罫 */
@@ -55,7 +54,6 @@
   --good-ink:  #006300;
   --warning:   #fab219;
   --warn-ink:  #8a5b00;
-  --serious:   #ec835a;
   --critical:  #d03b3b;
   --crit-ink:  #a52121;
   --good-bg:    rgba(12,163,12,.12);
@@ -64,6 +62,7 @@
   --info-bg:    rgba(42,120,214,.10);
 
   --shadow: 0 1px 2px rgba(16,21,26,.06), 0 1px 1px rgba(16,21,26,.04);
+  --shadow-pop: 0 6px 20px rgba(16,21,26,.18);
 
   --font-sans: "IBM Plex Sans", "Hiragino Sans", "Hiragino Kaku Gothic ProN",
                "Yu Gothic", "Noto Sans JP", "Meiryo", system-ui, -apple-system, sans-serif;
@@ -81,7 +80,6 @@
     --ink:         #f2f5f7;
     --ink-2:       #b7c0c8;
     --ink-3:       #8b959e;
-    --ink-on-fill: #0d0f11;
     --ink-inverse: #10151a;
     --rule:        #2b3138;
     --rule-strong: #3c444c;
@@ -103,14 +101,14 @@
     --good-ink:  #35c035;
     --warning:   #fab219;
     --warn-ink:  #e8ac36;
-    --serious:   #ec835a;
-    --critical:  #d03b3b;
+      --critical:  #d03b3b;
     --crit-ink:  #ec7676;
     --good-bg:    rgba(12,163,12,.18);
     --warning-bg: rgba(250,178,25,.16);
     --critical-bg:rgba(208,59,59,.20);
     --info-bg:    rgba(57,135,229,.14);
     --shadow: 0 1px 2px rgba(0,0,0,.4), 0 1px 1px rgba(0,0,0,.3);
+    --shadow-pop: 0 8px 24px rgba(0,0,0,.55);
   }
 }
 
@@ -124,7 +122,6 @@
   --ink:         #f2f5f7;
   --ink-2:       #b7c0c8;
   --ink-3:       #8b959e;
-  --ink-on-fill: #0d0f11;
   --ink-inverse: #10151a;
   --rule:        #2b3138;
   --rule-strong: #3c444c;
@@ -146,7 +143,6 @@
   --good-ink:  #35c035;
   --warning:   #fab219;
   --warn-ink:  #e8ac36;
-  --serious:   #ec835a;
   --critical:  #d03b3b;
   --crit-ink:  #ec7676;
   --good-bg:    rgba(12,163,12,.18);
@@ -154,6 +150,7 @@
   --critical-bg:rgba(208,59,59,.20);
   --info-bg:    rgba(57,135,229,.14);
   --shadow: 0 1px 2px rgba(0,0,0,.4), 0 1px 1px rgba(0,0,0,.3);
+  --shadow-pop: 0 8px 24px rgba(0,0,0,.55);
 }
 
 /* ==================================================================
@@ -299,6 +296,7 @@ td.n, th.n { font-variant-numeric: tabular-nums; }
 .chart .mark:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 10px; font-size: 12px; color: var(--ink-2); }
 .legend .it { display: inline-flex; align-items: center; }
+.legend .kbd { color: var(--ink-3); }
 .smallmult { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 16px; }
 @media (max-width: 860px) { .smallmult { grid-template-columns: 1fr; } }
 .smallmult .panel { min-width: 0; }
@@ -310,7 +308,7 @@ td.n, th.n { font-variant-numeric: tabular-nums; }
   transform: translate(-50%, -100%);
   background: var(--surface); color: var(--ink);
   border: 1px solid var(--rule-strong); border-radius: 4px;
-  box-shadow: 0 6px 20px rgba(16,21,26,.18);
+  box-shadow: var(--shadow-pop);
   padding: 8px 10px; font-size: 12px; line-height: 1.55; max-width: 260px;
 }
 #tip.on { opacity: 1; }
@@ -1396,6 +1394,12 @@ dl { margin: 0; }
     return e;
   }
   function clear(node) { while (node && node.firstChild) node.removeChild(node.firstChild); }
+  /** 凡例の末尾にキーボード操作のヒントを足す。 */
+  function kbdHint(lg) {
+    if (!lg) return;
+    var it = el("span", "it kbd", "Tab でチャートへ、← → で各項目へ");
+    lg.appendChild(it);
+  }
   function cssVar(name) {
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || "#888";
   }
@@ -1447,9 +1451,45 @@ dl { margin: 0; }
   }
   function hideTip() { tip.classList.remove("on"); }
 
+  /**
+   * 1つのチャートを 1つのタブストップにし、矢印キーでマーク間を移動できるようにする
+   * （ローヴィング tabindex）。マークが多いチャートでもキーボード操作が破綻しない。
+   */
+  function makeRoving(svg) {
+    var marks = Array.prototype.slice.call(svg.querySelectorAll(".mark"));
+    if (!marks.length) return;
+    var idx = 0;
+    marks.forEach(function (mk, i) { mk.setAttribute("tabindex", i === 0 ? "0" : "-1"); });
+    function focusAt(i) {
+      i = Math.max(0, Math.min(marks.length - 1, i));
+      marks[idx].setAttribute("tabindex", "-1");
+      idx = i;
+      marks[idx].setAttribute("tabindex", "0");
+      marks[idx].focus();
+    }
+    svg.addEventListener("keydown", function (e) {
+      var d = 0;
+      if (e.key === "ArrowRight" || e.key === "ArrowDown") d = 1;
+      else if (e.key === "ArrowLeft" || e.key === "ArrowUp") d = -1;
+      else if (e.key === "Home") { e.preventDefault(); focusAt(0); return; }
+      else if (e.key === "End") { e.preventDefault(); focusAt(marks.length - 1); return; }
+      else return;
+      e.preventDefault();
+      focusAt(idx + d);
+    });
+    svg.addEventListener("focusin", function (e) {
+      var i = marks.indexOf(e.target);
+      if (i >= 0 && i !== idx) {
+        marks[idx].setAttribute("tabindex", "-1");
+        idx = i;
+        marks[idx].setAttribute("tabindex", "0");
+      }
+    });
+  }
+
   /** マークに hover/focus のツールチップを付ける（当たり判定は透明 rect で広げる）。 */
   function attachTip(g, title, rows, aria) {
-    g.setAttribute("tabindex", "0");
+    g.setAttribute("tabindex", "-1");
     g.setAttribute("role", "img");
     g.setAttribute("aria-label", aria || title);
     g.classList.add("mark");
@@ -1486,8 +1526,8 @@ dl { margin: 0; }
       queries: {}
     };
     QK.forEach(function (k) {
-      var live = STATE.liveRows[k];
-      if (live && live.length) out.queries[k] = { rows: live, live: true };
+      // ライブ結果が返っていれば 0 行でもそれを採用する（0 行は「0 行」という事実）
+      if (Object.prototype.hasOwnProperty.call(STATE.liveRows, k)) out.queries[k] = { rows: STATE.liveRows[k], live: true };
       else out.queries[k] = (base.queries && base.queries[k]) || { rows: [] };
     });
     return out;
@@ -1582,6 +1622,7 @@ dl { margin: 0; }
       svg.appendChild(t);
     });
 
+    makeRoving(svg);
     host.appendChild(svg);
 
     // 凡例
@@ -1593,6 +1634,7 @@ dl { margin: 0; }
       it.appendChild(sw); it.appendChild(document.createTextNode(s.label + " " + m1(s.v)));
       lg.appendChild(it);
     });
+    kbdHint(lg);
   }
 
   /* ---- B. チャネル別（横棒: 実績 + 見込み + レンジ） ---- */
@@ -1668,6 +1710,7 @@ dl { margin: 0; }
       svg.appendChild(t);
     });
 
+    makeRoving(svg);
     host.appendChild(svg);
 
     var lg = $("legend-channel"); clear(lg);
@@ -1681,6 +1724,7 @@ dl { margin: 0; }
       it.appendChild(sw); it.appendChild(document.createTextNode(p[0]));
       lg.appendChild(it);
     });
+    kbdHint(lg);
   }
 
   /* ---- C. 月次推移（3面のスモールマルチプル） ---- */
@@ -1716,6 +1760,7 @@ dl { margin: 0; }
       it.appendChild(sw); it.appendChild(document.createTextNode(p[0]));
       lg.appendChild(it);
     });
+    kbdHint(lg);
   }
 
   function drawMonthlyPanel(host, m, p) {
@@ -1823,6 +1868,7 @@ dl { margin: 0; }
       }
     });
 
+    makeRoving(svg);
     host.appendChild(svg);
   }
 
@@ -1891,6 +1937,7 @@ dl { margin: 0; }
     bl.textContent = "基準日";
     svg.appendChild(bl);
 
+    makeRoving(svg);
     host.appendChild(svg);
 
     var lg = $("legend-conv"); clear(lg);
@@ -1900,6 +1947,7 @@ dl { margin: 0; }
     it.appendChild(document.createTextNode(
       "当月の日別有効成約（q6.n_valid）。基準日以降は集計途中のため淡色。ペースの既定値 = 合計 ÷ " + m.inputs.paceDefaults.denom + "日"));
     lg.appendChild(it);
+    kbdHint(lg);
   }
 
   /* ================================================================
@@ -1955,8 +2003,11 @@ dl { margin: 0; }
   function deltaText(svc) {
     if (svc.prev === null || svc.prev === undefined || !(svc.prev > 0)) return { txt: "前月データなし", cls: "flat", arw: "" };
     var up = svc.delta >= 0;
+    var mag = Math.abs(svc.delta);
+    // 100万円未満の差は「-0.0 百万円」になってしまうので円で出す
+    var amt = mag >= 1e6 ? (m1(mag) + " 百万円") : (yen(mag) + " 円");
     return {
-      txt: (up ? "+" : "") + m1(svc.delta) + " 百万円 / " + pct(svc.deltaPct),
+      txt: (up ? "+" : "-") + amt + " / " + pct(svc.deltaPct),
       cls: up ? "up" : "down",
       arw: up ? "▲" : "▼"
     };
@@ -2332,7 +2383,11 @@ dl { margin: 0; }
     var c = el("span", "chip");
     var tone = "", txt = "スナップショット";
     if (st.state === "loading") { tone = "is-info"; txt = "取得中"; }
-    else if (st.state === "ok") { tone = "is-good"; txt = "ライブ " + jstStamp(STATE.liveAt[key]); }
+    else if (st.state === "ok") {
+      var n = (STATE.liveRows[key] || []).length;
+      if (n === 0) { tone = "is-warn"; txt = "ライブ 0行 " + jstStamp(STATE.liveAt[key]); }
+      else { tone = "is-good"; txt = "ライブ " + n + "行 " + jstStamp(STATE.liveAt[key]); }
+    }
     else if (st.state === "error") { tone = "is-crit"; txt = "失敗（" + (st.err && st.err.code || "unknown") + "）"; }
     else if (st.state === "nosql") { tone = "is-warn"; txt = "SQL 未配置"; }
     c.className = "chip " + tone;
@@ -2443,6 +2498,13 @@ dl { margin: 0; }
   }
   window.addEventListener("resize", onResize);
   window.addEventListener("scroll", hideTip, { passive: true });
+  window.addEventListener("pagehide", function () {
+    for (var k in STATE.watches) {
+      if (Object.prototype.hasOwnProperty.call(STATE.watches, k) && typeof STATE.watches[k] === "function") {
+        try { STATE.watches[k](); } catch (e) { /* 冪等なので無視 */ }
+      }
+    }
+  });
 
   /* ================================================================
    * 6. ライブ更新（mcp capability）
