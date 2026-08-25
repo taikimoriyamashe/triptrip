@@ -1,0 +1,1944 @@
+<title>財務売上着地モニター</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+/* ==================================================================
+   トークン
+   ------------------------------------------------------------------
+   bare :root にライトの完全定義。dark は「再定義のみ」を 2 スコープで。
+   色は必ずトークン経由（生の hex を本文で使わない）。
+   ================================================================== */
+:root {
+  color-scheme: light;
+
+  /* 面 */
+  --plane:       #e8ebee;   /* ページ地 */
+  --surface:     #f8fafb;   /* カード / チャート面（パレット検証の基準面） */
+  --surface-2:   #eef1f4;   /* 表ヘッダ・コード・チップの地 */
+  --surface-3:   #e1e7eb;   /* ホバーの薄地 */
+  --surface-sunk:#dfe5e9;   /* 溝（トラック） */
+
+  /* 文字 */
+  --ink:         #10151a;
+  --ink-2:       #454f58;
+  --ink-3:       #6b7681;   /* 軸・補助ラベル */
+  --ink-on-fill: #ffffff;   /* 濃い塗りの上の文字 */
+  --ink-inverse: #f6f8f9;   /* 反転ボタンの文字 */
+
+  /* 罫 */
+  --rule:        #d3d9de;
+  --rule-strong: #b6c0c8;
+  --grid:        #e3e8eb;
+  --baseline:    #c2cbd2;
+
+  /* 操作 */
+  --focus:       #2a78d6;
+  --btn:         #1b2530;
+  --btn-hover:   #2b3743;
+
+  /* データ系列（dataviz 参照パレット。当ページの面で検証済み） */
+  --measure:      #2a78d6;              /* 実績 / 計上済み */
+  --measure-wash: rgba(42,120,214,.14); /* 見込み（同一色相・状態違い） */
+  --measure-soft: #86b6ef;              /* 見込みの輪郭・薄い塗り */
+  --c1:  #eb6834;   /* ① 更新残 */
+  --c2:  #1baf7a;   /* ② 既成約未計上 */
+  --c3:  #eda100;   /* ③ 今後の成約 */
+  --c4:  #e87ba4;   /* ④ 滞納・処理ラグ */
+  --c4-ghost: rgba(232,123,164,.30);
+  --neutral-mark: #9aa5ae;   /* 文脈用のグレー */
+
+  /* 状態色（系列色とは別系統。必ずアイコン+ラベルと併用） */
+  --good:      #0ca30c;
+  --good-ink:  #006300;
+  --warning:   #fab219;
+  --warn-ink:  #8a5b00;
+  --serious:   #ec835a;
+  --critical:  #d03b3b;
+  --crit-ink:  #a52121;
+  --good-bg:    rgba(12,163,12,.12);
+  --warning-bg: rgba(250,178,25,.18);
+  --critical-bg:rgba(208,59,59,.12);
+  --info-bg:    rgba(42,120,214,.10);
+
+  --shadow: 0 1px 2px rgba(16,21,26,.06), 0 1px 1px rgba(16,21,26,.04);
+
+  --font-sans: "IBM Plex Sans", "Hiragino Sans", "Hiragino Kaku Gothic ProN",
+               "Yu Gothic", "Noto Sans JP", "Meiryo", system-ui, -apple-system, sans-serif;
+  --font-mono: "IBM Plex Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --plane:       #0d0f11;
+    --surface:     #16191c;
+    --surface-2:   #1e2226;
+    --surface-3:   #262b30;
+    --surface-sunk:#22262a;
+    --ink:         #f2f5f7;
+    --ink-2:       #b7c0c8;
+    --ink-3:       #8b959e;
+    --ink-on-fill: #0d0f11;
+    --ink-inverse: #10151a;
+    --rule:        #2b3138;
+    --rule-strong: #3c444c;
+    --grid:        #23282d;
+    --baseline:    #333b42;
+    --focus:       #6da7ec;
+    --btn:         #e6ebef;
+    --btn-hover:   #ffffff;
+    --measure:      #3987e5;
+    --measure-wash: rgba(57,135,229,.20);
+    --measure-soft: #2a78d6;
+    --c1:  #d95926;
+    --c2:  #199e70;
+    --c3:  #c98500;
+    --c4:  #d55181;
+    --c4-ghost: rgba(213,81,129,.34);
+    --neutral-mark: #6b7681;
+    --good:      #0ca30c;
+    --good-ink:  #35c035;
+    --warning:   #fab219;
+    --warn-ink:  #e8ac36;
+    --serious:   #ec835a;
+    --critical:  #d03b3b;
+    --crit-ink:  #ec7676;
+    --good-bg:    rgba(12,163,12,.18);
+    --warning-bg: rgba(250,178,25,.16);
+    --critical-bg:rgba(208,59,59,.20);
+    --info-bg:    rgba(57,135,229,.14);
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 1px 1px rgba(0,0,0,.3);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --plane:       #0d0f11;
+  --surface:     #16191c;
+  --surface-2:   #1e2226;
+  --surface-3:   #262b30;
+  --surface-sunk:#22262a;
+  --ink:         #f2f5f7;
+  --ink-2:       #b7c0c8;
+  --ink-3:       #8b959e;
+  --ink-on-fill: #0d0f11;
+  --ink-inverse: #10151a;
+  --rule:        #2b3138;
+  --rule-strong: #3c444c;
+  --grid:        #23282d;
+  --baseline:    #333b42;
+  --focus:       #6da7ec;
+  --btn:         #e6ebef;
+  --btn-hover:   #ffffff;
+  --measure:      #3987e5;
+  --measure-wash: rgba(57,135,229,.20);
+  --measure-soft: #2a78d6;
+  --c1:  #d95926;
+  --c2:  #199e70;
+  --c3:  #c98500;
+  --c4:  #d55181;
+  --c4-ghost: rgba(213,81,129,.34);
+  --neutral-mark: #6b7681;
+  --good:      #0ca30c;
+  --good-ink:  #35c035;
+  --warning:   #fab219;
+  --warn-ink:  #e8ac36;
+  --serious:   #ec835a;
+  --critical:  #d03b3b;
+  --crit-ink:  #ec7676;
+  --good-bg:    rgba(12,163,12,.18);
+  --warning-bg: rgba(250,178,25,.16);
+  --critical-bg:rgba(208,59,59,.20);
+  --info-bg:    rgba(57,135,229,.14);
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 1px 1px rgba(0,0,0,.3);
+}
+
+/* ==================================================================
+   ベース
+   ================================================================== */
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--plane);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.65;
+  font-feature-settings: "palt" 1;
+  overflow-x: hidden;
+}
+h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: .01em; }
+p { margin: 0 0 .7em; }
+p:last-child { margin-bottom: 0; }
+a { color: var(--focus); }
+ul { margin: 0 0 .7em; padding-left: 1.15em; }
+li { margin-bottom: .3em; }
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+.num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+.big { font-variant-numeric: normal; font-feature-settings: normal; } /* 大きな単独数値は比例数字 */
+.vh {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+}
+
+.wrap { max-width: 1180px; margin: 0 auto; padding: 22px 20px 72px; }
+
+/* ------------------------------ ヘッダ ------------------------------ */
+.hd { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; justify-content: space-between; margin-bottom: 6px; }
+.hd h1 { font-size: 21px; line-height: 1.3; }
+.hd .sub { margin-top: 3px; color: var(--ink-2); font-size: 13px; }
+.hd .sub b { font-weight: 600; color: var(--ink); }
+.hd-right { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+.chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 2px 8px; border-radius: 3px;
+  background: var(--surface-2); color: var(--ink-2);
+  border: 1px solid var(--rule);
+  font-size: 11.5px; font-weight: 500; line-height: 1.7; white-space: nowrap;
+}
+.chip .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--neutral-mark); flex: none; }
+.chip.is-good    { background: var(--good-bg);     border-color: transparent; color: var(--good-ink); }
+.chip.is-good .dot { background: var(--good); }
+.chip.is-warn    { background: var(--warning-bg);  border-color: transparent; color: var(--warn-ink); }
+.chip.is-warn .dot { background: var(--warning); }
+.chip.is-crit    { background: var(--critical-bg); border-color: transparent; color: var(--crit-ink); }
+.chip.is-crit .dot { background: var(--critical); }
+.chip.is-info    { background: var(--info-bg);     border-color: transparent; color: var(--ink-2); }
+.chip.is-info .dot { background: var(--measure); }
+
+.btn {
+  appearance: none; border: 1px solid var(--rule-strong); border-radius: 3px;
+  background: var(--surface); color: var(--ink);
+  font: inherit; font-size: 13px; font-weight: 500;
+  padding: 6px 13px; cursor: pointer;
+}
+.btn:hover:not(:disabled) { background: var(--surface-3); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn.primary { background: var(--btn); border-color: var(--btn); color: var(--ink-inverse); }
+.btn.primary:hover:not(:disabled) { background: var(--btn-hover); border-color: var(--btn-hover); }
+.btn.sm { padding: 3px 9px; font-size: 12px; }
+
+/* ------------------------------ セクション ------------------------------ */
+.card {
+  background: var(--surface); border: 1px solid var(--rule); border-radius: 4px;
+  padding: 18px 20px; margin-top: 14px; box-shadow: var(--shadow);
+}
+.sec-h { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; margin-bottom: 14px; }
+.sec-h h2 { font-size: 12px; letter-spacing: .09em; color: var(--ink-3); font-weight: 600; }
+.sec-h .note { font-size: 12px; color: var(--ink-3); }
+.sec-h .spacer { flex: 1 1 auto; }
+
+/* ------------------------------ サマリーカード ------------------------------ */
+.cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
+@media (max-width: 860px) { .cards { grid-template-columns: 1fr; } }
+.svc {
+  background: var(--surface); border: 1px solid var(--rule); border-radius: 4px;
+  padding: 15px 16px 13px; box-shadow: var(--shadow);
+  border-top: 2px solid var(--rule-strong);
+}
+.svc .name { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.svc .name h3 { font-size: 14px; }
+.svc .name .k { font-size: 11px; color: var(--ink-3); font-family: var(--font-mono); }
+.svc .lead { margin: 10px 0 2px; font-size: 30px; font-weight: 600; line-height: 1.15; letter-spacing: -.015em; }
+.svc .lead .u { font-size: 13px; font-weight: 500; color: var(--ink-3); margin-left: 4px; letter-spacing: 0; }
+.svc .leadlabel { font-size: 11.5px; color: var(--ink-3); }
+.svc .rows { margin-top: 12px; border-top: 1px solid var(--rule); padding-top: 9px; display: grid; gap: 5px; }
+.svc .r { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; font-size: 12.5px; }
+.svc .r .lbl { color: var(--ink-3); }
+.svc .r .val { color: var(--ink); font-weight: 500; }
+.svc .foot { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
+
+.delta { display: inline-flex; align-items: baseline; gap: 4px; font-weight: 500; }
+.delta .arw { font-size: 11px; }
+.delta.up   { color: var(--good-ink); }
+.delta.down { color: var(--crit-ink); }
+.delta.flat { color: var(--ink-2); }
+
+/* ------------------------------ 合計（ヒーロー） ------------------------------ */
+.hero { display: flex; flex-wrap: wrap; gap: 26px; align-items: flex-end; justify-content: space-between; }
+.hero .fig { font-size: 54px; font-weight: 600; line-height: 1.05; letter-spacing: -.025em; }
+.hero .fig .u { font-size: 17px; font-weight: 500; color: var(--ink-3); margin-left: 6px; letter-spacing: 0; }
+.hero .cap { font-size: 12.5px; color: var(--ink-3); margin-bottom: 3px; }
+.hero .side { display: grid; gap: 4px; min-width: 260px; }
+.hero .side .r { display: flex; justify-content: space-between; gap: 16px; font-size: 12.5px; }
+.hero .side .r .lbl { color: var(--ink-3); }
+
+/* 合計レンジのメーター */
+.rangebar { margin-top: 14px; }
+.rangebar .track { position: relative; height: 8px; border-radius: 2px; background: var(--surface-sunk); overflow: hidden; }
+.rangebar .span { position: absolute; top: 0; bottom: 0; background: var(--measure-wash); }
+.rangebar .mid  { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--measure); }
+.rangebar .scale { display: flex; justify-content: space-between; margin-top: 5px; font-size: 11px; color: var(--ink-3); }
+
+/* ------------------------------ 表 ------------------------------ */
+.tablewrap { overflow-x: auto; margin: 0 -2px; }
+table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+caption { text-align: left; font-size: 12px; color: var(--ink-3); padding-bottom: 6px; }
+th, td { padding: 6px 10px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--rule); }
+th:first-child, td:first-child { text-align: left; }
+thead th { background: var(--surface-2); color: var(--ink-2); font-weight: 600; font-size: 11.5px; border-bottom: 1px solid var(--rule-strong); }
+tbody tr:hover { background: var(--surface-3); }
+tfoot td { font-weight: 600; border-top: 1px solid var(--rule-strong); border-bottom: none; background: var(--surface-2); }
+td.n, th.n { font-variant-numeric: tabular-nums; }
+.swatch { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 7px; vertical-align: -1px; }
+.linekey { display: inline-block; width: 13px; height: 2px; border-radius: 1px; margin-right: 7px; vertical-align: 3px; }
+
+/* ------------------------------ チャート ------------------------------ */
+.chart { width: 100%; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chart .mark { cursor: default; }
+.chart .mark:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 10px; font-size: 12px; color: var(--ink-2); }
+.legend .it { display: inline-flex; align-items: center; }
+.smallmult { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 16px; }
+@media (max-width: 860px) { .smallmult { grid-template-columns: 1fr; } }
+.smallmult .panel { min-width: 0; }
+.smallmult .panel h3 { font-size: 12.5px; margin-bottom: 1px; }
+.smallmult .panel .axisnote { font-size: 11px; color: var(--ink-3); margin-bottom: 6px; }
+
+#tip {
+  position: fixed; z-index: 40; pointer-events: none; opacity: 0;
+  transform: translate(-50%, -100%);
+  background: var(--surface); color: var(--ink);
+  border: 1px solid var(--rule-strong); border-radius: 4px;
+  box-shadow: 0 6px 20px rgba(16,21,26,.18);
+  padding: 8px 10px; font-size: 12px; line-height: 1.55; max-width: 260px;
+}
+#tip.on { opacity: 1; }
+#tip .t { font-weight: 600; margin-bottom: 3px; }
+#tip .r { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; }
+#tip .r .v { font-weight: 600; font-variant-numeric: tabular-nums; }
+#tip .r .s { color: var(--ink-2); }
+
+/* ------------------------------ シナリオ入力 ------------------------------ */
+.scen { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; align-items: end; }
+.field label { display: block; font-size: 12px; color: var(--ink-2); margin-bottom: 4px; }
+.field .hint { font-size: 11px; color: var(--ink-3); margin-top: 3px; }
+input[type="number"] {
+  width: 100%; font: inherit; font-size: 15px; font-variant-numeric: tabular-nums;
+  padding: 6px 9px; border: 1px solid var(--rule-strong); border-radius: 3px;
+  background: var(--surface-2); color: var(--ink);
+}
+.seg { display: inline-flex; border: 1px solid var(--rule-strong); border-radius: 3px; overflow: hidden; }
+.seg button {
+  appearance: none; border: 0; border-right: 1px solid var(--rule-strong);
+  background: var(--surface-2); color: var(--ink-2);
+  font: inherit; font-size: 12px; font-variant-numeric: tabular-nums;
+  padding: 5px 11px; cursor: pointer;
+}
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--btn); color: var(--ink-inverse); font-weight: 600; }
+.seg button:hover:not([aria-pressed="true"]) { background: var(--surface-3); }
+
+/* ------------------------------ 注記・折りたたみ ------------------------------ */
+.callout {
+  border-left: 3px solid var(--warning); background: var(--warning-bg);
+  padding: 9px 12px; border-radius: 0 3px 3px 0; font-size: 12.5px; color: var(--ink-2);
+}
+.callout.info { border-left-color: var(--measure); background: var(--info-bg); }
+.callout .h { font-weight: 600; color: var(--ink); display: flex; align-items: center; gap: 6px; }
+.callout .h .ic { color: var(--warn-ink); font-size: 11px; }
+.callout.info .h .ic { color: var(--measure); }
+
+details { border-top: 1px solid var(--rule); }
+details > summary {
+  cursor: pointer; list-style: none; padding: 8px 0;
+  font-size: 12.5px; color: var(--ink-2);
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+details > summary::-webkit-details-marker { display: none; }
+details > summary::before { content: "▸"; color: var(--ink-3); font-size: 10px; }
+details[open] > summary::before { content: "▾"; }
+details > summary:hover { color: var(--ink); }
+details .body { padding: 4px 0 14px; }
+.q-title { font-family: var(--font-mono); font-size: 12px; color: var(--ink); }
+.q-meta { color: var(--ink-3); font-size: 11.5px; margin-left: auto; display: flex; gap: 10px; align-items: center; }
+pre {
+  margin: 0; padding: 11px 13px; background: var(--surface-2); border: 1px solid var(--rule);
+  border-radius: 3px; overflow-x: auto; font-family: var(--font-mono); font-size: 11.5px;
+  line-height: 1.6; color: var(--ink-2); tab-size: 2;
+}
+
+.defs { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px,1fr)); gap: 6px 28px; }
+.defs .d { padding: 8px 0; border-bottom: 1px solid var(--rule); }
+.defs .d dt { font-weight: 600; font-size: 12.5px; margin-bottom: 2px; }
+.defs .d dd { margin: 0; font-size: 12.5px; color: var(--ink-2); }
+dl { margin: 0; }
+
+.checks { display: grid; gap: 4px; margin-top: 10px; }
+.checkrow { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ink-2); }
+.checkrow .st { font-size: 11px; width: 1em; text-align: center; flex: none; }
+.checkrow .st.ok { color: var(--good-ink); }
+.checkrow .st.ng { color: var(--crit-ink); }
+.checkrow .dt { color: var(--ink-3); font-variant-numeric: tabular-nums; margin-left: auto; text-align: right; }
+
+.banner { margin-top: 14px; }
+.foot { margin-top: 26px; font-size: 11.5px; color: var(--ink-3); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .btn, .seg button, tbody tr, #tip { transition: background-color .12s ease, opacity .12s ease, color .12s ease; }
+}
+</style>
+
+<div class="wrap">
+
+  <!-- ================= ヘッダ ================= -->
+  <header class="hd">
+    <div>
+      <h1>財務売上着地モニター</h1>
+      <div class="sub" id="hd-sub"></div>
+    </div>
+    <div class="hd-right">
+      <span class="chip" id="freshness"><span class="dot"></span><span id="freshness-txt">読み込み中</span></span>
+      <button class="btn primary" id="btn-live" hidden>ライブ更新</button>
+    </div>
+  </header>
+  <div id="live-banner" class="banner" hidden></div>
+
+  <!-- ================= サービス別サマリー ================= -->
+  <div class="cards" id="cards"></div>
+
+  <!-- ================= 合計着地 ================= -->
+  <section class="card" aria-labelledby="h-total">
+    <div class="sec-h"><h2 id="h-total">合計着地見込み</h2><span class="note" id="total-note"></span></div>
+    <div class="hero">
+      <div>
+        <div class="cap">3サービス合計・当月末着地見込み（中央値）</div>
+        <div class="fig big num" id="total-fig">—<span class="u">百万円</span></div>
+      </div>
+      <div class="side" id="total-side"></div>
+    </div>
+    <div class="rangebar">
+      <div class="track" id="total-track">
+        <div class="span" id="total-span"></div>
+        <div class="mid" id="total-mid"></div>
+      </div>
+      <div class="scale"><span id="total-lo" class="num"></span><span id="total-hi" class="num"></span></div>
+    </div>
+    <div class="checks" id="checks"></div>
+  </section>
+
+  <!-- ================= LKS 詳細 ================= -->
+  <section class="card" aria-labelledby="h-lks">
+    <div class="sec-h">
+      <h2 id="h-lks">SHElikes — これから計上予定の内訳</h2>
+      <span class="spacer"></span>
+      <span class="note" id="lks-note"></span>
+    </div>
+
+    <div class="chart" id="chart-breakdown"></div>
+    <div class="legend" id="legend-breakdown"></div>
+
+    <div class="tablewrap" style="margin-top:16px">
+      <table id="tbl-breakdown">
+        <caption>増分の内訳（円）— ①②③ は low、④ は織り込み率に応じて central / high に効く</caption>
+        <thead><tr>
+          <th>成分</th><th class="n">金額（円）</th><th class="n">百万円</th><th>算出根拠</th>
+        </tr></thead>
+        <tbody></tbody>
+        <tfoot></tfoot>
+      </table>
+    </div>
+
+    <div style="margin-top:18px" class="sec-h"><h2>シナリオ入力（③ 今後の成約）</h2></div>
+    <div class="scen">
+      <div class="field">
+        <label for="in-pace-on">オンライン成約ペース（件/日）</label>
+        <input type="number" id="in-pace-on" min="0" step="0.1" inputmode="decimal">
+        <div class="hint" id="hint-pace-on"></div>
+      </div>
+      <div class="field">
+        <label for="in-pace-ky">拠点成約ペース（件/日）</label>
+        <input type="number" id="in-pace-ky" min="0" step="0.1" inputmode="decimal">
+        <div class="hint" id="hint-pace-ky"></div>
+      </div>
+      <div class="field">
+        <label id="lbl-lag">④ 滞納・処理ラグの織り込み率</label>
+        <div class="seg" role="group" aria-labelledby="lbl-lag" id="seg-lag"></div>
+        <div class="hint">既定 50%。7月実績（予測 ¥349M → 実績 ¥356.6M）でのキャリブレーション値。</div>
+      </div>
+      <div class="field">
+        <button class="btn" id="btn-reset">既定値に戻す</button>
+        <div class="hint" id="hint-reset"></div>
+      </div>
+    </div>
+
+    <div style="margin-top:14px" class="chart" id="chart-conv"></div>
+    <div class="legend" id="legend-conv"></div>
+
+    <details style="margin-top:14px">
+      <summary>成約プロファイル（前月実測）と残日の期待FAを表で見る</summary>
+      <div class="body tablewrap">
+        <table id="tbl-profile">
+          <caption>成約日（dom）別・1件あたり当月FA。オンラインが基準系列、拠点は係数 k をかけて使う。</caption>
+          <thead><tr><th>成約日</th><th class="n">オンライン（円/件）</th><th class="n">拠点（円/件）</th><th>区分</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </details>
+    <details>
+      <summary>① 更新残・④ 滞納/処理ラグ のプラン×支払種別 明細</summary>
+      <div class="body tablewrap">
+        <table id="tbl-plans">
+          <caption>rate = fa_per_day_cur ?? fa_per_day_prev ?? 0（円/会員日）</caption>
+          <thead><tr>
+            <th>プラン</th><th>支払種別</th><th class="n">単価</th><th>単価の出所</th>
+            <th class="n">① 件数</th><th class="n">① 日数</th><th class="n">① 金額</th>
+            <th class="n">④ 件数</th><th class="n">④ 日数</th><th class="n">④ 金額</th>
+          </tr></thead>
+          <tbody></tbody>
+          <tfoot></tfoot>
+        </table>
+      </div>
+    </details>
+  </section>
+
+  <!-- ================= LKS チャネル別 ================= -->
+  <section class="card" aria-labelledby="h-ch">
+    <div class="sec-h">
+      <h2 id="h-ch">SHElikes — チャネル別の着地</h2>
+      <span class="spacer"></span>
+      <span class="note">①②④ は計上済みFAの構成比で按分、③ はチャネル直接</span>
+    </div>
+    <div class="chart" id="chart-channel"></div>
+    <div class="legend" id="legend-channel"></div>
+    <div class="tablewrap" style="margin-top:14px">
+      <table id="tbl-channel">
+        <thead><tr>
+          <th>チャネル</th><th class="n">会員数</th><th class="n">計上済み（円）</th><th class="n">構成比</th>
+          <th class="n">①</th><th class="n">②</th><th class="n">③</th><th class="n">④</th>
+          <th class="n">着地 low</th><th class="n">着地 central</th><th class="n">着地 high</th>
+        </tr></thead>
+        <tbody></tbody>
+        <tfoot></tfoot>
+      </table>
+    </div>
+  </section>
+
+  <!-- ================= 月次推移 ================= -->
+  <section class="card" aria-labelledby="h-hist">
+    <div class="sec-h">
+      <h2 id="h-hist">月次推移（公式FA）</h2>
+      <span class="spacer"></span>
+      <span class="note">3面はそれぞれ独立の縦軸。金額規模が2桁違うため重ねない。</span>
+    </div>
+    <div class="callout info" style="margin-bottom:12px">
+      <div class="h"><span class="ic">●</span>当月より右は「予測」ではない</div>
+      区切り線より右の月は、<b>その時点ですでに計上済みの前受分</b>（一括払いの按分など）。まだ発生していない
+      更新・新規成約は含まれないので、月が先になるほど小さく見える。今後の実績で積み上がっていく値であり、
+      減少トレンドの予測ではない。SHEmoney の一部の月がマイナスなのは、返金・取消の戻し計上によるもの。
+    </div>
+    <div class="smallmult" id="chart-monthly"></div>
+    <div class="legend" id="legend-monthly"></div>
+    <details style="margin-top:12px">
+      <summary>月次推移を表で見る</summary>
+      <div class="body tablewrap">
+        <table id="tbl-monthly">
+          <thead><tr><th>年月</th><th class="n">SHElikes</th><th class="n">SHEmoney</th><th class="n">プロデ</th><th class="n">合計</th><th>区分</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </details>
+  </section>
+
+  <!-- ================= MNY / プロデ ================= -->
+  <div class="cards" style="grid-template-columns: repeat(2, minmax(0,1fr))" id="cards-2">
+    <section class="card" style="margin-top:0" aria-labelledby="h-mny">
+      <div class="sec-h"><h2 id="h-mny">SHEmoney — 詳細</h2></div>
+      <div class="tablewrap">
+        <table id="tbl-mny"><tbody></tbody></table>
+      </div>
+      <div class="callout info" style="margin-top:12px">
+        <div class="h"><span class="ic">●</span>新規成約分は未算入</div>
+        新規成約による当月FAは僅少のため、MNY の見込みには ③（今後の成約）を含めていない。
+        計上済み + ①更新残 + ④滞納/処理ラグ × 織り込み率 で構成される。
+      </div>
+    </section>
+
+    <section class="card" style="margin-top:0" aria-labelledby="h-pd">
+      <div class="sec-h"><h2 id="h-pd">SHElikes PRO（プロデ） — 詳細</h2></div>
+      <div class="tablewrap">
+        <table id="tbl-pd"><tbody></tbody></table>
+      </div>
+      <div class="callout" style="margin-top:12px" id="pd-caveat">
+        <div class="h"><span class="ic">▲</span>残計上を直接算出できない</div>
+        multicreator は marts の monthly_accounting にFAが載らない<b>別パイプライン</b>のため、
+        1日単価から残計上を算出できない。全件一括払いのため当月分は<b>実質すでに計上済み</b>と扱い、
+        low = central = 計上済み としている。
+        <div id="pd-caveat-dyn" style="margin-top:6px"></div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ================= 前提・定義・手法 ================= -->
+  <section class="card" aria-labelledby="h-def">
+    <div class="sec-h"><h2 id="h-def">前提・定義・手法</h2></div>
+    <dl class="defs" id="defs"></dl>
+    <div style="margin-top:14px" class="callout">
+      <div class="h"><span class="ic">▲</span>読むときの注意</div>
+      <ul style="margin-top:6px">
+        <li><b>バッチ更新ズレ:</b> 公式FAテーブルはバッチ更新のため、スプレッドシートの認識値と数万〜数十万円ずれることがある（8/20 の実例で差 ¥68,287）。</li>
+        <li><b>単価は基準日依存:</b> 課金更新の1日単価は基準日を後ろへずらすほど上がる（月初計上の一括分が early 側に積み上がるため）。毎回の再計算が前提で、過去に出した数値をそのまま使い回さない。</li>
+        <li><b>④ 50% は実績キャリブレーション:</b> 予測は構造的に過少へ出やすい。7月に予測 ¥349M に対し実績 ¥356.6M だったことから、滞納/処理ラグの 50% 織り込みを既定とした。0%＝low、100%＝high。</li>
+        <li><b>月末寄りの成約は当月FAが僅少:</b> 8/31 成約の当月FAは ¥0。残日のプロファイルが末日に向かって 0 に収束するのはこのため。</li>
+        <li><b>拠点の per-dom 単価はノイズが大きい:</b> そのため拠点は「オンラインのプロファイル × 係数 k」で近似する。</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ================= SQL ================= -->
+  <section class="card" aria-labelledby="h-sql">
+    <div class="sec-h">
+      <h2 id="h-sql">クエリ（BigQuery / shelikes-001・読み取り専用）</h2>
+      <span class="spacer"></span>
+      <span class="note" id="sql-note"></span>
+    </div>
+    <div id="sql-list"></div>
+  </section>
+
+  <div class="foot" id="foot"></div>
+</div>
+
+<div id="tip" role="status" aria-live="polite"></div>
+
+<script>/*__LOGIC__*/</script>
+<script>/*__DATA__*/</script>
+<script>
+(function () {
+  "use strict";
+
+  /* ================================================================
+   * 0. ブート
+   * ================================================================ */
+  var APP = (window.__APP__ && typeof window.__APP__ === "object") ? window.__APP__ : { data: {}, queries: {} };
+  var L = window.FALogic;
+  if (!L) {
+    document.getElementById("hd-sub").textContent = "logic.js が注入されていません（build.py を通してください）。";
+    return;
+  }
+
+  var SERVER = "Google Cloud BigQuery";
+  var TOOL = "execute_sql_readonly";
+  var PROJECT_ID = "shelikes-001";
+  var QK = L.QUERY_KEYS;
+  var QLABEL = {
+    q1_official_monthly: "公式月次FA（計上済み実績）",
+    q2_lks_pending: "LKS 課金更新残・滞納/処理ラグ",
+    q3_mny_pd_pending: "MNY・プロデ 同等集計",
+    q4_lks_channel_booked: "LKS 計上済みFAのチャネル按分",
+    q5_conv_profile: "成約日別・1件あたり当月FA（前月実測）",
+    q6_conv_actuals: "当月の成約実績（チャネル×日）"
+  };
+
+  var STATE = {
+    opts: { paceOn: null, paceKyoten: null, lagWeight: L.DEFAULT_LAG_WEIGHT },
+    liveRows: {},           // key -> rows
+    liveAt: {},             // key -> epoch ms
+    status: {},             // key -> {state:'idle'|'loading'|'ok'|'error'|'nosql', err}
+    mcp: null,
+    mcpState: "checking",   // checking | unavailable | not_connected | needs_reauth | selection | ready
+    subscribed: false,
+    watches: {},
+    retried: {},
+    model: null
+  };
+  QK.forEach(function (k) { STATE.status[k] = { state: APP.queries && APP.queries[k] ? "idle" : "nosql" }; });
+
+  /* ================================================================
+   * 1. 小道具
+   * ================================================================ */
+  var SVGNS = "http://www.w3.org/2000/svg";
+  function $(id) { return document.getElementById(id); }
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined && text !== null) e.textContent = String(text);
+    return e;
+  }
+  function sv(tag, attrs) {
+    var e = document.createElementNS(SVGNS, tag);
+    if (attrs) for (var k in attrs) if (Object.prototype.hasOwnProperty.call(attrs, k)) e.setAttribute(k, String(attrs[k]));
+    return e;
+  }
+  function clear(node) { while (node && node.firstChild) node.removeChild(node.firstChild); }
+  function cssVar(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || "#888";
+  }
+
+  var yen = L.fmtYen;
+  function m1(v, d) { if (v === null || v === undefined || !isFinite(v)) return "—"; return (v / 1e6).toFixed(d === undefined ? 1 : d); }
+  function mRange(a, b, d) { return m1(a, d) + " – " + m1(b, d); }
+  function pct(v, d) { return L.fmtPct(v, d); }
+  function pctPlain(v, d) { if (v === null || !isFinite(v)) return "—"; return (v * 100).toFixed(d === undefined ? 1 : d) + "%"; }
+
+  function jstStamp(ms) {
+    if (!ms || !isFinite(ms)) return "—";
+    try {
+      return new Intl.DateTimeFormat("ja-JP", {
+        timeZone: "Asia/Tokyo", month: "2-digit", day: "2-digit",
+        hour: "2-digit", minute: "2-digit", hour12: false
+      }).format(new Date(ms)) + " JST";
+    } catch (e) { return new Date(ms).toISOString().slice(5, 16).replace("T", " ") + " UTC"; }
+  }
+  function prettyIso(s) {
+    if (!s) return "—";
+    var d = new Date(s);
+    return isNaN(d.getTime()) ? String(s) : jstStamp(d.getTime());
+  }
+
+  /* ---- ツールチップ ---- */
+  var tip = $("tip");
+  function showTip(evtTarget, title, rows) {
+    clear(tip);
+    var t = el("div", "t", title);
+    tip.appendChild(t);
+    (rows || []).forEach(function (r) {
+      var line = el("div", "r");
+      var s = el("span", "s");
+      if (r.color) {
+        var key = el("span", "linekey");
+        key.style.background = r.color;
+        s.appendChild(key);
+      }
+      s.appendChild(document.createTextNode(r.label));
+      var v = el("span", "v", r.value);
+      line.appendChild(s); line.appendChild(v);
+      tip.appendChild(line);
+    });
+    var b = evtTarget.getBoundingClientRect();
+    tip.style.left = (b.left + b.width / 2) + "px";
+    tip.style.top = (b.top - 8) + "px";
+    tip.classList.add("on");
+  }
+  function hideTip() { tip.classList.remove("on"); }
+
+  /** マークに hover/focus のツールチップを付ける（当たり判定は透明 rect で広げる）。 */
+  function attachTip(g, title, rows, aria) {
+    g.setAttribute("tabindex", "0");
+    g.setAttribute("role", "img");
+    g.setAttribute("aria-label", aria || title);
+    g.classList.add("mark");
+    function on(e) { showTip(e.currentTarget, title, rows); }
+    g.addEventListener("pointerenter", on);
+    g.addEventListener("focus", on);
+    g.addEventListener("pointerleave", hideTip);
+    g.addEventListener("blur", hideTip);
+  }
+
+  /* ---- 目盛り ---- */
+  function niceTicks(max, count) {
+    if (!(max > 0)) return [0];
+    var raw = max / (count || 4);
+    var mag = Math.pow(10, Math.floor(Math.log(raw) / Math.LN10));
+    var norm = raw / mag;
+    var step = (norm >= 5 ? 5 : norm >= 2 ? 2 : 1) * mag;
+    var out = [];
+    for (var v = 0; v <= max * 1.0001; v += step) out.push(v);
+    if (out[out.length - 1] < max) out.push(out[out.length - 1] + step);
+    return out;
+  }
+
+  /* ================================================================
+   * 2. データ合成（スナップショット + ライブ成功分）
+   * ================================================================ */
+  function effectiveData() {
+    var base = APP.data || {};
+    var out = {
+      generated_at: base.generated_at,
+      basis_date: base.basis_date,
+      target_month: base.target_month,
+      meta: base.meta || {},
+      queries: {}
+    };
+    QK.forEach(function (k) {
+      // ライブ結果が返っていれば 0 行でもそれを採用する（0 行は「0 行」という事実）
+      if (Object.prototype.hasOwnProperty.call(STATE.liveRows, k)) out.queries[k] = { rows: STATE.liveRows[k], live: true };
+      else out.queries[k] = (base.queries && base.queries[k]) || { rows: [] };
+    });
+    return out;
+  }
+
+  /* ================================================================
+   * 3. チャート
+   * ================================================================ */
+
+  /* ---- A. 増分の構成（横積み上げ 1本 + low/central/high マーカー） ---- */
+  function chartBreakdown(host, m) {
+    clear(host);
+    var W = Math.max(320, host.clientWidth || 640);
+    var padL = 14, padR = 16, top = 30, barH = 22, axisH = 34;
+    var H = top + barH + axisH;
+    var c = m.lks.components;
+    var w = m.inputs.lagWeight;
+    var maxV = c.p1 + c.p2 + c.p3 + c.p4;
+    if (!(maxV > 0)) maxV = 1;
+    var ticks = niceTicks(maxV, 5);
+    var domainMax = ticks[ticks.length - 1];
+    var innerW = W - padL - padR;
+    function x(v) { return padL + (v / domainMax) * innerW; }
+
+    var svg = sv("svg", { viewBox: "0 0 " + W + " " + H, role: "img" });
+    svg.setAttribute("aria-label",
+      "これから計上予定の内訳。①更新残 " + m1(c.p1) + "、②既成約未計上 " + m1(c.p2) +
+      "、③今後の成約 " + m1(c.p3) + "、④滞納処理ラグ " + m1(c.p4) + "（いずれも百万円）。");
+
+    // 目盛り（薄い縦グリッド）
+    var tickDigits = domainMax >= 5e6 ? 1 : 2;
+    ticks.forEach(function (t, ti) {
+      svg.appendChild(sv("line", { x1: x(t), x2: x(t), y1: top, y2: top + barH + 6, stroke: cssVar("--grid"), "stroke-width": 1 }));
+      var anchor = ti === 0 ? "start" : ti === ticks.length - 1 ? "end" : "middle";
+      var lb = sv("text", { x: x(t), y: top + barH + 20, "text-anchor": anchor, fill: cssVar("--ink-3"), "font-size": 10.5 });
+      lb.setAttribute("style", "font-variant-numeric:tabular-nums");
+      lb.textContent = m1(t, tickDigits);
+      svg.appendChild(lb);
+    });
+    var unit = sv("text", { x: padL, y: top + barH + 33, fill: cssVar("--ink-3"), "font-size": 10.5 });
+    unit.textContent = "百万円";
+    svg.appendChild(unit);
+
+    var segs = [
+      { key: "p1", label: "① 更新残", v: c.p1, color: cssVar("--c1"), solid: true },
+      { key: "p2", label: "② 既成約未計上", v: c.p2, color: cssVar("--c2"), solid: true },
+      { key: "p3", label: "③ 今後の成約", v: c.p3, color: cssVar("--c3"), solid: true },
+      { key: "p4w", label: "④ 滞納/ラグ（織り込み " + Math.round(w * 100) + "%）", v: c.p4 * w, color: cssVar("--c4"), solid: true },
+      { key: "p4g", label: "④ 未織り込み（上振れ余地）", v: c.p4 * (1 - w), color: cssVar("--c4-ghost"), solid: false }
+    ];
+
+    var acc = 0;
+    var GAP = 2;
+    segs.forEach(function (s) {
+      if (!(s.v > 0)) { acc += s.v; return; }
+      var x0 = x(acc), x1 = x(acc + s.v);
+      var wpx = Math.max(1, x1 - x0 - GAP);
+      var g = sv("g", {});
+      var r = sv("rect", { x: x0, y: top, width: wpx, height: barH, fill: s.color, rx: 1 });
+      if (!s.solid) {
+        r.setAttribute("stroke", cssVar("--c4"));
+        r.setAttribute("stroke-width", "1");
+      }
+      g.appendChild(r);
+      // 当たり判定を広げる透明 rect
+      g.appendChild(sv("rect", { x: x0, y: top - 8, width: Math.max(10, x1 - x0), height: barH + 16, fill: "transparent" }));
+      attachTip(g, s.label, [{ label: "金額", value: yen(s.v) + " 円", color: s.solid ? s.color : cssVar("--c4") },
+      { label: "百万円", value: m1(s.v) }], s.label + " " + m1(s.v) + "百万円");
+      svg.appendChild(g);
+      acc += s.v;
+    });
+
+    // low / central / high マーカー
+    var marks = [
+      { v: m.lks.pending.low, label: "low", strong: false },
+      { v: m.lks.pending.central, label: "central", strong: true },
+      { v: m.lks.pending.high, label: "high", strong: false }
+    ];
+    marks.forEach(function (mk) {
+      var xx = x(mk.v);
+      svg.appendChild(sv("line", {
+        x1: xx, x2: xx, y1: top - 12, y2: top + barH + 3,
+        stroke: mk.strong ? cssVar("--ink") : cssVar("--ink-3"), "stroke-width": mk.strong ? 2 : 1
+      }));
+      var t = sv("text", {
+        x: xx, y: top - 16, "text-anchor": mk.label === "high" ? "end" : mk.label === "low" ? "start" : "middle",
+        fill: mk.strong ? cssVar("--ink") : cssVar("--ink-3"), "font-size": 10.5,
+        "font-weight": mk.strong ? 600 : 400
+      });
+      t.setAttribute("style", "font-variant-numeric:tabular-nums");
+      t.textContent = mk.label + " " + m1(mk.v);
+      svg.appendChild(t);
+    });
+
+    host.appendChild(svg);
+
+    // 凡例
+    var lg = $("legend-breakdown"); clear(lg);
+    segs.forEach(function (s) {
+      var it = el("span", "it");
+      var sw = el("span", "swatch"); sw.style.background = s.color;
+      if (!s.solid) sw.style.border = "1px solid " + cssVar("--c4");
+      it.appendChild(sw); it.appendChild(document.createTextNode(s.label + " " + m1(s.v)));
+      lg.appendChild(it);
+    });
+  }
+
+  /* ---- B. チャネル別（横棒: 実績 + 見込み + レンジ） ---- */
+  function chartChannel(host, m) {
+    clear(host);
+    var W = Math.max(320, host.clientWidth || 640);
+    var labelW = Math.min(110, Math.max(78, W * 0.16));
+    var valW = 78, rowH = 34, barH = 20, top = 8, axisH = 30;
+    var chans = m.lks.channels;
+    var H = top + rowH * chans.length + axisH;
+    var maxV = 0;
+    chans.forEach(function (c) { maxV = Math.max(maxV, c.landing.high); });
+    var ticks = niceTicks(maxV, 4);
+    var domainMax = ticks[ticks.length - 1] || 1;
+    var x0 = labelW, innerW = Math.max(40, W - labelW - valW);
+    function x(v) { return x0 + (v / domainMax) * innerW; }
+
+    var svg = sv("svg", { viewBox: "0 0 " + W + " " + H, role: "img" });
+    svg.setAttribute("aria-label", "チャネル別の当月着地見込み。" + chans.map(function (c) {
+      return c.channel + " " + m1(c.landing.central) + "百万円";
+    }).join("、") + "。");
+
+    ticks.forEach(function (t) {
+      svg.appendChild(sv("line", { x1: x(t), x2: x(t), y1: top, y2: top + rowH * chans.length, stroke: cssVar("--grid"), "stroke-width": 1 }));
+      var lb = sv("text", { x: x(t), y: top + rowH * chans.length + 16, "text-anchor": "middle", fill: cssVar("--ink-3"), "font-size": 10.5 });
+      lb.setAttribute("style", "font-variant-numeric:tabular-nums");
+      lb.textContent = m1(t, 0);
+      svg.appendChild(lb);
+    });
+    var unit = sv("text", { x: x0, y: top + rowH * chans.length + 28, fill: cssVar("--ink-3"), "font-size": 10.5 });
+    unit.textContent = "百万円";
+    svg.appendChild(unit);
+    svg.appendChild(sv("line", { x1: x0, x2: x0, y1: top, y2: top + rowH * chans.length, stroke: cssVar("--baseline"), "stroke-width": 1 }));
+
+    chans.forEach(function (c, i) {
+      var y = top + i * rowH + (rowH - barH) / 2;
+      var lab = sv("text", { x: 0, y: y + barH / 2 + 4, fill: cssVar("--ink-2"), "font-size": 12 });
+      lab.textContent = c.channel;
+      svg.appendChild(lab);
+
+      var g = sv("g", {});
+      // 実績（計上済み）
+      var wB = Math.max(0, x(c.booked) - x0);
+      if (wB > 0) g.appendChild(sv("rect", { x: x0, y: y, width: Math.max(1, wB - 2), height: barH, fill: cssVar("--measure"), rx: 1 }));
+      // 見込み増分（同一色相・状態違い）
+      var wI = Math.max(0, x(c.landing.central) - x(c.booked));
+      if (wI > 0.5) {
+        g.appendChild(sv("rect", {
+          x: x(c.booked), y: y, width: Math.max(1.5, wI), height: barH,
+          fill: cssVar("--measure-wash"), stroke: cssVar("--measure-soft"), "stroke-width": 1, rx: 1
+        }));
+      }
+      // レンジ（low–high）
+      var yr = y - 5;
+      g.appendChild(sv("line", { x1: x(c.landing.low), x2: x(c.landing.high), y1: yr, y2: yr, stroke: cssVar("--ink-3"), "stroke-width": 1 }));
+      [c.landing.low, c.landing.high].forEach(function (v) {
+        g.appendChild(sv("line", { x1: x(v), x2: x(v), y1: yr - 3, y2: yr + 3, stroke: cssVar("--ink-3"), "stroke-width": 1 }));
+      });
+      g.appendChild(sv("rect", { x: x0, y: y - 10, width: innerW, height: barH + 16, fill: "transparent" }));
+      attachTip(g, c.channel, [
+        { label: "着地 central", value: m1(c.landing.central) + " 百万円" },
+        { label: "レンジ", value: mRange(c.landing.low, c.landing.high) },
+        { label: "計上済み", value: yen(c.booked) + " 円", color: cssVar("--measure") },
+        { label: "見込み増分", value: yen(c.pending.central) + " 円", color: cssVar("--measure-soft") },
+        { label: "会員数", value: c.nUsers.toLocaleString("ja-JP") + " 人" }
+      ], c.channel + " 着地 " + m1(c.landing.central) + "百万円");
+      svg.appendChild(g);
+
+      // 直接ラベル（端）
+      var t = sv("text", { x: W - 2, y: y + barH / 2 + 4, "text-anchor": "end", fill: cssVar("--ink"), "font-size": 12, "font-weight": 500 });
+      t.setAttribute("style", "font-variant-numeric:tabular-nums");
+      t.textContent = m1(c.landing.central);
+      svg.appendChild(t);
+    });
+
+    host.appendChild(svg);
+
+    var lg = $("legend-channel"); clear(lg);
+    [["計上済み（実績）", cssVar("--measure"), true],
+    ["これから計上予定（中央値）", cssVar("--measure-wash"), false],
+    ["レンジ low–high", cssVar("--ink-3"), "line"]].forEach(function (p) {
+      var it = el("span", "it");
+      var sw = el("span", p[2] === "line" ? "linekey" : "swatch");
+      sw.style.background = p[1];
+      if (p[2] === false) sw.style.border = "1px solid " + cssVar("--measure-soft");
+      it.appendChild(sw); it.appendChild(document.createTextNode(p[0]));
+      lg.appendChild(it);
+    });
+  }
+
+  /* ---- C. 月次推移（3面のスモールマルチプル） ---- */
+  function chartMonthly(host, m) {
+    clear(host);
+    var panels = [
+      { key: "lks", title: "SHElikes", get: function (h) { return h.lks; }, svc: m.lks },
+      { key: "mny", title: "SHEmoney", get: function (h) { return h.mny; }, svc: m.mny },
+      { key: "pd", title: "SHElikes PRO（プロデ）", get: function (h) { return h.pd; }, svc: m.pd }
+    ];
+    panels.forEach(function (p) {
+      var panel = el("div", "panel");
+      var h3 = el("h3", null, p.title);
+      panel.appendChild(h3);
+      var note = el("div", "axisnote", "縦軸: 百万円（この面だけのスケール）");
+      panel.appendChild(note);
+      var holder = el("div", "chart");
+      panel.appendChild(holder);
+      host.appendChild(panel);
+      drawMonthlyPanel(holder, m, p);
+    });
+
+    var lg = $("legend-monthly"); clear(lg);
+    [["計上済み（実績）", cssVar("--measure"), "swatch"],
+    ["当月のこれから計上予定（中央値）", cssVar("--measure-wash"), "ghost"],
+    ["着地レンジ low–high", cssVar("--ink-3"), "line"],
+    ["未来月の前受計上分（淡色・区切り線より右）", cssVar("--measure"), "faint"]].forEach(function (p) {
+      var it = el("span", "it");
+      var sw = el("span", p[2] === "line" ? "linekey" : "swatch");
+      sw.style.background = p[1];
+      if (p[2] === "ghost") sw.style.border = "1px solid " + cssVar("--measure-soft");
+      if (p[2] === "faint") sw.style.opacity = "0.45";
+      it.appendChild(sw); it.appendChild(document.createTextNode(p[0]));
+      lg.appendChild(it);
+    });
+  }
+
+  function drawMonthlyPanel(host, m, p) {
+    clear(host);
+    var W = Math.max(240, host.clientWidth || 340);
+    var padL = 34, padR = 6, top = 10, plotH = 132, axisH = 26;
+    var H = top + plotH + axisH;
+    var hist = m.history;
+    var n = hist.length || 1;
+    var innerW = Math.max(30, W - padL - padR);
+    var band = innerW / n;
+    var barW = Math.min(20, Math.max(4, band - 6));
+
+    var maxV = 0, minV = 0;
+    hist.forEach(function (h) {
+      var v = p.get(h);
+      maxV = Math.max(maxV, v); minV = Math.min(minV, v);
+      if (h.isCurrent) { maxV = Math.max(maxV, p.svc.landing.high); minV = Math.min(minV, p.svc.landing.low); }
+    });
+    var ticks = niceTicks(maxV, 3);
+    var domainMax = ticks[ticks.length - 1] || 1;
+    // 負の値（前受戻し等）がある月は 0 を下回るぶんだけ軸を下へ伸ばす
+    var domainMin = 0;
+    if (minV < 0) {
+      var step = ticks.length > 1 ? ticks[1] - ticks[0] : domainMax;
+      domainMin = -Math.ceil(Math.abs(minV) / step) * step;
+      for (var tv = domainMin; tv < -1e-9; tv += step) ticks.push(tv);
+    }
+    var span = domainMax - domainMin || 1;
+    function y(v) { return top + plotH - ((v - domainMin) / span) * plotH; }
+
+    var svg = sv("svg", { viewBox: "0 0 " + W + " " + H, role: "img" });
+    svg.setAttribute("aria-label", p.title + " の月次公式FA推移。当月 " + m.meta.targetMonth +
+      " の着地見込みは中央値 " + m1(p.svc.landing.central) + "百万円（レンジ " + mRange(p.svc.landing.low, p.svc.landing.high) + "）。");
+
+    ticks.forEach(function (t) {
+      svg.appendChild(sv("line", { x1: padL, x2: W - padR, y1: y(t), y2: y(t), stroke: cssVar("--grid"), "stroke-width": 1 }));
+      var lb = sv("text", { x: padL - 6, y: y(t) + 3.5, "text-anchor": "end", fill: cssVar("--ink-3"), "font-size": 10 });
+      lb.setAttribute("style", "font-variant-numeric:tabular-nums");
+      lb.textContent = m1(t, domainMax >= 1e7 ? 0 : 1);
+      svg.appendChild(lb);
+    });
+    svg.appendChild(sv("line", { x1: padL, x2: W - padR, y1: y(0), y2: y(0), stroke: cssVar("--baseline"), "stroke-width": 1 }));
+
+    // 当月と未来月のあいだの区切り
+    var curIdx = -1;
+    hist.forEach(function (h, i) { if (h.isCurrent) curIdx = i; });
+    if (curIdx >= 0 && curIdx < hist.length - 1) {
+      var sx = padL + band * (curIdx + 1);
+      svg.appendChild(sv("line", { x1: sx, x2: sx, y1: top, y2: top + plotH, stroke: cssVar("--rule-strong"), "stroke-width": 1 }));
+    }
+
+    hist.forEach(function (h, i) {
+      var cx = padL + band * i + band / 2;
+      var bx = cx - barW / 2;
+      var v = p.get(h);
+      var g = sv("g", {});
+      var yTop = Math.min(y(v), y(0));
+      var rect = sv("rect", { x: bx, y: yTop, width: barW, height: Math.max(0.8, Math.abs(y(0) - y(v))), rx: 2 });
+      rect.setAttribute("fill", cssVar("--measure"));
+      if (h.isFuture) rect.setAttribute("opacity", "0.45");
+      g.appendChild(rect);
+
+      var rows = [{
+        label: h.isFuture ? "計上済み（前受分）" : "計上済み",
+        value: yen(v) + " 円", color: cssVar("--measure")
+      }];
+      if (h.isCurrent) {
+        var ct = y(p.svc.landing.central);
+        if (p.svc.landing.central > v) {
+          g.appendChild(sv("rect", {
+            x: bx, y: ct, width: barW, height: Math.max(1.5, yTop - ct),
+            fill: cssVar("--measure-wash"), stroke: cssVar("--measure-soft"), "stroke-width": 1, rx: 2
+          }));
+        }
+        // レンジ ひげ
+        var xw = cx;
+        g.appendChild(sv("line", { x1: xw, x2: xw, y1: y(p.svc.landing.high), y2: y(p.svc.landing.low), stroke: cssVar("--ink-3"), "stroke-width": 1 }));
+        [p.svc.landing.high, p.svc.landing.low].forEach(function (vv) {
+          g.appendChild(sv("line", { x1: xw - 4, x2: xw + 4, y1: y(vv), y2: y(vv), stroke: cssVar("--ink-3"), "stroke-width": 1 }));
+        });
+        rows.push({ label: "着地 central", value: m1(p.svc.landing.central) + " 百万円", color: cssVar("--measure-soft") });
+        rows.push({ label: "レンジ", value: mRange(p.svc.landing.low, p.svc.landing.high) });
+      }
+      g.appendChild(sv("rect", { x: cx - band / 2, y: top, width: band, height: plotH, fill: "transparent" }));
+      attachTip(g, h.ym + (h.isCurrent ? "（当月）" : h.isFuture ? "（未来月）" : ""), rows,
+        h.ym + " " + m1(v) + "百万円");
+      svg.appendChild(g);
+
+      // x ラベル（3ヶ月ごと + 当月）
+      if (h.isCurrent || i % 3 === 0 || i === hist.length - 1) {
+        var t = sv("text", {
+          x: cx, y: top + plotH + 14, "text-anchor": "middle",
+          fill: h.isCurrent ? cssVar("--ink") : cssVar("--ink-3"),
+          "font-size": 10, "font-weight": h.isCurrent ? 600 : 400
+        });
+        t.setAttribute("style", "font-variant-numeric:tabular-nums");
+        t.textContent = h.ym.slice(2).replace("-", "/");
+        svg.appendChild(t);
+      }
+      if (h.isCurrent) {
+        var mk = sv("text", { x: cx, y: top + plotH + 24, "text-anchor": "middle", fill: cssVar("--ink-3"), "font-size": 9.5 });
+        mk.textContent = "当月";
+        svg.appendChild(mk);
+      }
+    });
+
+    host.appendChild(svg);
+  }
+
+  /* ---- D. 当月 日次の有効成約（ペース入力の根拠） ---- */
+  function chartConv(host, m) {
+    clear(host);
+    var rows = m.lks.conv.byDom;
+    if (!rows.length) {
+      host.appendChild(el("div", "chip", "当月の成約実績データがありません（q6 が空）"));
+      clear($("legend-conv"));
+      return;
+    }
+    var W = Math.max(300, host.clientWidth || 640);
+    var padL = 26, padR = 6, top = 8, plotH = 62, axisH = 20;
+    var H = top + plotH + axisH;
+    var lastDom = m.meta.lastDom;
+    var band = (W - padL - padR) / lastDom;
+    var barW = Math.min(14, Math.max(3, band - 3));
+    var maxV = 0;
+    rows.forEach(function (r) { maxV = Math.max(maxV, r.nValid); });
+    var ticks = niceTicks(maxV, 2);
+    var domainMax = ticks[ticks.length - 1] || 1;
+    function y(v) { return top + plotH - (v / domainMax) * plotH; }
+    var byDom = {}; rows.forEach(function (r) { byDom[r.dom] = r; });
+
+    var svg = sv("svg", { viewBox: "0 0 " + W + " " + H, role: "img" });
+    svg.setAttribute("aria-label", "当月の日別有効成約件数。基準日 " + m.meta.basisDom + "日まで。");
+    ticks.forEach(function (t) {
+      svg.appendChild(sv("line", { x1: padL, x2: W - padR, y1: y(t), y2: y(t), stroke: cssVar("--grid"), "stroke-width": 1 }));
+      var lb = sv("text", { x: padL - 5, y: y(t) + 3.5, "text-anchor": "end", fill: cssVar("--ink-3"), "font-size": 10 });
+      lb.setAttribute("style", "font-variant-numeric:tabular-nums");
+      lb.textContent = String(Math.round(t));
+      svg.appendChild(lb);
+    });
+    svg.appendChild(sv("line", { x1: padL, x2: W - padR, y1: y(0), y2: y(0), stroke: cssVar("--baseline"), "stroke-width": 1 }));
+
+    for (var d = 1; d <= lastDom; d++) {
+      var cx = padL + band * (d - 1) + band / 2;
+      var r = byDom[d];
+      var v = r ? r.nValid : 0;
+      var g = sv("g", {});
+      if (v > 0) {
+        var yt = y(v);
+        var rect = sv("rect", { x: cx - barW / 2, y: yt, width: barW, height: Math.max(1, y(0) - yt), rx: 2, fill: cssVar("--measure") });
+        if (d >= m.meta.basisDom) rect.setAttribute("opacity", "0.45");
+        g.appendChild(rect);
+      }
+      g.appendChild(sv("rect", { x: cx - band / 2, y: top, width: band, height: plotH, fill: "transparent" }));
+      attachTip(g, m.meta.targetMonth + "-" + (d < 10 ? "0" + d : d),
+        [{ label: "有効成約", value: v + " 件", color: cssVar("--measure") },
+        { label: "全成約", value: (r ? r.nAll : 0) + " 件" },
+        { label: "当月FA(計上済み)", value: yen(r ? r.bookedFaValid : 0) + " 円" }],
+        d + "日 有効成約 " + v + "件");
+      svg.appendChild(g);
+      if (d === 1 || d % 5 === 0 || d === lastDom) {
+        var t = sv("text", { x: cx, y: top + plotH + 13, "text-anchor": "middle", fill: cssVar("--ink-3"), "font-size": 10 });
+        t.setAttribute("style", "font-variant-numeric:tabular-nums");
+        t.textContent = String(d);
+        svg.appendChild(t);
+      }
+    }
+    // 基準日ライン
+    var bx = padL + band * (m.meta.basisDom - 1);
+    svg.appendChild(sv("line", { x1: bx, x2: bx, y1: top - 2, y2: top + plotH, stroke: cssVar("--ink-3"), "stroke-width": 1 }));
+    var bl = sv("text", { x: bx + 4, y: top + 7, fill: cssVar("--ink-3"), "font-size": 9.5 });
+    bl.textContent = "基準日";
+    svg.appendChild(bl);
+
+    host.appendChild(svg);
+
+    var lg = $("legend-conv"); clear(lg);
+    var it = el("span", "it");
+    var sw = el("span", "swatch"); sw.style.background = cssVar("--measure");
+    it.appendChild(sw);
+    it.appendChild(document.createTextNode(
+      "当月の日別有効成約（q6.n_valid）。基準日以降は集計途中のため淡色。ペースの既定値 = 合計 ÷ " + m.inputs.paceDefaults.denom + "日"));
+    lg.appendChild(it);
+  }
+
+  /* ================================================================
+   * 4. 描画
+   * ================================================================ */
+  function svcCard(cfg) {
+    var c = el("section", "svc");
+    c.style.borderTopColor = cfg.accent;
+    var name = el("div", "name");
+    var h = el("h3", null, cfg.title);
+    name.appendChild(h);
+    name.appendChild(el("span", "k", cfg.key));
+    c.appendChild(name);
+
+    c.appendChild(el("div", "leadlabel", "着地見込み（中央値）"));
+    var lead = el("div", "lead big num");
+    lead.appendChild(document.createTextNode(cfg.lead));
+    lead.appendChild(el("span", "u", "百万円"));
+    c.appendChild(lead);
+
+    var rows = el("div", "rows");
+    cfg.rows.forEach(function (r) {
+      var row = el("div", "r");
+      row.appendChild(el("span", "lbl", r[0]));
+      var v = el("span", "val num", r[1]);
+      row.appendChild(v);
+      rows.appendChild(row);
+    });
+    if (cfg.delta) {
+      var drow = el("div", "r");
+      drow.appendChild(el("span", "lbl", "前月比"));
+      var dv = el("span", "delta " + cfg.delta.cls);
+      dv.appendChild(el("span", "arw", cfg.delta.arw));
+      dv.appendChild(el("span", "num", cfg.delta.txt));
+      drow.appendChild(dv);
+      rows.appendChild(drow);
+    }
+    c.appendChild(rows);
+
+    if (cfg.chips.length) {
+      var foot = el("div", "foot");
+      cfg.chips.forEach(function (ch) {
+        var chip = el("span", "chip " + (ch.tone || ""));
+        chip.appendChild(el("span", "dot"));
+        chip.appendChild(document.createTextNode(ch.text));
+        foot.appendChild(chip);
+      });
+      c.appendChild(foot);
+    }
+    return c;
+  }
+
+  function deltaText(svc) {
+    if (svc.prev === null || svc.prev === undefined || !(svc.prev > 0)) return { txt: "前月データなし", cls: "flat", arw: "" };
+    var up = svc.delta >= 0;
+    var mag = Math.abs(svc.delta);
+    // 100万円未満の差は「-0.0 百万円」になってしまうので円で出す
+    var amt = mag >= 1e6 ? (m1(mag) + " 百万円") : (yen(mag) + " 円");
+    return {
+      txt: (up ? "+" : "−") + amt + " / " + pct(svc.deltaPct),
+      cls: up ? "up" : "down",
+      arw: up ? "▲" : "▼"
+    };
+  }
+
+  function renderCards(m) {
+    var host = $("cards"); clear(host);
+    var wpc = Math.round(m.inputs.lagWeight * 100) + "%";
+    var defs = [
+      {
+        title: "SHElikes", key: "lks", accent: cssVar("--measure"), svc: m.lks,
+        chips: [{ text: "④ 織り込み " + wpc, tone: "is-info" }]
+      },
+      {
+        title: "SHEmoney", key: "mny", accent: cssVar("--measure"), svc: m.mny,
+        chips: [{ text: "④ 織り込み " + wpc, tone: "is-info" }, { text: "新規成約分は未算入", tone: "" }]
+      },
+      {
+        title: "SHElikes PRO（プロデ）", key: "pd", accent: cssVar("--measure"), svc: m.pd,
+        chips: [{ text: "残計上は直接算出不可", tone: "is-warn" }, { text: "実質計上済み扱い", tone: "" }]
+      }
+    ];
+    defs.forEach(function (d) {
+      var s = d.svc;
+      var pendLabel = d.key === "pd"
+        ? (s.pending.high > 0 ? "0 – " + m1(s.pending.high) + " 百万円" : "0.0 百万円（上振れ余地なし）")
+        : mRange(s.pending.low, s.pending.high) + " 百万円";
+      host.appendChild(svcCard({
+        title: d.title, key: d.key, accent: d.accent,
+        lead: "約 " + m1(s.landing.central),
+        rows: [
+          ["計上済み", m1(s.booked) + " 百万円"],
+          ["これから計上予定", pendLabel],
+          ["着地レンジ", mRange(s.landing.low, s.landing.high) + " 百万円"],
+          ["前月（" + m.meta.prevMonth + "）", m1(s.prev) + " 百万円"]
+        ],
+        delta: deltaText(s),
+        chips: (d.chips || []).slice()
+      }));
+    });
+  }
+
+  function renderTotal(m) {
+    $("total-fig").textContent = "";
+    var fig = $("total-fig");
+    fig.appendChild(document.createTextNode("約 " + m1(m.total.landing.central)));
+    fig.appendChild(el("span", "u", "百万円"));
+
+    var side = $("total-side"); clear(side);
+    [
+      ["計上済み（" + m.meta.targetMonth + " 実績）", m1(m.total.booked) + " 百万円"],
+      ["これから計上予定", mRange(m.total.pending.low, m.total.pending.high) + " 百万円"],
+      ["着地レンジ", mRange(m.total.landing.low, m.total.landing.high) + " 百万円"],
+      ["前月（" + m.meta.prevMonth + "）合計", m1(m.total.prev) + " 百万円"]
+    ].forEach(function (r) {
+      var row = el("div", "r");
+      row.appendChild(el("span", "lbl", r[0]));
+      row.appendChild(el("span", "num", r[1]));
+      side.appendChild(row);
+    });
+    var dl = deltaText(m.total);
+    var drow = el("div", "r");
+    drow.appendChild(el("span", "lbl", "前月比"));
+    var dv = el("span", "delta " + dl.cls);
+    dv.appendChild(el("span", "arw", dl.arw));
+    dv.appendChild(el("span", "num", dl.txt));
+    drow.appendChild(dv);
+    side.appendChild(drow);
+
+    // レンジメーター
+    var lo = m.total.landing.low, hi = m.total.landing.high, ce = m.total.landing.central;
+    var pad = Math.max((hi - lo) * 0.35, Math.abs(ce) * 0.004, 1);
+    var a = lo - pad, b = hi + pad;
+    function ppos(v) { return ((v - a) / (b - a)) * 100; }
+    $("total-span").style.left = ppos(lo) + "%";
+    $("total-span").style.width = Math.max(0.5, ppos(hi) - ppos(lo)) + "%";
+    $("total-mid").style.left = "calc(" + ppos(ce) + "% - 1px)";
+    $("total-lo").textContent = "low " + m1(lo) + " 百万円";
+    $("total-hi").textContent = "high " + m1(hi) + " 百万円";
+    $("total-note").textContent = "基準日 " + m.meta.basisDate + " ／ 残り " + m.meta.remainingDays + " 日";
+
+    var ck = $("checks"); clear(ck);
+    m.checks.forEach(function (c) {
+      var row = el("div", "checkrow");
+      var st = el("span", "st " + (c.ok ? "ok" : "ng"), c.ok ? "✓" : "▲");
+      row.appendChild(st);
+      row.appendChild(el("span", null, c.label));
+      row.appendChild(el("span", "dt", c.detail));
+      ck.appendChild(row);
+    });
+  }
+
+  function renderBreakdownTable(m) {
+    var c = m.lks.components, w = m.inputs.lagWeight;
+    var tb = $("tbl-breakdown").querySelector("tbody"); clear(tb);
+    var rows = [
+      ["c1", "① 更新残", c.p1, "Σ(window_days × 単価)。基準日以降に有効化される既存会員の課金更新分。"],
+      ["c2", "② 既成約未計上", c.p2, "Σ max(0, n_valid × プロファイル − 計上済み)。基準日より前の成約で、まだFAが載っていない分。"],
+      ["c3", "③ 今後の成約", c.p3, "Σ ペース × 残日のプロファイル。下のシナリオ入力で即再計算。"],
+      ["c4", "④ 滞納・処理ラグ", c.p4, "Σ(lag_days × 単価)。early かつ当月FA=0 の会員。既定は " + Math.round(w * 100) + "% を織り込む。"]
+    ];
+    rows.forEach(function (r) {
+      var tr = el("tr");
+      var td0 = el("td");
+      var sw = el("span", "swatch"); sw.style.background = cssVar("--" + r[0]);
+      td0.appendChild(sw); td0.appendChild(document.createTextNode(r[1]));
+      tr.appendChild(td0);
+      tr.appendChild(el("td", "n", yen(r[2])));
+      tr.appendChild(el("td", "n", m1(r[2])));
+      var td3 = el("td"); td3.style.textAlign = "left"; td3.style.whiteSpace = "normal";
+      td3.textContent = r[3];
+      tr.appendChild(td3);
+      tb.appendChild(tr);
+    });
+    var tf = $("tbl-breakdown").querySelector("tfoot"); clear(tf);
+    [["low（①+②+③）", m.lks.pending.low],
+    ["central（low + " + Math.round(w * 100) + "% × ④）", m.lks.pending.central],
+    ["high（low + ④）", m.lks.pending.high]].forEach(function (r) {
+      var tr = el("tr");
+      tr.appendChild(el("td", null, r[0]));
+      tr.appendChild(el("td", "n", yen(r[1])));
+      tr.appendChild(el("td", "n", m1(r[1])));
+      var t = el("td"); t.style.textAlign = "left";
+      t.textContent = "着地 " + m1(m.lks.booked + r[1]) + " 百万円";
+      tr.appendChild(t);
+      tf.appendChild(tr);
+    });
+  }
+
+  function renderProfileTable(m) {
+    var tb = $("tbl-profile").querySelector("tbody"); clear(tb);
+    var k = m.inputs.k;
+    m.lks.profile.onlineSeries.forEach(function (r) {
+      var tr = el("tr");
+      tr.appendChild(el("td", null, String(r.dom) + " 日"));
+      tr.appendChild(el("td", "n", yen(r.fa_per_conv)));
+      tr.appendChild(el("td", "n", yen(r.fa_per_conv * k)));
+      tr.appendChild(el("td", null, r.dom < m.meta.basisDom ? "経過（②の判定に使用）" : "残日（③の積算に使用）"));
+      tb.appendChild(tr);
+    });
+  }
+
+  function renderPlanTable(m) {
+    var tb = $("tbl-plans").querySelector("tbody"); clear(tb);
+    m.lks.planRows.forEach(function (r) {
+      var tr = el("tr");
+      tr.appendChild(el("td", null, r.plan_name));
+      tr.appendChild(el("td", null, r.payment_type));
+      tr.appendChild(el("td", "n", r.rate ? r.rate.toFixed(1) : "0.0"));
+      tr.appendChild(el("td", null, r.rateSource === "cur" ? "当月" : r.rateSource === "prev" ? "前月フォールバック" : "単価なし"));
+      tr.appendChild(el("td", "n", r.n_window.toLocaleString("ja-JP")));
+      tr.appendChild(el("td", "n", r.window_days.toLocaleString("ja-JP")));
+      tr.appendChild(el("td", "n", yen(r.p1)));
+      tr.appendChild(el("td", "n", r.n_lag.toLocaleString("ja-JP")));
+      tr.appendChild(el("td", "n", r.lag_days.toLocaleString("ja-JP")));
+      tr.appendChild(el("td", "n", yen(r.p4)));
+      tb.appendChild(tr);
+    });
+    var tf = $("tbl-plans").querySelector("tfoot"); clear(tf);
+    var tr2 = el("tr");
+    tr2.appendChild(el("td", null, "合計"));
+    tr2.appendChild(el("td", null, ""));
+    tr2.appendChild(el("td", null, ""));
+    tr2.appendChild(el("td", null, ""));
+    tr2.appendChild(el("td", "n", m.lks.totals.nWindow.toLocaleString("ja-JP")));
+    tr2.appendChild(el("td", "n", m.lks.totals.windowDays.toLocaleString("ja-JP")));
+    tr2.appendChild(el("td", "n", yen(m.lks.components.p1)));
+    tr2.appendChild(el("td", "n", m.lks.totals.nLag.toLocaleString("ja-JP")));
+    tr2.appendChild(el("td", "n", m.lks.totals.lagDays.toLocaleString("ja-JP")));
+    tr2.appendChild(el("td", "n", yen(m.lks.components.p4)));
+    tf.appendChild(tr2);
+  }
+
+  function renderChannelTable(m) {
+    var tb = $("tbl-channel").querySelector("tbody"); clear(tb);
+    m.lks.channels.forEach(function (c) {
+      var tr = el("tr");
+      tr.appendChild(el("td", null, c.channel));
+      tr.appendChild(el("td", "n", c.nUsers.toLocaleString("ja-JP")));
+      tr.appendChild(el("td", "n", yen(c.booked)));
+      tr.appendChild(el("td", "n", c.share > 0 ? pctPlain(c.share) : "—"));
+      tr.appendChild(el("td", "n", yen(c.inc.p1)));
+      tr.appendChild(el("td", "n", yen(c.inc.p2)));
+      tr.appendChild(el("td", "n", yen(c.inc.p3)));
+      tr.appendChild(el("td", "n", yen(c.inc.p4)));
+      tr.appendChild(el("td", "n", m1(c.landing.low)));
+      tr.appendChild(el("td", "n", m1(c.landing.central)));
+      tr.appendChild(el("td", "n", m1(c.landing.high)));
+      tb.appendChild(tr);
+    });
+    var tf = $("tbl-channel").querySelector("tfoot"); clear(tf);
+    var sum = function (f) { return m.lks.channels.reduce(function (s, c) { return s + f(c); }, 0); };
+    var tr2 = el("tr");
+    tr2.appendChild(el("td", null, "合計"));
+    tr2.appendChild(el("td", "n", sum(function (c) { return c.nUsers; }).toLocaleString("ja-JP")));
+    tr2.appendChild(el("td", "n", yen(sum(function (c) { return c.booked; }))));
+    tr2.appendChild(el("td", "n", "100.0%"));
+    tr2.appendChild(el("td", "n", yen(sum(function (c) { return c.inc.p1; }))));
+    tr2.appendChild(el("td", "n", yen(sum(function (c) { return c.inc.p2; }))));
+    tr2.appendChild(el("td", "n", yen(sum(function (c) { return c.inc.p3; }))));
+    tr2.appendChild(el("td", "n", yen(sum(function (c) { return c.inc.p4; }))));
+    tr2.appendChild(el("td", "n", m1(sum(function (c) { return c.landing.low; }))));
+    tr2.appendChild(el("td", "n", m1(sum(function (c) { return c.landing.central; }))));
+    tr2.appendChild(el("td", "n", m1(sum(function (c) { return c.landing.high; }))));
+    tf.appendChild(tr2);
+  }
+
+  function renderMonthlyTable(m) {
+    var tb = $("tbl-monthly").querySelector("tbody"); clear(tb);
+    m.history.forEach(function (h) {
+      var tr = el("tr");
+      tr.appendChild(el("td", null, h.ym));
+      tr.appendChild(el("td", "n", yen(h.lks)));
+      tr.appendChild(el("td", "n", yen(h.mny)));
+      tr.appendChild(el("td", "n", yen(h.pd)));
+      tr.appendChild(el("td", "n", yen(h.total)));
+      tr.appendChild(el("td", null, h.isCurrent ? "当月（計上途中）" : h.isFuture ? "未来月" : "確定"));
+      tb.appendChild(tr);
+    });
+  }
+
+  function kvTable(table, rows) {
+    var tb = table.querySelector("tbody"); clear(tb);
+    rows.forEach(function (r) {
+      var tr = el("tr");
+      var th = el("th", null, r[0]);
+      th.setAttribute("scope", "row");
+      th.style.background = "transparent";
+      th.style.fontWeight = "400";
+      th.style.color = cssVar("--ink-3");
+      th.style.whiteSpace = "normal";
+      tr.appendChild(th);
+      var td = el("td", "n", r[1]);
+      if (r[2]) td.style.fontWeight = "600";
+      tr.appendChild(td);
+      tb.appendChild(tr);
+    });
+  }
+
+  function renderMnyPd(m) {
+    var w = Math.round(m.inputs.lagWeight * 100);
+    kvTable($("tbl-mny"), [
+      ["計上済み（" + m.meta.targetMonth + "）", yen(m.mny.booked) + " 円"],
+      ["1日単価", (m.mny.rate ? m.mny.rate.toFixed(1) : "—") + " 円/日" + (m.mny.rateSource === "prev" ? "（前月）" : "")],
+      ["① 更新残", yen(m.mny.components.p1) + " 円"],
+      ["④ 滞納・処理ラグ", yen(m.mny.components.p4) + " 円"],
+      ["トークン件数（当月 / 前月）", m.mny.counts.nActiveCur.toLocaleString("ja-JP") + " / " + m.mny.counts.nActivePrev.toLocaleString("ja-JP") + " 件"],
+      ["更新予定 / 滞納", m.mny.counts.nWindow.toLocaleString("ja-JP") + " 件 / " + m.mny.counts.nLag.toLocaleString("ja-JP") + " 件"],
+      ["着地 low", m1(m.mny.landing.low) + " 百万円"],
+      ["着地 central（④ " + w + "%）", m1(m.mny.landing.central) + " 百万円", true],
+      ["着地 high", m1(m.mny.landing.high) + " 百万円"],
+      ["前月（" + m.meta.prevMonth + "）", yen(m.mny.prev) + " 円"]
+    ]);
+    kvTable($("tbl-pd"), [
+      ["計上済み（" + m.meta.targetMonth + "）", yen(m.pd.booked) + " 円"],
+      ["fa_per_day_cur", m.pd.fa_per_day_cur === null ? "NULL（別パイプライン）" : String(m.pd.fa_per_day_cur) + "（別パイプライン）"],
+      ["トークン件数（当月 / 前月）", m.pd.counts.nActiveCur.toLocaleString("ja-JP") + " / " + m.pd.counts.nActivePrev.toLocaleString("ja-JP") + " 件"],
+      ["更新予定（基準日以降・未計上なら上振れ）", m.pd.nWindow.toLocaleString("ja-JP") + " 件"],
+      ["1件あたり概算（前月公式FA ÷ 前月件数）", yen(m.pd.perUnit) + " 円"],
+      ["上振れ余地", yen(m.pd.upside) + " 円"],
+      ["着地 low = central", m1(m.pd.landing.central) + " 百万円", true],
+      ["着地 high", m1(m.pd.landing.high) + " 百万円"],
+      ["前月（" + m.meta.prevMonth + "）", yen(m.pd.prev) + " 円"]
+    ]);
+
+    var dyn = $("pd-caveat-dyn"); clear(dyn);
+    if (m.pd.nWindow > 0) {
+      dyn.appendChild(document.createTextNode(
+        "基準日以降に更新予定のトークンが " + m.pd.nWindow.toLocaleString("ja-JP") +
+        " 件ある。これがまだ未計上なら、1件あたり " + yen(m.pd.perUnit) + " 円（前月公式FA ÷ 前月トークン件数）で " +
+        yen(m.pd.upside) + " 円ぶん上振れしうる。これを high に加えている。"));
+    } else {
+      dyn.appendChild(document.createTextNode(
+        "基準日以降に更新予定のトークンは 0 件のため、上振れ余地は算出上 0 円（high = central）。" +
+        "なお当月のトークン " + m.pd.counts.nActiveCur.toLocaleString("ja-JP") +
+        " 件はすべて「当月FA=0」に見えるが、これは FA がこのテーブルに載らない別パイプライン仕様によるもので、滞納ではない。"));
+    }
+  }
+
+  function renderDefs(m) {
+    var dl = $("defs"); clear(dl);
+    var k = m.inputs.k;
+    [
+      ["対象と基準日", "対象月 " + m.meta.targetMonth + "、基準日 " + m.meta.basisDate + "（" + m.meta.basisDom + "日目 / " + m.meta.lastDom + "日）。すべてのクエリは CURRENT_DATE('Asia/Tokyo') 基準で自己完結しており、実行のたびに当月を対象化する。"],
+      ["計上済み（booked）", "公式月次FAテーブル（monthly_financial_accounting）の当月値。likes財務会計 / money財務会計 / likespro財務会計。"],
+      ["1日単価 rate", "fa_per_day_cur ?? fa_per_day_prev ?? 0。当月 early（基準日より前に有効化）の FA 合計 ÷ 有効日数。月初で early が空のときは前月の同計算にフォールバックする。"],
+      ["① 更新残", "既存会員のうち、基準日以降に当月内で有効化される課金更新分。Σ(window_days × rate)。"],
+      ["② 既成約未計上", "基準日より前に成約済みなのに、まだ当月FAが載っていない分。Σ max(0, n_valid × プロファイル − 計上済みFA)。"],
+      ["③ 今後の成約", "Σ ペース × 残日のプロファイル。プロファイルは前月実測（q5）の成約日別・1件あたり当月FA。"],
+      ["④ 滞納・処理ラグ", "early かつ当月FAが 0 の会員。Σ(lag_days × rate)。low では 0、central では既定 50%、high では 100% を織り込む。"],
+      ["拠点の係数 k", "prof(拠点,d) = prof(オンライン,d) × k。k = " + k.toFixed(4) + "（" + (m.inputs.kSource === "q5" ? "q5 の加重平均から算出" : "q5 の分母が 0 のため実務値 0.94 を使用") + "）。拠点の日別単価はノイズが大きいためオンラインを基準にスケールする。"],
+      ["チャネル按分", "①②④ は計上済みFAの構成比（成約記録なしを除く）で按分。③ はチャネル直接。したがって Σチャネル別 と全体は、Σq4 と q1 の差ぶんだけずれる。"],
+      ["プロデの扱い", "multicreator は marts の monthly_accounting にFAが載らない別パイプライン。全件一括払いのため当月分は実質計上済みとみなし、central = 計上済み。上振れ余地のみ high に加える。"],
+      ["丸め", "内部計算はフル精度。表示は百万円（小数1桁）を基本とし、詳細表は円の3桁区切り。"],
+      ["レンジと「約」", "low / central / high は ④ の織り込み率だけが違う3シナリオ。中央値には「約」を付けて点推定でないことを示す。"]
+    ].forEach(function (p) {
+      var d = el("div", "d");
+      var dt = el("dt", null, p[0]);
+      var dd = el("dd", null, p[1]);
+      d.appendChild(dt); d.appendChild(dd);
+      dl.appendChild(d);
+    });
+  }
+
+  function renderScenario(m) {
+    var a = $("in-pace-on"), b = $("in-pace-ky");
+    if (document.activeElement !== a) a.value = String(m.inputs.paceOn);
+    if (document.activeElement !== b) b.value = String(m.inputs.paceKyoten);
+    var d = m.inputs.paceDefaults;
+    $("hint-pace-on").textContent = "既定 " + d.paceOn + "（当月 有効成約 " + d.validTotals["オンライン"] + " 件 ÷ " + d.denom + " 日）";
+    $("hint-pace-ky").textContent = "既定 " + d.paceKyoten + "（当月 有効成約 " + d.validTotals["拠点"] + " 件 ÷ " + d.denom + " 日）";
+    $("hint-reset").textContent = "分類不能チャネルのペースは既定 0 のまま";
+    var seg = $("seg-lag");
+    if (!seg.childNodes.length) {
+      [0, 0.25, 0.5, 0.75, 1].forEach(function (v) {
+        var btn = el("button", null, Math.round(v * 100) + "%");
+        btn.type = "button";
+        btn.setAttribute("data-w", String(v));
+        btn.addEventListener("click", function () { STATE.opts.lagWeight = v; render(); });
+        seg.appendChild(btn);
+      });
+    }
+    Array.prototype.forEach.call(seg.childNodes, function (btn) {
+      btn.setAttribute("aria-pressed", Math.abs(parseFloat(btn.getAttribute("data-w")) - m.inputs.lagWeight) < 1e-9 ? "true" : "false");
+    });
+    $("lks-note").textContent =
+      "計上済み " + m1(m.lks.booked) + " 百万円 ＋ 予定 " + mRange(m.lks.pending.low, m.lks.pending.high) +
+      " 百万円 → 着地 " + mRange(m.lks.landing.low, m.lks.landing.high) + " 百万円";
+  }
+
+  function renderSql(m) {
+    var host = $("sql-list"); clear(host);
+    var totalBytes = 0, known = 0;
+    QK.forEach(function (k) {
+      var sql = (APP.queries || {})[k];
+      var bytes = (m.meta.bytesProcessed || {})[k];
+      if (isFinite(bytes)) { totalBytes += bytes; known++; }
+      var st = STATE.status[k] || { state: "idle" };
+
+      var d = el("details");
+      var s = el("summary");
+      s.appendChild(el("span", "q-title", k));
+      s.appendChild(el("span", null, QLABEL[k] || ""));
+      var meta = el("span", "q-meta");
+      meta.appendChild(el("span", "num", isFinite(bytes) ? L.fmtBytes(bytes) : "bytes 不明"));
+      meta.appendChild(statusChip(k, st));
+      s.appendChild(meta);
+      d.appendChild(s);
+
+      var body = el("div", "body");
+      var pre = el("pre");
+      pre.textContent = sql ? String(sql) : "-- SQL 未配置: dashboard/sql/" + k + ".sql\n-- build.py 実行時にこのファイルが存在しなかったため、ライブ更新もこのクエリだけ無効です。";
+      body.appendChild(pre);
+      if (st.state === "error" && st.err) {
+        var cal = el("div", "callout");
+        cal.style.marginTop = "8px";
+        var hh = el("div", "h");
+        hh.appendChild(el("span", "ic", "▲"));
+        hh.appendChild(document.createTextNode(errTitle(st.err.code)));
+        cal.appendChild(hh);
+        cal.appendChild(document.createTextNode(errBody(st.err)));
+        body.appendChild(cal);
+      }
+      d.appendChild(body);
+      host.appendChild(d);
+    });
+    $("sql-note").textContent = known
+      ? "スナップショット取得時の合計スキャン量 " + L.fmtBytes(totalBytes) + "（" + known + "/" + QK.length + " クエリぶん）"
+      : "スキャン量の記録なし";
+  }
+
+  function statusChip(key, st) {
+    var c = el("span", "chip");
+    var tone = "", txt = "スナップショット";
+    if (st.state === "loading") { tone = "is-info"; txt = "取得中"; }
+    else if (st.state === "ok") {
+      var n = (STATE.liveRows[key] || []).length;
+      if (n === 0) { tone = "is-warn"; txt = "ライブ 0行 " + jstStamp(STATE.liveAt[key]); }
+      else { tone = "is-good"; txt = "ライブ " + n + "行 " + jstStamp(STATE.liveAt[key]); }
+    }
+    else if (st.state === "error") { tone = "is-crit"; txt = "失敗（" + (st.err && st.err.code || "unknown") + "）"; }
+    else if (st.state === "nosql") { tone = "is-warn"; txt = "SQL 未配置"; }
+    c.className = "chip " + tone;
+    c.appendChild(el("span", "dot"));
+    c.appendChild(document.createTextNode(txt));
+    return c;
+  }
+
+  function renderHeader(m) {
+    var sub = $("hd-sub"); clear(sub);
+    sub.appendChild(document.createTextNode("対象月 "));
+    sub.appendChild(el("b", null, m.meta.targetMonth));
+    sub.appendChild(document.createTextNode("　基準日 "));
+    sub.appendChild(el("b", null, m.meta.basisDate));
+    sub.appendChild(document.createTextNode("（" + m.meta.basisDom + "日目 / " + m.meta.lastDom + "日、残り " + m.meta.remainingDays + "日）"));
+
+    var okCount = 0, errCount = 0;
+    QK.forEach(function (k) {
+      if (STATE.status[k].state === "ok") okCount++;
+      else if (STATE.status[k].state === "error") errCount++;
+    });
+    var f = $("freshness"), t = $("freshness-txt");
+    f.className = "chip";
+    if (okCount === 0) {
+      t.textContent = "スナップショット " + prettyIso(m.meta.generatedAt);
+    } else {
+      var newest = 0;
+      QK.forEach(function (k) { if (STATE.status[k].state === "ok" && STATE.liveAt[k] > newest) newest = STATE.liveAt[k]; });
+      t.textContent = "ライブ " + okCount + "/" + QK.length + " · " + jstStamp(newest);
+      f.className = "chip " + (errCount ? "is-warn" : "is-good");
+    }
+    if (m.meta.isFixture) {
+      t.textContent += "（フィクスチャ）";
+      f.className = "chip is-warn";
+    }
+    $("foot").textContent =
+      "生成 " + prettyIso(m.meta.generatedAt) +
+      " ／ 行数 " + QK.map(function (k) { return k.slice(0, 2) + ":" + m.rowCounts[k]; }).join(" ") +
+      (m.meta.source ? " ／ " + m.meta.source : "");
+  }
+
+  /* ---- 全体描画 ---- */
+  var charts = [
+    { host: "chart-breakdown", fn: chartBreakdown },
+    { host: "chart-channel", fn: chartChannel },
+    { host: "chart-conv", fn: chartConv },
+    { host: "chart-monthly", fn: chartMonthly }
+  ];
+
+  function render() {
+    var m;
+    try {
+      m = L.buildModel(effectiveData(), STATE.opts);
+    } catch (e) {
+      $("hd-sub").textContent = "モデルの計算に失敗しました: " + (e && e.message ? e.message : String(e));
+      return;
+    }
+    STATE.model = m;
+    renderHeader(m);
+    renderCards(m);
+    renderTotal(m);
+    renderBreakdownTable(m);
+    renderProfileTable(m);
+    renderPlanTable(m);
+    renderChannelTable(m);
+    renderMonthlyTable(m);
+    renderMnyPd(m);
+    renderDefs(m);
+    renderScenario(m);
+    renderSql(m);
+    drawCharts();
+  }
+
+  function drawCharts() {
+    if (!STATE.model) return;
+    charts.forEach(function (c) {
+      var host = $(c.host);
+      if (host) c.fn(host, STATE.model);
+    });
+  }
+
+  /* ================================================================
+   * 5. 入力
+   * ================================================================ */
+  var deb = null;
+  function onPace() {
+    if (deb) clearTimeout(deb);
+    deb = setTimeout(function () {
+      var a = parseFloat($("in-pace-on").value);
+      var b = parseFloat($("in-pace-ky").value);
+      STATE.opts.paceOn = isFinite(a) && a >= 0 ? a : 0;
+      STATE.opts.paceKyoten = isFinite(b) && b >= 0 ? b : 0;
+      render();
+    }, 130);
+  }
+  $("in-pace-on").addEventListener("input", onPace);
+  $("in-pace-ky").addEventListener("input", onPace);
+  $("btn-reset").addEventListener("click", function () {
+    STATE.opts.paceOn = null; STATE.opts.paceKyoten = null;
+    STATE.opts.lagWeight = L.DEFAULT_LAG_WEIGHT;
+    render();
+  });
+
+  var rdeb = null;
+  function onResize() {
+    if (rdeb) clearTimeout(rdeb);
+    rdeb = setTimeout(drawCharts, 120);
+  }
+  window.addEventListener("resize", onResize);
+  window.addEventListener("scroll", hideTip, { passive: true });
+  window.addEventListener("pagehide", function () {
+    for (var k in STATE.watches) {
+      if (Object.prototype.hasOwnProperty.call(STATE.watches, k) && typeof STATE.watches[k] === "function") {
+        try { STATE.watches[k](); } catch (e) { /* 冪等なので無視 */ }
+      }
+    }
+  });
+
+  /* ================================================================
+   * 6. ライブ更新（mcp capability）
+   * ================================================================ */
+  var RETRACT = { needs_reauth: 1, server_not_connected: 1, blocked_by_policy: 1, approval_required: 1, selection_required: 1 };
+
+  function errTitle(code) {
+    switch (code) {
+      case "needs_reauth": return "コネクタの再認証が必要";
+      case "server_not_connected": return "BigQuery コネクタが未接続";
+      case "selection_required": return "接続先コネクタが未選択";
+      case "server_not_found": return "コネクタが見つからない";
+      case "server_unavailable": return "BigQuery に一時的に到達できない";
+      case "not_in_manifest": return "このページの許可範囲外の呼び出し";
+      case "blocked_by_policy": return "組織ポリシーによりブロック";
+      case "approval_required": return "組織ポリシーで都度承認が必要";
+      case "tool_error": return "クエリがエラーを返した";
+      case "bad_request": case "transform_error": return "呼び出しに不備がある";
+      case "cancelled": return "呼び出しが中断された";
+      case "rate_limited": return "呼び出し回数の上限";
+      case "not_granted": case "capability_disabled": case "capability_removed": return "このビューではライブ更新を使えない";
+      default: return "取得に失敗";
+    }
+  }
+  function errBody(err) {
+    var code = err && err.code;
+    switch (code) {
+      case "needs_reauth": return "claude.ai の 設定 → コネクタ で「Google Cloud BigQuery」を再接続してください。表示中の数値はスナップショットのままです。";
+      case "server_not_connected": return "claude.ai の 設定 → コネクタ で「Google Cloud BigQuery」を追加してください。追加するまではスナップショット表示になります。";
+      case "selection_required": return "同名の BigQuery コネクタが複数あります。どれを使うかを選択すると再実行できます。";
+      case "server_not_found": return "接続先の BigQuery コネクタが上流に存在しません。管理者に確認してください。";
+      case "server_unavailable": return "一時的な障害の可能性があります。少し待ってからもう一度「ライブ更新」を押してください。";
+      case "not_in_manifest": return "このアーティファクトが宣言した範囲に (Google Cloud BigQuery, execute_sql_readonly) が含まれていません。公開設定を見直してください。";
+      case "blocked_by_policy": return "組織のポリシーでこのツールの利用が許可されていません。スナップショット表示のみ利用できます。";
+      case "approval_required": return "都度承認が必要な設定ですが、アーティファクト内での承認は未対応です。スナップショット表示のみ利用できます。";
+      case "tool_error": return "BigQuery からのメッセージ: " + (err.message || "（詳細なし）");
+      case "bad_request": case "transform_error": return "クエリ文字列または引数に問題があります: " + (err.message || "");
+      case "cancelled": return "再度「ライブ更新」を押すとやり直せます。";
+      case "rate_limited": return "しばらく待ってから再試行してください。";
+      default: return (err && err.message) || "詳細不明のエラーです。スナップショット値を表示しています。";
+    }
+  }
+
+  function setBanner(kind, title, body) {
+    var host = $("live-banner");
+    clear(host);
+    if (!kind) { host.hidden = true; return; }
+    host.hidden = false;
+    var c = el("div", "callout" + (kind === "info" ? " info" : ""));
+    var h = el("div", "h");
+    h.appendChild(el("span", "ic", kind === "info" ? "●" : "▲"));
+    h.appendChild(document.createTextNode(title));
+    c.appendChild(h);
+    c.appendChild(document.createTextNode(body));
+    host.appendChild(c);
+  }
+
+  function setStatus(key, state, err) {
+    STATE.status[key] = { state: state, err: err };
+  }
+
+  function refreshBanner() {
+    var codes = {}, errs = 0, total = 0;
+    QK.forEach(function (k) {
+      var st = STATE.status[k];
+      if (st.state === "nosql") return;
+      total++;
+      if (st.state === "error") { errs++; codes[st.err && st.err.code || "unknown"] = (codes[st.err && st.err.code || "unknown"] || 0) + 1; }
+    });
+    var keys = Object.keys(codes);
+    if (total > 0 && errs === total && keys.length === 1) {
+      var code = keys[0];
+      var sample = null;
+      QK.forEach(function (k) { if (STATE.status[k].state === "error") sample = STATE.status[k].err; });
+      setBanner("warn", errTitle(code) + " — スナップショット表示を継続中", errBody(sample || { code: code }));
+    } else if (errs > 0) {
+      setBanner("warn", "一部のクエリが失敗（" + errs + "/" + total + "）",
+        "失敗したクエリの値はスナップショットのままです。各クエリの状態は下の「クエリ」セクションで確認できます。");
+    } else {
+      setBanner(null);
+    }
+  }
+
+  function extractBytes(result) {
+    try {
+      var p = result && result.payload;
+      if (typeof p === "string") p = JSON.parse(p);
+      if (!p || typeof p !== "object") return null;
+      var b = p.totalBytesProcessed || (p.jobStatistics && p.jobStatistics.totalBytesProcessed) ||
+        (p.statistics && p.statistics.totalBytesProcessed);
+      var n = Number(b);
+      return isFinite(n) ? n : null;
+    } catch (e) { return null; }
+  }
+
+  function onEvent(key, ev, input) {
+    if (!ev) return;
+    if (ev.type === "data") {
+      var rows = [];
+      try { rows = L.parseBqResult(ev.result); } catch (e) { rows = []; }
+      STATE.liveRows[key] = rows;
+      var cache = ev.result && ev.result.cache;
+      STATE.liveAt[key] = (cache && isFinite(cache.storedAt)) ? cache.storedAt : Date.now();
+      var bytes = extractBytes(ev.result);
+      if (bytes !== null) {
+        if (!APP.data.meta) APP.data.meta = {};
+        if (!APP.data.meta.bytes_processed) APP.data.meta.bytes_processed = {};
+        APP.data.meta.bytes_processed[key] = bytes;
+      }
+      setStatus(key, "ok");
+    } else {
+      var err = ev.error || { code: "upstream_error", message: "" };
+      if (RETRACT[err.code]) delete STATE.liveRows[key];
+      setStatus(key, "error", err);
+      maybeRetry(key, err, input);
+    }
+    refreshBanner();
+    render();
+  }
+
+  function maybeRetry(key, err, input) {
+    if (!err || err.retryable !== true) return;
+    if (STATE.retried[key]) return;
+    STATE.retried[key] = true;
+    var wait = isFinite(err.retryAfterMs) ? Math.min(60000, Math.max(0, err.retryAfterMs))
+      : 700 + Math.random() * 1800;
+    setTimeout(function () {
+      if (!STATE.mcp) return;
+      setStatus(key, "loading");
+      render();
+      try {
+        Promise.resolve(STATE.mcp.invalidate(SERVER, TOOL, input)).catch(function () { });
+      } catch (e) { /* 古いシェル: 何もしない */ }
+    }, wait);
+  }
+
+  function startLive() {
+    if (!STATE.mcp) return;
+    var btn = $("btn-live");
+    btn.disabled = true;
+    btn.textContent = "取得中…";
+    if (!STATE.subscribed) {
+      STATE.subscribed = true;
+      QK.forEach(function (k) {
+        var sql = (APP.queries || {})[k];
+        if (!sql) { setStatus(k, "nosql"); return; }
+        var input = { projectId: PROJECT_ID, query: String(sql) };
+        setStatus(k, "loading");
+        try {
+          STATE.watches[k] = STATE.mcp.watchTool(SERVER, TOOL, input, function (ev) { onEvent(k, ev, input); },
+            { cache: { staleTime: 60000, gcTime: 900000 } });
+        } catch (e) {
+          setStatus(k, "error", { code: "bad_request", message: String(e && e.message || e) });
+        }
+      });
+    } else {
+      STATE.retried = {};
+      QK.forEach(function (k) { if (STATE.watches[k]) setStatus(k, "loading"); });
+      try {
+        Promise.resolve(STATE.mcp.invalidate(SERVER, TOOL)).catch(function () { });
+      } catch (e) { /* 古いシェル */ }
+    }
+    refreshBanner();
+    render();
+    setTimeout(function () { btn.disabled = false; btn.textContent = "ライブ更新"; }, 1500);
+  }
+
+  function initMcp() {
+    var btn = $("btn-live");
+    if (!(window.claude && typeof window.claude.use === "function")) { STATE.mcpState = "unavailable"; return; }
+    var p;
+    try { p = window.claude.use("mcp"); } catch (e) { STATE.mcpState = "unavailable"; return; }
+    Promise.resolve(p).then(function (ns) {
+      if (!ns) { STATE.mcpState = "unavailable"; return; }
+      STATE.mcp = ns;
+      STATE.mcpState = "ready";
+      btn.hidden = false;
+      btn.addEventListener("click", startLive);
+      // コネクタの状態を先に見て、押す前にヒントを出す
+      return Promise.resolve(ns.listTools()).then(function (lt) {
+        var srv = null;
+        ((lt && lt.servers) || []).forEach(function (s) { if (s.server === SERVER) srv = s; });
+        if (!srv) {
+          setBanner("warn", errTitle("server_not_connected"), errBody({ code: "server_not_connected" }));
+          btn.disabled = true;
+        } else if (srv.authStatus === "needs_reauth") {
+          setBanner("warn", errTitle("needs_reauth"), errBody({ code: "needs_reauth" }));
+        } else if (!(srv.tools || []).some(function (t) { return t.name === TOOL; })) {
+          setBanner("warn", errTitle("selection_required"), errBody({ code: "selection_required" }));
+        }
+      }).catch(function () { /* listTools 失敗はボタンを塞がない */ });
+    }).catch(function () { STATE.mcpState = "unavailable"; });
+  }
+
+  /* ================================================================
+   * 7. 起動
+   * ================================================================ */
+  render();
+  if (typeof ResizeObserver === "function") {
+    try {
+      var ro = new ResizeObserver(function () { onResize(); });
+      ro.observe(document.querySelector(".wrap"));
+    } catch (e) { /* resize イベントで代替 */ }
+  }
+  // details を開いたときにチャートが 0 幅で描かれていたら描き直す
+  document.addEventListener("toggle", function (e) {
+    if (e.target && e.target.tagName === "DETAILS" && e.target.open) onResize();
+  }, true);
+  initMcp();
+})();
+</script>
