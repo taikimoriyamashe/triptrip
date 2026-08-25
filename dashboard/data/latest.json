@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-25T10:48:26+09:00",
+  "generated_at": "2026-08-25T11:15:10+09:00",
   "basis_date": "2026-08-25",
   "target_month": "2026-08",
   "queries": {
@@ -166,8 +166,8 @@
           "fa_per_day_prev": 473.6688170616428,
           "n_window": 430,
           "window_days": 1681,
-          "n_lag": 174,
-          "lag_days": 3439
+          "n_lag": 173,
+          "lag_days": 3428
         },
         {
           "plan_name": "ライトプラン",
@@ -186,8 +186,8 @@
           "fa_per_day_prev": 1313.8776966509113,
           "n_window": 30,
           "window_days": 125,
-          "n_lag": 77,
-          "lag_days": 1488
+          "n_lag": 63,
+          "lag_days": 1312
         },
         {
           "plan_name": "レギュラープラン",
@@ -196,8 +196,8 @@
           "fa_per_day_prev": 1221.4920590564016,
           "n_window": 65,
           "window_days": 308,
-          "n_lag": 203,
-          "lag_days": 3969
+          "n_lag": 173,
+          "lag_days": 3495
         },
         {
           "plan_name": "卒業生プラン",
@@ -1020,8 +1020,8 @@
   "meta": {
     "bytes_processed": {
       "q1_official_monthly": 3234,
-      "q2_lks_pending": 938780547,
-      "q3_mny_pd_pending": 1410946180,
+      "q2_lks_pending": 938782121,
+      "q3_mny_pd_pending": 1410947703,
       "q4_lks_channel_booked": 861674797,
       "q5_conv_profile": 861674797,
       "q6_conv_actuals": 861674797

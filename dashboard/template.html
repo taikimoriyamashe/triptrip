@@ -157,6 +157,8 @@
    ベース
    ================================================================== */
 *, *::before, *::after { box-sizing: border-box; }
+/* display を持つクラス（.chip 等）が UA の [hidden] を上書きしてしまうので明示的に勝たせる */
+[hidden] { display: none !important; }
 html { -webkit-text-size-adjust: 100%; }
 body {
   margin: 0;
@@ -1675,7 +1677,25 @@ dl { margin: 0; }
 
   function renderNotices(m) {
     var host = $("notice-banner"); clear(host);
-    var ns = m.notices || [];
+    var all = m.notices || [];
+    // info レベルはチップに畳む（本文を押し下げないように）。詳細は該当セクションの注記が持つ。
+    var ns = all.filter(function (n) { return n.level !== "info"; });
+    var infos = all.filter(function (n) { return n.level === "info"; });
+    if (infos.length) {
+      var row = el("div");
+      row.style.display = "flex";
+      row.style.flexWrap = "wrap";
+      row.style.gap = "6px";
+      row.style.marginBottom = ns.length ? "8px" : "0";
+      infos.forEach(function (n) {
+        var chip = el("span", "chip is-info");
+        chip.appendChild(el("span", "dot"));
+        chip.appendChild(document.createTextNode(n.title));
+        chip.setAttribute("title", n.body);
+        row.appendChild(chip);
+      });
+      host.appendChild(row);
+    }
     if (!ns.length) return;
 
     if (ns.length === 1) {
