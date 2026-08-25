@@ -31,7 +31,23 @@ QUERY_KEYS = [
     "q4_lks_channel_booked",
     "q5_conv_profile",
     "q6_conv_actuals",
+    "q7_conv_plan",
+    "q8_yomi",
 ]
+
+# targets.json が無い / 壊れているときの既定（契約 v1.2 / logic.js の DEFAULT_TARGETS と同値）
+DEFAULT_TARGETS = {
+    "fa_targets": {"lks": None, "mny": None, "pd": None, "total": None},
+    "kyoten_conv_target": None,
+    "yomi": {
+        "comparable": False,
+        "note": "社内売上ヨミ(オンライン)は財務会計と定義が異なる可能性があるため参考値",
+    },
+    "note": "fa_targets は月次の目標FA(円)。null=未設定(UIは前月実績を基準線として表示)。",
+}
+
+# 契約 v1.2 で追加。データ層が未対応でも生成を止めない（UI 側でフォールバック）。
+OPTIONAL_QUERY_KEYS = {"q7_conv_plan", "q8_yomi"}
 
 PH_LOGIC = "/*__LOGIC__*/"
 PH_DATA = "/*__DATA__*/"
@@ -82,7 +98,12 @@ def load_snapshot(args, warn) -> dict:
             for k in QUERY_KEYS:
                 q = data["queries"].get(k)
                 if not isinstance(q, dict) or not isinstance(q.get("rows"), list):
-                    warn(f"{label} に {k}.rows が無い（空行として扱う）")
+                    # q7/q8 は契約 v1.2 の追加分。データ層が未対応でも生成は通し、
+                    # ページ側は該当UIを隠す（空行 = 欠損のフォールバック）。
+                    if k in OPTIONAL_QUERY_KEYS:
+                        print(f"  note     : {k} が未提供（該当UIは非表示で生成）")
+                    else:
+                        warn(f"{label} に {k}.rows が無い（空行として扱う）")
                     data["queries"][k] = {"rows": []}
             data.setdefault("meta", {})
             if label == "fixture":
@@ -99,8 +120,73 @@ def load_snapshot(args, warn) -> dict:
         "basis_date": "",
         "target_month": "",
         "queries": {k: {"rows": []} for k in QUERY_KEYS},
+        "targets": json.loads(json.dumps(DEFAULT_TARGETS)),
         "meta": {"empty": True},
     }
+
+
+def load_targets(path: str, snapshot_targets, warn) -> dict:
+    """目標を解決する。
+
+    優先順: repo の targets.json（人が編集する正）> snapshot に入っていた targets > 既定。
+    どれも無ければ全 null の既定を返すので、ページは「目標未設定」= 前月実績比の表示になる。
+    """
+    merged = json.loads(json.dumps(DEFAULT_TARGETS))   # deep copy
+
+    def overlay(src, origin):
+        if not isinstance(src, dict):
+            warn(f"targets({origin}) がオブジェクトではないため無視する")
+            return False
+        fa = src.get("fa_targets")
+        if isinstance(fa, dict):
+            for k in ("lks", "mny", "pd", "total"):
+                if k in fa:
+                    v = fa[k]
+                    if v is None:
+                        merged["fa_targets"][k] = None
+                    elif isinstance(v, (int, float)) and v > 0:
+                        merged["fa_targets"][k] = v
+                    else:
+                        warn(f"targets({origin}).fa_targets.{k} が数値でない: {v!r}（無視）")
+        elif fa is not None:
+            warn(f"targets({origin}).fa_targets がオブジェクトでない（無視）")
+        if "kyoten_conv_target" in src:
+            v = src["kyoten_conv_target"]
+            if v is None or (isinstance(v, (int, float)) and v >= 0):
+                merged["kyoten_conv_target"] = v
+            else:
+                warn(f"targets({origin}).kyoten_conv_target が数値でない: {v!r}（無視）")
+        y = src.get("yomi")
+        if isinstance(y, dict):
+            if "comparable" in y:
+                merged["yomi"]["comparable"] = bool(y["comparable"])
+            if y.get("note"):
+                merged["yomi"]["note"] = str(y["note"])
+        if src.get("note"):
+            merged["note"] = str(src["note"])
+        return True
+
+    used = "既定(全 null)"
+    if isinstance(snapshot_targets, dict):
+        if overlay(snapshot_targets, "snapshot"):
+            used = "snapshot"
+
+    if path and os.path.isfile(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                if overlay(json.load(f), os.path.basename(path)):
+                    used = path
+        except (OSError, ValueError) as e:
+            warn(f"targets.json の読み込みに失敗: {path}: {e}")
+    elif path:
+        print(f"  note     : targets.json が無い（{path}）— 目標未設定として生成")
+
+    fa = merged["fa_targets"]
+    n_set = sum(1 for v in fa.values() if v)
+    print(f"  targets  : {used}（fa_targets {n_set}/4 設定"
+          f"{'・拠点成約目標あり' if merged['kyoten_conv_target'] else ''}"
+          f"{'・ヨミ=目標系列' if merged['yomi']['comparable'] else '・ヨミ=参考値'}）")
+    return merged
 
 
 def load_queries(sql_dir: str, warn) -> dict:
@@ -307,6 +393,8 @@ def main() -> int:
     ap.add_argument("--fixture", default=os.path.join(HERE, "fixture.json"),
                     help="latest.json が無いときに使うフィクスチャ")
     ap.add_argument("--sql", default=os.path.join(HERE, "sql"))
+    ap.add_argument("--targets", default=os.path.join(HERE, "data", "targets.json"),
+                    help="目標(円)の定義。無ければ目標未設定として生成する")
     ap.add_argument("-o", "--out", default=os.path.join(HERE, "out", "dashboard.html"))
     ap.add_argument("--standalone", action="store_true",
                     help="doctype/html/head/body で包む（ローカル閲覧用。Artifact 公開には不要）")
@@ -336,6 +424,7 @@ def main() -> int:
     print(f"  logic    : {args.logic} ({len(logic):,} bytes)")
 
     data = load_snapshot(args, warn)
+    data["targets"] = load_targets(args.targets, data.get("targets"), warn)
     queries = load_queries(args.sql, warn)
 
     app_literal = "window.__APP__={data:" + js_json(data) + ",queries:" + js_json(queries) + "};"

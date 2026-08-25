@@ -422,6 +422,232 @@ describe("ペース入力の未指定は既定値・明示 0 は 0", function ()
 });
 
 /* ---------------------------------------------------------------- *
+ * 3.5 目標（targets）と成約進捗 — 契約 v1.2
+ * ---------------------------------------------------------------- */
+
+describe("normalizeTargets — 出所つきの正規化", function () {
+  var repo = {
+    fa_targets: { lks: 358000000, mny: 4700000, pd: 10500000, total: 375000000 },
+    kyoten_conv_target: 240,
+    yomi: { comparable: false, note: "参考値" }
+  };
+
+  var n = L.normalizeTargets(repo, null);
+  eq(n.fa.total.value, 375000000, "repo の total を採用");
+  eq(n.fa.total.source, "repo", "出所は repo");
+  eq(n.kyotenConvTarget.value, 240, "拠点の成約目標");
+  eq(n.yomi.comparable, false, "ヨミは参考値");
+  eq(n.hasAnyFa, true, "FA 目標あり");
+  eq(n.hasLocalOverride, false, "ローカル上書きなし");
+
+  var o = L.normalizeTargets(repo, { fa_targets: { lks: 360000000 } });
+  eq(o.fa.lks.value, 360000000, "ローカル上書きが repo に勝つ");
+  eq(o.fa.lks.source, "local", "出所は local");
+  eq(o.fa.mny.source, "repo", "上書きしていないキーは repo のまま");
+  eq(o.hasLocalOverride, true, "ローカル上書きあり");
+
+  var empty = L.normalizeTargets(null, null);
+  eq(empty.fa.total.value, null, "targets 無し → total は null");
+  eq(empty.fa.total.source, null, "出所も null");
+  eq(empty.hasAnyFa, false, "FA 目標なし");
+  eq(empty.kyotenConvTarget.value, null, "拠点目標も null");
+  eq(empty.yomi.comparable, false, "ヨミの既定は参考値");
+
+  // total 未設定でも 3 サービス揃っていれば合計を導出
+  var der = L.normalizeTargets({ fa_targets: { lks: 300, mny: 20, pd: 5 } }, null);
+  eq(der.fa.total.value, 325, "total 未設定 → 3サービスの合計を導出");
+  eq(der.fa.total.source, "derived", "導出は source=derived");
+  var noDer = L.normalizeTargets({ fa_targets: { lks: 300, mny: 20 } }, null);
+  eq(noDer.fa.total.value, null, "1つでも欠ければ導出しない");
+
+  // 不正値は無視して null 扱い
+  var bad = L.normalizeTargets({ fa_targets: { lks: "abc", mny: -5, pd: 0 } }, null);
+  eq(bad.fa.lks.value, null, "文字列は無視");
+  eq(bad.fa.mny.value, null, "負値は無視");
+  eq(bad.fa.pd.value, null, "0 は未設定扱い");
+  eq(L.normalizeTargets("not an object", 42).fa.lks.value, null, "型違いの引数でもクラッシュせず null");
+  eq(L.normalizeTargets(undefined, undefined).hasAnyFa, false, "引数なしでもクラッシュしない");
+});
+
+describe("targetDiff — 目標差分と達成率", function () {
+  var over = L.targetDiff(110, 100);
+  eq(over.met, true, "着地 > 目標 → met");
+  near(over.diff, 10, 1e-9, "差分 +10");
+  near(over.rate, 1.1, 1e-12, "達成率 110%");
+  eq(over.shortfall, 0, "不足なし");
+
+  var under = L.targetDiff(90, 100);
+  eq(under.met, false, "着地 < 目標 → 未達");
+  near(under.diff, -10, 1e-9, "差分 -10");
+  near(under.shortfall, 10, 1e-9, "不足 10");
+
+  eq(L.targetDiff(100, 100).met, true, "ちょうど達成は met");
+  eq(L.targetDiff(100, null), null, "目標 null → null");
+  eq(L.targetDiff(100, 0), null, "目標 0 → null（ゼロ除算しない）");
+  eq(L.targetDiff(100, -5), null, "目標が負 → null");
+  eq(L.targetDiff(null, 100), null, "着地 null → null");
+  eq(L.targetDiff(100, "abc"), null, "目標が非数値 → null");
+});
+
+describe("convProgress — 成約件数の進捗", function () {
+  var p = L.convProgress({ plan: 846, actual: 657, remainingDays: 7, pace: 27.4 });
+  eq(p.hasPlan, true, "計画あり");
+  eq(p.remaining, 189, "残り 846 − 657 = 189 件");
+  near(p.neededPace, 27, 1e-9, "必要ペース 189 ÷ 7 = 27.0 件/日");
+  near(p.projected, 657 + 27.4 * 7, 1e-9, "現ペース着地 = 実績 + ペース × 残日数");
+  near(p.projectedDiff, 657 + 27.4 * 7 - 846, 1e-9, "計画比");
+  near(p.rate, 657 / 846, 1e-12, "達成率");
+  eq(p.behind, false, "必要ペース < 現ペース → 遅れていない");
+  eq(p.unreachable, false, "到達可能");
+
+  var slow = L.convProgress({ plan: 846, actual: 485, remainingDays: 7, pace: 20.2 });
+  eq(slow.behind, true, "必要ペース > 現ペース → 注意");
+
+  // 計画なし
+  var np = L.convProgress({ plan: null, actual: 100, remainingDays: 5, pace: 10 });
+  eq(np.hasPlan, false, "計画 null → hasPlan false");
+  eq(np.remaining, null, "残りは null");
+  eq(np.neededPace, null, "必要ペースは null");
+  eq(np.rate, null, "達成率は null");
+  eq(np.projectedDiff, null, "計画比は null");
+  near(np.projected, 150, 1e-9, "現ペース着地は計画が無くても出る");
+  eq(np.behind, false, "計画が無ければ遅れ判定しない");
+
+  // 実績 > 計画
+  var overP = L.convProgress({ plan: 100, actual: 130, remainingDays: 3, pace: 5 });
+  eq(overP.remaining, 0, "実績超過 → 残りは 0（負にしない）");
+  eq(overP.neededPace, 0, "必要ペース 0");
+  eq(overP.behind, false, "超過なら遅れではない");
+  near(overP.projectedDiff, 45, 1e-9, "計画比 +45");
+
+  // 残 0 日（月末）でゼロ除算しない
+  var last = L.convProgress({ plan: 100, actual: 80, remainingDays: 0, pace: 10 });
+  eq(last.neededPace, null, "残 0 日で未達 → 必要ペースは算出不能(null)");
+  eq(last.unreachable, true, "unreachable フラグが立つ");
+  eq(last.behind, true, "遅れ扱い");
+  near(last.projected, 80, 1e-9, "残 0 日なら現ペース着地 = 実績");
+  var lastMet = L.convProgress({ plan: 100, actual: 100, remainingDays: 0, pace: 10 });
+  eq(lastMet.neededPace, 0, "残 0 日でも達成済みなら必要ペース 0");
+  eq(lastMet.unreachable, false, "達成済みなら unreachable ではない");
+
+  // 欠損・異常値
+  var z = L.convProgress({});
+  eq(z.actual, 0, "引数なしでも actual 0");
+  eq(z.hasPlan, false, "計画なし");
+  near(z.projected, 0, 1e-9, "projected 0");
+  eq(L.convProgress({ plan: 10, actual: 5, remainingDays: 5, pace: -3 }).pace, 0, "負のペースは 0 に");
+  eq(L.convProgress({ plan: -10, actual: 5, remainingDays: 5, pace: 1 }).plan, 0, "負の計画は 0 に");
+  eq(L.convProgress({ plan: 0, actual: 5, remainingDays: 5, pace: 1 }).rate, null, "計画 0 → 達成率は null（ゼロ除算しない）");
+});
+
+describe("buildModel — 目標・成約進捗の統合", function () {
+  var withTargets = clone(MINI);
+  withTargets.targets = {
+    fa_targets: { lks: 3000, mny: 1800, pd: 500, total: 5300 },
+    kyoten_conv_target: 8,
+    yomi: { comparable: false, note: "参考" }
+  };
+  withTargets.queries.q7_conv_plan = {
+    rows: [
+      { month: "2026-07", plan_regular: 4, plan_sutara: 2, src_regular: "実績", src_sutara: "実績", as_of: "2026-08-01" },
+      { month: "2026-08", plan_regular: 7, plan_sutara: 3, src_regular: "ヨミ", src_sutara: "ヨミ", as_of: "2026-08-09" }
+    ]
+  };
+  withTargets.queries.q8_yomi = {
+    rows: [{ month: "2026-08", yomi_total: 3200, as_of: "2026-08-09" }]
+  };
+
+  var m = L.buildModel(withTargets, { paceOn: 2, paceKyoten: 4, lagWeight: 0.5 });
+
+  // 目標
+  eq(m.total.target, 5300, "合計目標が読める");
+  eq(m.total.targetSource, "repo", "出所 repo");
+  eq(m.lks.baselineKind, "target", "目標があれば基準線は目標");
+  near(m.lks.targetDiff.diff, 3165 - 3000, 1e-9, "LKS 目標差分 = 3165 − 3000");
+  near(m.lks.targetDiff.rate, 3165 / 3000, 1e-12, "LKS 達成率");
+  eq(m.pd.targetDiff.met, true, "プロデ 600 vs 目標 500 → 達成");
+  eq(m.mny.targetDiff.met, true, "MNY 1900 vs 目標 1800 → 達成");
+
+  // 目標なしなら前月実績が基準線
+  var noT = L.buildModel(MINI, { paceOn: 2, paceKyoten: 4 });
+  eq(noT.total.target, null, "targets 無し → target は null");
+  eq(noT.total.targetDiff, null, "targetDiff も null");
+  eq(noT.total.baselineKind, "prev", "基準線は前月実績");
+  eq(noT.total.baseline, 1500, "前月合計 1500");
+
+  // 成約進捗（オンラインは q7、拠点は targets）
+  eq(m.conv.online.plan, 10, "q7 2026-08 の 7+3 = 10 件");
+  eq(m.conv.online.src, "ヨミ", "出所はヨミ");
+  eq(m.conv.online.asOf, "2026-08-09", "as_of");
+  eq(m.conv.online.actual, 5, "q6 オンラインの n_valid 合計 = 5");
+  eq(m.conv.online.remainingDays, 22, "残り 22 日（basis 10日 / 31日）");
+  eq(m.conv.kyoten.plan, 8, "拠点は targets.kyoten_conv_target");
+  eq(m.conv.kyoten.actual, 2, "拠点実績 2");
+  eq(m.conv.hasPlan, true, "計画あり");
+
+  // 前月行の src が「実績」であること（計画でなく実績表記に使う）
+  var julRow = withTargets.queries.q7_conv_plan.rows[0];
+  eq(julRow.src_regular, "実績", "前月行は実績");
+
+  // ヨミ
+  eq(m.yomi.total, 3200, "q8 の当月ヨミ");
+  eq(m.yomi.comparable, false, "既定は参考値");
+  eq(m.yomi.role, "reference", "role=reference");
+  eq(m.yomi.diff, null, "参考値なので目標差分は出さない");
+
+  var cmp = clone(withTargets);
+  cmp.targets.yomi = { comparable: true, note: "突合可" };
+  var mc2 = L.buildModel(cmp, { paceOn: 2, paceKyoten: 4 });
+  eq(mc2.yomi.role, "target", "comparable=true なら目標系列");
+  ok(mc2.yomi.diff !== null, "comparable=true なら LKS との差分を出す");
+  near(mc2.yomi.diff.diff, 3165 - 3200, 1e-9, "ヨミとの差 = LKS着地 − ヨミ");
+
+  // UI 上書き（opts.targets）
+  var ov = L.buildModel(withTargets, { paceOn: 2, paceKyoten: 4, targets: { fa_targets: { total: 4000 }, kyoten_conv_target: 3 } });
+  eq(ov.total.target, 4000, "opts.targets が data.targets に勝つ");
+  eq(ov.total.targetSource, "local", "出所は local");
+  eq(ov.conv.kyoten.plan, 3, "拠点目標も上書きできる");
+  eq(ov.lks.target, 3000, "上書きしていないキーは repo のまま");
+});
+
+describe("フォールバック: q7 / q8 / targets が無い（データ層 未対応時）", function () {
+  var m = L.buildModel(MINI, { paceOn: 2, paceKyoten: 4 });
+  eq(m.targets.hasAnyFa, false, "目標なし");
+  eq(m.yomi, null, "q8 が無ければ yomi は null（UI は非表示）");
+  eq(m.conv.online.hasPlan, false, "q7 が無ければ計画なし");
+  eq(m.conv.kyoten.hasPlan, false, "拠点目標もなし");
+  eq(m.conv.hasPlan, false, "計画は一つも無い");
+  ok(m.conv.online.actual >= 0, "実績とペースだけは出る");
+  ok(isFinite(m.conv.online.projected), "現ペース着地は出せる");
+  eq(m.rowCounts.q7_conv_plan, 0, "q7 の行数 0");
+  eq(m.rowCounts.q8_yomi, 0, "q8 の行数 0");
+  ["lks", "mny", "pd", "total"].forEach(function (k) {
+    eq(m[k].targetDiff, null, k + ": targetDiff は null");
+    eq(m[k].baselineKind, "prev", k + ": 基準線は前月実績");
+  });
+
+  // 当月行が無い q7（前月・翌月だけ）でも落ちない
+  var otherMonths = clone(MINI);
+  otherMonths.queries.q7_conv_plan = { rows: [{ month: "2026-07", plan_regular: 4, plan_sutara: 2, src_regular: "実績", src_sutara: "実績", as_of: "2026-08-01" }] };
+  var mo = L.buildModel(otherMonths, {});
+  eq(mo.conv.online.hasPlan, false, "当月行が無い q7 → 計画なし");
+
+  // 壊れた q7（数値でない）
+  var broken = clone(MINI);
+  broken.queries.q7_conv_plan = { rows: [{ month: "2026-08", plan_regular: null, plan_sutara: null, src_regular: null, src_sutara: null, as_of: null }] };
+  var mb = L.buildModel(broken, {});
+  eq(mb.conv.online.hasPlan, false, "plan が全 NULL → 計画なし");
+  ok(isFinite(mb.total.landing.central), "壊れた q7 でもクラッシュしない");
+
+  // targets が壊れている
+  var badT = clone(MINI);
+  badT.targets = { fa_targets: "nope", kyoten_conv_target: {}, yomi: null };
+  var mt = L.buildModel(badT, {});
+  eq(mt.targets.hasAnyFa, false, "壊れた targets → 目標なし扱い");
+  ok(isFinite(mt.total.landing.central), "壊れた targets でもクラッシュしない");
+});
+
+/* ---------------------------------------------------------------- *
  * 4. 実データ固定の回帰テスト（凍結スナップショット）
  * ---------------------------------------------------------------- *
  * dashboard/data/latest.json は日々更新されうるので、このテストは必ず

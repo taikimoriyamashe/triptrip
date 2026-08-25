@@ -263,7 +263,38 @@ li { margin-bottom: .3em; }
 .delta.down { color: var(--crit-ink); }
 .delta.flat { color: var(--ink-2); }
 
-/* ------------------------------ 合計（ヒーロー） ------------------------------ */
+/* ------------------------------ ヒーロー（3秒で読む） ------------------------------ */
+.hero-card { border-top: 2px solid var(--measure); }
+.lede {
+  margin: 6px 0 0; font-size: 21px; line-height: 1.35; font-weight: 500;
+  color: var(--ink); letter-spacing: -.005em;
+}
+.lede .fig {
+  font-size: 52px; font-weight: 600; line-height: 1.02; letter-spacing: -.025em;
+  display: inline-block; vertical-align: -.06em; margin: 0 2px;
+}
+.lede .u { font-size: 16px; font-weight: 500; color: var(--ink-3); margin: 0 3px 0 4px; }
+@media (max-width: 560px) { .lede { font-size: 17px; } .lede .fig { font-size: 40px; } }
+.hero-cmp { margin-top: 10px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 14px; }
+.hero-cmp .primary { font-size: 16px; font-weight: 600; }
+.hero-cmp .sub { font-size: 12.5px; color: var(--ink-2); }
+.hero-sub { margin-top: 6px; font-size: 12.5px; color: var(--ink-2); display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.hero-sub .k { color: var(--ink-3); }
+.bullet-host { margin-top: 14px; }
+
+/* ------------------------------ 成約進捗 ------------------------------ */
+.convgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 18px 26px; }
+.convblk .top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin-bottom: 2px; }
+.convblk .top h3 { font-size: 13.5px; }
+.convblk .top .spacer { flex: 1 1 auto; }
+.convblk .facts { margin-top: 10px; display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 8px 12px; }
+.convblk .fact .k { font-size: 11px; color: var(--ink-3); display: block; }
+.convblk .fact .v { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.convblk .fact .v small { font-size: 11px; font-weight: 400; color: var(--ink-3); margin-left: 2px; }
+.convblk .fact.alert .v { color: var(--warn-ink); }
+.convblk .concl { margin-top: 9px; font-size: 12.5px; color: var(--ink-2); }
+
+/* ------------------------------ 合計（ヒーロー旧） ------------------------------ */
 .hero { display: flex; flex-wrap: wrap; gap: 26px; align-items: flex-end; justify-content: space-between; }
 .hero .fig { font-size: 54px; font-weight: 600; line-height: 1.05; letter-spacing: -.025em; }
 .hero .fig .u { font-size: 17px; font-weight: 500; color: var(--ink-3); margin-left: 6px; letter-spacing: 0; }
@@ -407,43 +438,96 @@ dl { margin: 0; }
   <div id="notice-banner" class="banner"></div>
   <div id="live-banner" class="banner" hidden></div>
 
+  <!-- ================= ヒーロー：今月いくらで着地しそうか ================= -->
+  <section class="card hero-card" aria-labelledby="h-total">
+    <div class="sec-h">
+      <h2 id="h-total">3サービス合計の着地見込み</h2>
+      <span class="spacer"></span>
+      <span class="note" id="total-note"></span>
+    </div>
+
+    <p class="lede" id="hero-lede"></p>
+    <div class="hero-cmp" id="hero-cmp"></div>
+    <div class="hero-sub" id="hero-sub"></div>
+
+    <div class="chart bullet-host" id="chart-total-bullet"></div>
+    <div class="legend" id="legend-total-bullet"></div>
+
+    <details id="dt-targets">
+      <summary><span id="dt-targets-label">目標を設定する</span></summary>
+      <div class="body">
+        <p class="hint" id="targets-scope"></p>
+        <div class="scen">
+          <div class="field">
+            <label for="tg-total">合計の目標（百万円）</label>
+            <input type="number" id="tg-total" min="0" step="0.1" inputmode="decimal">
+            <div class="hint" id="tg-total-src"></div>
+          </div>
+          <div class="field">
+            <label for="tg-lks">SHElikes（百万円）</label>
+            <input type="number" id="tg-lks" min="0" step="0.1" inputmode="decimal">
+            <div class="hint" id="tg-lks-src"></div>
+          </div>
+          <div class="field">
+            <label for="tg-mny">SHEmoney（百万円）</label>
+            <input type="number" id="tg-mny" min="0" step="0.1" inputmode="decimal">
+            <div class="hint" id="tg-mny-src"></div>
+          </div>
+          <div class="field">
+            <label for="tg-pd">プロデ（百万円）</label>
+            <input type="number" id="tg-pd" min="0" step="0.1" inputmode="decimal">
+            <div class="hint" id="tg-pd-src"></div>
+          </div>
+          <div class="field">
+            <label for="tg-kyoten">拠点の成約目標（件）</label>
+            <input type="number" id="tg-kyoten" min="0" step="1" inputmode="numeric">
+            <div class="hint" id="tg-kyoten-src"></div>
+          </div>
+          <div class="field">
+            <button class="btn" id="btn-targets-reset">この端末の設定を消す</button>
+            <div class="hint">リポジトリの targets.json の値に戻ります</div>
+          </div>
+        </div>
+        <div id="yomi-box" style="margin-top:12px"></div>
+      </div>
+    </details>
+
+    <details>
+      <summary><span id="checks-summary">整合チェック</span></summary>
+      <div class="body"><div class="checks" id="checks"></div></div>
+    </details>
+  </section>
+
   <!-- ================= サービス別サマリー ================= -->
   <div class="cards" id="cards"></div>
 
-  <!-- ================= 合計着地 ================= -->
-  <section class="card" aria-labelledby="h-total">
-    <div class="sec-h"><h2 id="h-total">合計着地見込み</h2><span class="note" id="total-note"></span></div>
-    <div class="hero">
-      <div>
-        <div class="cap">3サービス合計・当月末着地見込み（中央値）</div>
-        <div class="fig big num" id="total-fig">—<span class="u">百万円</span></div>
-      </div>
-      <div class="side" id="total-side"></div>
+  <!-- ================= 成約件数の進捗（目標差分の件数版） ================= -->
+  <section class="card" id="sec-conv" aria-labelledby="h-conv" hidden>
+    <div class="sec-h">
+      <h2 id="h-conv">成約件数の進捗</h2>
+      <span class="spacer"></span>
+      <span class="note" id="conv-note"></span>
     </div>
-    <div class="rangebar">
-      <div class="track" id="total-track">
-        <div class="span" id="total-span"></div>
-        <div class="mid" id="total-mid"></div>
-      </div>
-      <div class="scale"><span id="total-lo" class="num"></span><span id="total-hi" class="num"></span></div>
-    </div>
-    <div class="checks" id="checks"></div>
+    <div class="convgrid" id="conv-grid"></div>
   </section>
 
   <!-- ================= LKS 詳細 ================= -->
   <section class="card" aria-labelledby="h-lks">
     <div class="sec-h">
-      <h2 id="h-lks">SHElikes — これから計上予定の内訳</h2>
+      <h2 id="h-lks">SHElikes — 見込みの内訳と前提</h2>
       <span class="spacer"></span>
       <span class="note" id="lks-note"></span>
     </div>
 
+    <details id="dt-lks">
+      <summary>内訳のグラフ・単価表・シナリオ入力をひらく</summary>
+      <div class="body">
     <div class="chart" id="chart-breakdown"></div>
     <div class="legend" id="legend-breakdown"></div>
 
     <div class="tablewrap" style="margin-top:16px">
       <table id="tbl-breakdown">
-        <caption>増分の内訳（円）— ①②③ は low、④ は織り込み率に応じて central / high に効く</caption>
+        <caption>これから計上予定の内訳（円）— 上3つは確度が高く常に加算、「上振れの可能性」だけ織り込み率で効き方が変わる</caption>
         <thead><tr>
           <th>成分</th><th class="n">金額（円）</th><th class="n">百万円</th><th>算出根拠</th>
         </tr></thead>
@@ -452,7 +536,7 @@ dl { margin: 0; }
       </table>
     </div>
 
-    <div style="margin-top:18px" class="sec-h"><h2>シナリオ入力（③ 今後の成約）</h2></div>
+    <div style="margin-top:18px" class="sec-h"><h2>シナリオ入力（これからの新規成約）</h2></div>
     <div class="scen">
       <div class="field">
         <label for="in-pace-on">オンライン成約ペース（件/日）</label>
@@ -465,7 +549,7 @@ dl { margin: 0; }
         <div class="hint" id="hint-pace-ky"></div>
       </div>
       <div class="field">
-        <label id="lbl-lag">④ 滞納・処理ラグの織り込み率</label>
+        <label id="lbl-lag">「上振れの可能性」の織り込み率</label>
         <div class="seg" role="group" aria-labelledby="lbl-lag" id="seg-lag"></div>
         <div class="hint">既定 50%。7月実績（予測 ¥349M → 実績 ¥356.6M）でのキャリブレーション値。</div>
       </div>
@@ -489,7 +573,7 @@ dl { margin: 0; }
       </div>
     </details>
     <details>
-      <summary>① 更新残・④ 滞納/処理ラグ のプラン×支払種別 明細</summary>
+      <summary>「これから入る見込み」「上振れの可能性」のプラン×支払種別 明細</summary>
       <div class="body tablewrap">
         <table id="tbl-plans">
           <caption>rate = fa_per_day_cur ?? fa_per_day_prev ?? 0（円/会員日）</caption>
@@ -503,6 +587,8 @@ dl { margin: 0; }
         </table>
       </div>
     </details>
+      </div>
+    </details>
   </section>
 
   <!-- ================= LKS チャネル別 ================= -->
@@ -510,7 +596,7 @@ dl { margin: 0; }
     <div class="sec-h">
       <h2 id="h-ch">SHElikes — チャネル別の着地</h2>
       <span class="spacer"></span>
-      <span class="note">①②④ は計上済みFAの構成比で按分、③ はチャネル直接</span>
+      <span class="note">「これから入る見込み」「反映待ち」「上振れの可能性」は計上済みFAの構成比で按分、「これからの新規成約」はチャネル別に直接計算</span>
     </div>
     <div class="chart" id="chart-channel"></div>
     <div class="legend" id="legend-channel"></div>
@@ -518,7 +604,7 @@ dl { margin: 0; }
       <table id="tbl-channel">
         <thead><tr>
           <th>チャネル</th><th class="n">会員数</th><th class="n">計上済み（円）</th><th class="n">構成比</th>
-          <th class="n">①</th><th class="n">②</th><th class="n">③</th><th class="n">④</th>
+          <th class="n" id="th-c1">①</th><th class="n" id="th-c2">②</th><th class="n" id="th-c3">③</th><th class="n" id="th-c4">④</th>
           <th class="n">着地 low</th><th class="n">着地 central</th><th class="n">着地 high</th>
         </tr></thead>
         <tbody></tbody>
@@ -585,6 +671,9 @@ dl { margin: 0; }
   <!-- ================= 前提・定義・手法 ================= -->
   <section class="card" aria-labelledby="h-def">
     <div class="sec-h"><h2 id="h-def">前提・定義・手法</h2></div>
+    <details>
+      <summary>用語の定義・計算方法・読むときの注意をひらく</summary>
+      <div class="body">
     <dl class="defs" id="defs"></dl>
     <div style="margin-top:14px" class="callout">
       <div class="h"><span class="ic" aria-hidden="true">▲</span>読むときの注意</div>
@@ -596,6 +685,8 @@ dl { margin: 0; }
         <li><b>拠点の per-dom 単価はノイズが大きい:</b> そのため拠点は「オンラインのプロファイル × 係数 k」で近似する。</li>
       </ul>
     </div>
+      </div>
+    </details>
   </section>
 
   <!-- ================= SQL ================= -->
@@ -605,7 +696,10 @@ dl { margin: 0; }
       <span class="spacer"></span>
       <span class="note" id="sql-note"></span>
     </div>
-    <div id="sql-list"></div>
+    <details>
+      <summary>実行している 8 本の SQL とスキャン量をひらく</summary>
+      <div class="body"><div id="sql-list"></div></div>
+    </details>
   </section>
 
   <div class="foot" id="foot"></div>
@@ -619,11 +713,14 @@ dl { margin: 0; }
  * 純関数のみ / DOM 非依存。スナップショット経路(build.py が埋め込んだ latest.json)と
  * ライブ経路(BigQuery MCP の実行結果)が同じ関数を通る。
  *
- * 契約: data-contract v1.1（リポジトリ外の設計文書）。列名・計算式は契約どおり。変更しないこと。
+ * 契約: data-contract v1.2（リポジトリ外の設計文書）。列名・計算式は契約どおり。変更しないこと。
  *
  * export:
  *   parseBqResult(bqJson[, rows])  -> 型付き rows[]
  *   buildModel(data, opts)         -> 表示用モデル
+ *   normalizeTargets(base, override)   -> 目標の正規化（出所つき）
+ *   targetDiff(landingCentral, target) -> 目標差分・達成率
+ *   convProgress({plan, actual, remainingDays, pace}) -> 成約件数の進捗
  *   （補助）CHANNELS, QUERY_KEYS, defaultPaces, lastDayOfMonth, prevMonth, fmt*
  */
 (function (root, factory) {
@@ -644,8 +741,20 @@ dl { margin: 0; }
     "q3_mny_pd_pending",
     "q4_lks_channel_booked",
     "q5_conv_profile",
-    "q6_conv_actuals"
+    "q6_conv_actuals",
+    "q7_conv_plan",
+    "q8_yomi"
   ];
+
+  /** targets.json が無い / 欠けているときの既定（契約 v1.2）。 */
+  var DEFAULT_TARGETS = {
+    fa_targets: { lks: null, mny: null, pd: null, total: null },
+    kyoten_conv_target: null,
+    yomi: { comparable: false, note: "社内売上ヨミ(オンライン)は財務会計と定義が異なる可能性があるため参考値" },
+    note: ""
+  };
+
+  var SERVICE_KEYS = ["lks", "mny", "pd", "total"];
 
   var CH_ONLINE = "オンライン";
   var CH_KYOTEN = "拠点";
@@ -925,6 +1034,148 @@ dl { margin: 0; }
   }
 
   /* ------------------------------------------------------------------ *
+   * 目標（targets.json / UI 上書き） — 契約 v1.2
+   * ------------------------------------------------------------------ */
+
+  /**
+   * repo の targets.json と、閲覧者ローカルの上書きを畳んで正規化する。
+   * 値ごとに出所（repo / local / derived）を持たせ、UI が「どこから来た数字か」
+   * を明示できるようにする。純関数。
+   *
+   * @param {object} base     data.targets（build.py が注入した targets.json）
+   * @param {object} override UI/localStorage 由来の部分上書き（同じ形）
+   */
+  function normalizeTargets(base, override) {
+    base = base && typeof base === "object" ? base : {};
+    override = override && typeof override === "object" ? override : {};
+
+    var baseFa = (base.fa_targets && typeof base.fa_targets === "object") ? base.fa_targets : {};
+    var ovFa = (override.fa_targets && typeof override.fa_targets === "object") ? override.fa_targets : {};
+
+    var fa = {};
+    for (var i = 0; i < SERVICE_KEYS.length; i++) {
+      var k = SERVICE_KEYS[i];
+      var ov = num(ovFa[k]);
+      var bv = num(baseFa[k]);
+      if (ov !== null && ov > 0) fa[k] = { value: ov, source: "local" };
+      else if (bv !== null && bv > 0) fa[k] = { value: bv, source: "repo" };
+      else fa[k] = { value: null, source: null };
+    }
+
+    // total 未設定でも 3 サービスすべてに目標があれば合計を導出（出所を derived と明示）
+    if (fa.total.value === null) {
+      var sum = 0, all = true;
+      ["lks", "mny", "pd"].forEach(function (k2) {
+        if (fa[k2].value === null) all = false; else sum += fa[k2].value;
+      });
+      if (all && sum > 0) fa.total = { value: sum, source: "derived" };
+    }
+
+    var ovK = num(override.kyoten_conv_target);
+    var baseK = num(base.kyoten_conv_target);
+    var kyoten;
+    if (ovK !== null && ovK >= 0) kyoten = { value: ovK, source: "local" };
+    else if (baseK !== null && baseK >= 0) kyoten = { value: baseK, source: "repo" };
+    else kyoten = { value: null, source: null };
+
+    var baseYomi = (base.yomi && typeof base.yomi === "object") ? base.yomi : {};
+    var ovYomi = (override.yomi && typeof override.yomi === "object") ? override.yomi : {};
+    var comparable = ovYomi.comparable !== undefined ? !!ovYomi.comparable
+      : baseYomi.comparable !== undefined ? !!baseYomi.comparable
+        : DEFAULT_TARGETS.yomi.comparable;
+
+    var hasAnyFa = false;
+    for (var j = 0; j < SERVICE_KEYS.length; j++) if (fa[SERVICE_KEYS[j]].value !== null) hasAnyFa = true;
+
+    return {
+      fa: fa,
+      kyotenConvTarget: kyoten,
+      yomi: {
+        comparable: comparable,
+        note: (ovYomi.note || baseYomi.note || DEFAULT_TARGETS.yomi.note)
+      },
+      note: base.note || "",
+      hasAnyFa: hasAnyFa,
+      hasLocalOverride: (function () {
+        for (var x = 0; x < SERVICE_KEYS.length; x++) if (fa[SERVICE_KEYS[x]].source === "local") return true;
+        return kyoten.source === "local";
+      })()
+    };
+  }
+
+  /**
+   * 着地見込み(central) と目標の差分。
+   * 目標が未設定 / 0 以下なら null（呼び出し側は前月比にフォールバックする）。
+   *
+   * @returns {null|{target,diff,rate,met,shortfall}}
+   */
+  function targetDiff(landingCentral, target) {
+    var t = num(target);
+    var l = num(landingCentral);
+    if (t === null || !(t > 0) || l === null) return null;
+    var diff = l - t;
+    return {
+      target: t,
+      diff: diff,
+      rate: l / t,
+      met: diff >= 0,
+      shortfall: Math.max(0, -diff)
+    };
+  }
+
+  /**
+   * 成約件数の進捗（計画 vs 実績 vs 現ペース着地）。
+   *
+   * ゼロ除算・欠損の扱い:
+   *  - plan が無い → remaining / neededPace / rate / projectedDiff はすべて null
+   *  - 実績が計画以上 → remaining = 0、neededPace = 0（負にしない）
+   *  - 残日数 0 でまだ残がある → neededPace は算出不能(null) かつ unreachable = true
+   *
+   * @param {{plan:?number, actual:number, remainingDays:number, pace:?number,
+   *          label:?string, src:?string, asOf:?string}} o
+   */
+  function convProgress(o) {
+    o = o || {};
+    var plan = num(o.plan);
+    if (plan !== null && plan < 0) plan = 0;
+    var actual = Math.max(0, n0(o.actual, 0));
+    var days = Math.max(0, n0(o.remainingDays, 0));
+    var pace = num(o.pace);
+    if (pace === null || pace < 0) pace = 0;
+
+    var remaining = plan === null ? null : Math.max(0, plan - actual);
+    var neededPace = null;
+    var unreachable = false;
+    if (remaining !== null) {
+      if (remaining === 0) neededPace = 0;
+      else if (days <= 0) { neededPace = null; unreachable = true; }
+      else neededPace = remaining / days;
+    }
+
+    var projected = actual + pace * days;
+    var behind = unreachable || (neededPace !== null && neededPace > pace);
+
+    return {
+      label: o.label || "",
+      plan: plan,
+      hasPlan: plan !== null,
+      actual: actual,
+      remaining: remaining,
+      remainingDays: days,
+      neededPace: neededPace,
+      unreachable: unreachable,
+      pace: pace,
+      projected: projected,
+      projectedDiff: plan === null ? null : projected - plan,
+      rate: (plan !== null && plan > 0) ? actual / plan : null,
+      projectedRate: (plan !== null && plan > 0) ? projected / plan : null,
+      behind: behind,
+      src: o.src || null,
+      asOf: o.asOf || null
+    };
+  }
+
+  /* ------------------------------------------------------------------ *
    * buildModel
    * ------------------------------------------------------------------ */
 
@@ -942,12 +1193,15 @@ dl { margin: 0; }
     var q4 = rowsOf(data, "q4_lks_channel_booked");
     var q5 = rowsOf(data, "q5_conv_profile");
     var q6 = rowsOf(data, "q6_conv_actuals");
+    var q7 = rowsOf(data, "q7_conv_plan");
+    var q8 = rowsOf(data, "q8_yomi");
 
     var basisDate = data.basis_date || "";
     var targetMonth = data.target_month || monthOf(basisDate) || "";
     var basisDom = domOf(basisDate);
     var lastDom = lastDayOfMonth(targetMonth);
     if (basisDom > lastDom) basisDom = lastDom;
+    var remainingDays = Math.max(0, lastDom - basisDom + 1);
     var pm = prevMonth(targetMonth);
 
     // --- q1 履歴 ---
@@ -1208,6 +1462,76 @@ dl { margin: 0; }
     withDelta(pd, prv.pd);
     withDelta(total, prv.total);
 
+    /* ---------------- 目標との差分（契約 v1.2） ---------------- */
+
+    var targets = normalizeTargets(data.targets, opts.targets);
+    var svcByKey = { lks: lks, mny: mny, pd: pd, total: total };
+    SERVICE_KEYS.forEach(function (k) {
+      var s = svcByKey[k];
+      var t = targets.fa[k];
+      s.target = t.value;
+      s.targetSource = t.source;
+      s.targetDiff = targetDiff(s.landing.central, t.value);
+      // 主表示の基準線: 目標があれば目標、無ければ前月実績
+      s.baseline = t.value !== null ? t.value : (s.prev > 0 ? s.prev : null);
+      s.baselineKind = t.value !== null ? "target" : (s.prev > 0 ? "prev" : null);
+    });
+
+    /* ---------------- 成約件数の進捗（q7 / 拠点目標） ---------------- */
+
+    function q7Row(ym) {
+      for (var i = 0; i < q7.length; i++) if (String(q7[i].month) === ym) return q7[i];
+      return null;
+    }
+    var planRow = q7Row(targetMonth);
+    var planOnline = null, planSrc = null, planAsOf = null;
+    if (planRow) {
+      var pr = num(planRow.plan_regular), ps = num(planRow.plan_sutara);
+      if (pr !== null || ps !== null) planOnline = (pr || 0) + (ps || 0);
+      var sr = planRow.src_regular ? String(planRow.src_regular) : null;
+      var ss = planRow.src_sutara ? String(planRow.src_sutara) : null;
+      // 片方でも「実績」なら実績寄りの行。両方同じならそれを採用。
+      planSrc = (sr && ss) ? (sr === ss ? sr : sr + "/" + ss) : (sr || ss);
+      planAsOf = planRow.as_of ? String(planRow.as_of) : null;
+    }
+
+    var validTotals = paceDefaults.validTotals;
+    var convProgressOnline = convProgress({
+      label: CH_ONLINE,
+      plan: planOnline,
+      actual: validTotals[CH_ONLINE] || 0,
+      remainingDays: remainingDays,
+      pace: paceOn,
+      src: planSrc,
+      asOf: planAsOf
+    });
+    var convProgressKyoten = convProgress({
+      label: CH_KYOTEN,
+      plan: targets.kyotenConvTarget.value,
+      actual: validTotals[CH_KYOTEN] || 0,
+      remainingDays: remainingDays,
+      pace: paceKy,
+      src: targets.kyotenConvTarget.source === "local" ? "手入力(この端末)"
+        : targets.kyotenConvTarget.source === "repo" ? "手入力(targets.json)" : null,
+      asOf: null
+    });
+
+    /* ---------------- 社内売上ヨミ（q8） ---------------- */
+
+    var yomiRow = null;
+    for (var iy = 0; iy < q8.length; iy++) if (String(q8[iy].month) === targetMonth) yomiRow = q8[iy];
+    var yomi = yomiRow ? {
+      month: targetMonth,
+      total: n0(yomiRow.yomi_total, 0),
+      asOf: yomiRow.as_of ? String(yomiRow.as_of) : null,
+      comparable: targets.yomi.comparable,
+      note: targets.yomi.note,
+      // comparable のときだけ「目標系列」として扱ってよい
+      role: targets.yomi.comparable ? "target" : "reference",
+      // オンライン売上のヨミなので、比較先は LKS 着地
+      diff: targets.yomi.comparable ? targetDiff(lks.landing.central, n0(yomiRow.yomi_total, 0)) : null
+    } : null;
+
     /* ---------------- 不変条件チェック ---------------- */
 
     var q6BookedSum = 0;
@@ -1263,7 +1587,7 @@ dl { margin: 0; }
       lastDom: lastDom,
       targetMonth: targetMonth,
       prevMonth: pm,
-      remainingDays: Math.max(0, lastDom - basisDom + 1),
+      remainingDays: remainingDays,
       elapsedDays: Math.max(0, basisDom - 1),
       monthProgress: lastDom > 0 ? clamp((basisDom - 1) / lastDom, 0, 1) : 0,
       isMonthStart: isMonthStart,
@@ -1330,9 +1654,17 @@ dl { margin: 0; }
       history: hist,
       checks: checks,
       notices: notices,
+      targets: targets,
+      conv: {
+        online: convProgressOnline,
+        kyoten: convProgressKyoten,
+        hasPlan: convProgressOnline.hasPlan || convProgressKyoten.hasPlan
+      },
+      yomi: yomi,
       rowCounts: {
         q1_official_monthly: q1.length, q2_lks_pending: q2.length, q3_mny_pd_pending: q3.length,
-        q4_lks_channel_booked: q4.length, q5_conv_profile: q5.length, q6_conv_actuals: q6.length
+        q4_lks_channel_booked: q4.length, q5_conv_profile: q5.length, q6_conv_actuals: q6.length,
+        q7_conv_plan: q7.length, q8_yomi: q8.length
       }
     };
   }
@@ -1393,6 +1725,11 @@ dl { margin: 0; }
     K_FALLBACK: K_FALLBACK,
     DEFAULT_LAG_WEIGHT: DEFAULT_LAG_WEIGHT,
     MONTH_START_DOM: MONTH_START_DOM,
+    DEFAULT_TARGETS: DEFAULT_TARGETS,
+    SERVICE_KEYS: SERVICE_KEYS,
+    normalizeTargets: normalizeTargets,
+    targetDiff: targetDiff,
+    convProgress: convProgress,
     rateOf: rateOf,
     buildProfile: buildProfile,
     defaultPaces: defaultPaces,
@@ -1406,7 +1743,7 @@ dl { margin: 0; }
   };
 });
 </script>
-<script>window.__APP__={data:{"generated_at":"2026-08-25T14:55:48+09:00","basis_date":"2026-08-25","target_month":"2026-08","queries":{"q1_official_monthly":{"rows":[{"year_month":"2025-08","lks":365725385,"mny":4258938,"pd":6889460},{"year_month":"2025-09","lks":361980265,"mny":4380271,"pd":7576915},{"year_month":"2025-10","lks":375786197,"mny":4447538,"pd":8558880},{"year_month":"2025-11","lks":364396124,"mny":4666338,"pd":9545748},{"year_month":"2025-12","lks":375939467,"mny":4709470,"pd":10165103},{"year_month":"2026-01","lks":371987873,"mny":4548392,"pd":9723534},{"year_month":"2026-02","lks":331649365,"mny":4245214,"pd":9045613},{"year_month":"2026-03","lks":356468137,"mny":4420541,"pd":8654908},{"year_month":"2026-04","lks":335236140,"mny":4164079,"pd":7739234},{"year_month":"2026-05","lks":345393853,"mny":4470075,"pd":8875475},{"year_month":"2026-06","lks":341073716,"mny":4354158,"pd":8670759},{"year_month":"2026-07","lks":356607091,"mny":4619550,"pd":9080741},{"year_month":"2026-08","lks":351200806,"mny":4492633,"pd":10160505},{"year_month":"2026-09","lks":258231292,"mny":1696975,"pd":8034120},{"year_month":"2026-10","lks":213593061,"mny":1166730,"pd":7664829},{"year_month":"2026-11","lks":185989891,"mny":379418,"pd":7008848},{"year_month":"2026-12","lks":173860849,"mny":-42056,"pd":5431998},{"year_month":"2027-01","lks":156233304,"mny":-473666,"pd":3323009},{"year_month":"2027-02","lks":124486848,"mny":-646754,"pd":1673341},{"year_month":"2027-03","lks":120405354,"mny":-864412,"pd":252300},{"year_month":"2027-04","lks":99209939,"mny":-917855,"pd":0},{"year_month":"2027-05","lks":82430782,"mny":-920429,"pd":0},{"year_month":"2027-06","lks":58173404,"mny":-814722,"pd":0},{"year_month":"2027-07","lks":35478694,"mny":-636941,"pd":0},{"year_month":"2027-08","lks":9746449,"mny":-451273,"pd":0}]},"q2_lks_pending":{"rows":[{"plan_name":"スタンダードプラン","payment_type":"一括","fa_per_day_cur":453.2720817220492,"fa_per_day_prev":473.6688170616428,"n_window":430,"window_days":1681,"n_lag":173,"lag_days":3428},{"plan_name":"ライトプラン","payment_type":"一括","fa_per_day_cur":318.8453963190805,"fa_per_day_prev":322.06157828492724,"n_window":236,"window_days":944,"n_lag":25,"lag_days":493},{"plan_name":"レギュラープラン","payment_type":"一括","fa_per_day_cur":1136.5324302713889,"fa_per_day_prev":1313.8776966509113,"n_window":30,"window_days":125,"n_lag":63,"lag_days":1312},{"plan_name":"レギュラープラン","payment_type":"分割","fa_per_day_cur":882.4823488290807,"fa_per_day_prev":1221.4920590564016,"n_window":65,"window_days":308,"n_lag":173,"lag_days":3495},{"plan_name":"卒業生プラン","payment_type":"一括","fa_per_day_cur":155.27361942781104,"fa_per_day_prev":158.6633316658329,"n_window":50,"window_days":196,"n_lag":10,"lag_days":201}]},"q3_mny_pd_pending":{"rows":[{"service_key":"money","fa_per_day_cur":740.2961232260297,"fa_per_day_prev":767.2846258042669,"n_window":19,"window_days":89,"n_lag":5,"lag_days":106,"n_active_cur":262,"n_active_prev":260},{"service_key":"multicreator","fa_per_day_cur":0.0,"fa_per_day_prev":0.0,"n_window":0,"window_days":0,"n_lag":85,"lag_days":2125,"n_active_cur":85,"n_active_prev":87}]},"q4_lks_channel_booked":{"rows":[{"channel":"オンライン","n_users":32601,"booked_fa":322474485},{"channel":"拠点","n_users":3754,"booked_fa":20919091},{"channel":"分類不能","n_users":11290,"booked_fa":7742523},{"channel":"成約記録なし","n_users":883,"booked_fa":64707}]},"q5_conv_profile":{"rows":[{"channel":"オンライン","dom":1,"n_conv":14,"fa_per_conv":22290.5},{"channel":"オンライン","dom":2,"n_conv":26,"fa_per_conv":19719.5},{"channel":"オンライン","dom":3,"n_conv":26,"fa_per_conv":20211.96153846154},{"channel":"オンライン","dom":4,"n_conv":29,"fa_per_conv":15073.310344827587},{"channel":"オンライン","dom":5,"n_conv":25,"fa_per_conv":20840.2},{"channel":"オンライン","dom":6,"n_conv":31,"fa_per_conv":17288.129032258064},{"channel":"オンライン","dom":7,"n_conv":27,"fa_per_conv":14467.481481481482},{"channel":"オンライン","dom":8,"n_conv":17,"fa_per_conv":12833.411764705883},{"channel":"オンライン","dom":9,"n_conv":23,"fa_per_conv":11478.173913043478},{"channel":"オンライン","dom":10,"n_conv":26,"fa_per_conv":13795.038461538461},{"channel":"オンライン","dom":11,"n_conv":23,"fa_per_conv":15024.869565217392},{"channel":"オンライン","dom":12,"n_conv":24,"fa_per_conv":10288.791666666666},{"channel":"オンライン","dom":13,"n_conv":37,"fa_per_conv":11861.378378378378},{"channel":"オンライン","dom":14,"n_conv":24,"fa_per_conv":11825.5},{"channel":"オンライン","dom":15,"n_conv":25,"fa_per_conv":11801.08},{"channel":"オンライン","dom":16,"n_conv":26,"fa_per_conv":10430.23076923077},{"channel":"オンライン","dom":17,"n_conv":22,"fa_per_conv":6878.727272727273},{"channel":"オンライン","dom":18,"n_conv":30,"fa_per_conv":8406.4},{"channel":"オンライン","dom":19,"n_conv":22,"fa_per_conv":7338.590909090909},{"channel":"オンライン","dom":20,"n_conv":23,"fa_per_conv":7452.130434782609},{"channel":"オンライン","dom":21,"n_conv":24,"fa_per_conv":4795.416666666667},{"channel":"オンライン","dom":22,"n_conv":24,"fa_per_conv":4776.0},{"channel":"オンライン","dom":23,"n_conv":20,"fa_per_conv":2776.05},{"channel":"オンライン","dom":24,"n_conv":35,"fa_per_conv":3920.057142857143},{"channel":"オンライン","dom":25,"n_conv":35,"fa_per_conv":3491.657142857143},{"channel":"オンライン","dom":26,"n_conv":32,"fa_per_conv":2037.8125},{"channel":"オンライン","dom":27,"n_conv":19,"fa_per_conv":864.8947368421053},{"channel":"オンライン","dom":28,"n_conv":30,"fa_per_conv":1106.2666666666667},{"channel":"オンライン","dom":29,"n_conv":21,"fa_per_conv":332.95238095238096},{"channel":"オンライン","dom":30,"n_conv":38,"fa_per_conv":217.55263157894737},{"channel":"オンライン","dom":31,"n_conv":28,"fa_per_conv":0.0},{"channel":"分類不能","dom":14,"n_conv":1,"fa_per_conv":27967.0},{"channel":"分類不能","dom":16,"n_conv":1,"fa_per_conv":19233.0},{"channel":"分類不能","dom":22,"n_conv":1,"fa_per_conv":0.0},{"channel":"拠点","dom":1,"n_conv":1,"fa_per_conv":22435.0},{"channel":"拠点","dom":2,"n_conv":1,"fa_per_conv":33600.0},{"channel":"拠点","dom":3,"n_conv":1,"fa_per_conv":15224.0},{"channel":"拠点","dom":4,"n_conv":5,"fa_per_conv":19206.6},{"channel":"拠点","dom":5,"n_conv":1,"fa_per_conv":0.0},{"channel":"拠点","dom":6,"n_conv":4,"fa_per_conv":18081.0},{"channel":"拠点","dom":7,"n_conv":2,"fa_per_conv":21000.0},{"channel":"拠点","dom":8,"n_conv":4,"fa_per_conv":2700.0},{"channel":"拠点","dom":9,"n_conv":2,"fa_per_conv":18156.0},{"channel":"拠点","dom":10,"n_conv":5,"fa_per_conv":17875.6},{"channel":"拠点","dom":11,"n_conv":2,"fa_per_conv":18600.5},{"channel":"拠点","dom":12,"n_conv":2,"fa_per_conv":4200.0},{"channel":"拠点","dom":13,"n_conv":6,"fa_per_conv":9275.833333333334},{"channel":"拠点","dom":14,"n_conv":4,"fa_per_conv":11605.0},{"channel":"拠点","dom":15,"n_conv":3,"fa_per_conv":9600.0},{"channel":"拠点","dom":16,"n_conv":6,"fa_per_conv":10476.0},{"channel":"拠点","dom":17,"n_conv":1,"fa_per_conv":0.0},{"channel":"拠点","dom":18,"n_conv":3,"fa_per_conv":14400.0},{"channel":"拠点","dom":19,"n_conv":4,"fa_per_conv":7909.75},{"channel":"拠点","dom":20,"n_conv":6,"fa_per_conv":1200.0},{"channel":"拠点","dom":21,"n_conv":1,"fa_per_conv":12000.0},{"channel":"拠点","dom":22,"n_conv":1,"fa_per_conv":3599.0},{"channel":"拠点","dom":23,"n_conv":4,"fa_per_conv":2999.75},{"channel":"拠点","dom":24,"n_conv":3,"fa_per_conv":2800.0},{"channel":"拠点","dom":25,"n_conv":2,"fa_per_conv":0.0},{"channel":"拠点","dom":26,"n_conv":6,"fa_per_conv":1108.8333333333333},{"channel":"拠点","dom":27,"n_conv":2,"fa_per_conv":4799.5},{"channel":"拠点","dom":28,"n_conv":5,"fa_per_conv":1440.4},{"channel":"拠点","dom":29,"n_conv":4,"fa_per_conv":101.25},{"channel":"拠点","dom":30,"n_conv":4,"fa_per_conv":332.0},{"channel":"拠点","dom":31,"n_conv":4,"fa_per_conv":37000.0}]},"q6_conv_actuals":{"rows":[{"channel":"オンライン","dom":1,"n_all":40,"n_valid":33,"booked_fa_valid":847599},{"channel":"オンライン","dom":2,"n_all":27,"n_valid":24,"booked_fa_valid":557301},{"channel":"オンライン","dom":3,"n_all":31,"n_valid":29,"booked_fa_valid":541949},{"channel":"オンライン","dom":4,"n_all":26,"n_valid":20,"booked_fa_valid":475106},{"channel":"オンライン","dom":5,"n_all":27,"n_valid":25,"booked_fa_valid":570811},{"channel":"オンライン","dom":6,"n_all":21,"n_valid":14,"booked_fa_valid":200976},{"channel":"オンライン","dom":7,"n_all":27,"n_valid":22,"booked_fa_valid":416033},{"channel":"オンライン","dom":8,"n_all":31,"n_valid":22,"booked_fa_valid":427632},{"channel":"オンライン","dom":9,"n_all":25,"n_valid":23,"booked_fa_valid":255664},{"channel":"オンライン","dom":10,"n_all":26,"n_valid":24,"booked_fa_valid":351166},{"channel":"オンライン","dom":11,"n_all":36,"n_valid":33,"booked_fa_valid":439073},{"channel":"オンライン","dom":12,"n_all":27,"n_valid":21,"booked_fa_valid":309475},{"channel":"オンライン","dom":13,"n_all":21,"n_valid":17,"booked_fa_valid":259038},{"channel":"オンライン","dom":14,"n_all":22,"n_valid":21,"booked_fa_valid":308973},{"channel":"オンライン","dom":15,"n_all":25,"n_valid":24,"booked_fa_valid":303943},{"channel":"オンライン","dom":16,"n_all":34,"n_valid":28,"booked_fa_valid":332248},{"channel":"オンライン","dom":17,"n_all":36,"n_valid":32,"booked_fa_valid":342193},{"channel":"オンライン","dom":18,"n_all":37,"n_valid":35,"booked_fa_valid":329407},{"channel":"オンライン","dom":19,"n_all":39,"n_valid":34,"booked_fa_valid":274994},{"channel":"オンライン","dom":20,"n_all":37,"n_valid":30,"booked_fa_valid":198830},{"channel":"オンライン","dom":21,"n_all":26,"n_valid":25,"booked_fa_valid":343878},{"channel":"オンライン","dom":22,"n_all":39,"n_valid":38,"booked_fa_valid":347858},{"channel":"オンライン","dom":23,"n_all":41,"n_valid":39,"booked_fa_valid":122783},{"channel":"オンライン","dom":24,"n_all":44,"n_valid":43,"booked_fa_valid":104549},{"channel":"オンライン","dom":25,"n_all":5,"n_valid":5,"booked_fa_valid":0},{"channel":"分類不能","dom":18,"n_all":2,"n_valid":2,"booked_fa_valid":27395},{"channel":"分類不能","dom":23,"n_all":1,"n_valid":1,"booked_fa_valid":6931},{"channel":"拠点","dom":1,"n_all":5,"n_valid":4,"booked_fa_valid":57983},{"channel":"拠点","dom":2,"n_all":7,"n_valid":6,"booked_fa_valid":76800},{"channel":"拠点","dom":3,"n_all":2,"n_valid":2,"booked_fa_valid":33600},{"channel":"拠点","dom":4,"n_all":5,"n_valid":3,"booked_fa_valid":43308},{"channel":"拠点","dom":5,"n_all":4,"n_valid":4,"booked_fa_valid":33633},{"channel":"拠点","dom":6,"n_all":4,"n_valid":4,"booked_fa_valid":67659},{"channel":"拠点","dom":7,"n_all":6,"n_valid":5,"booked_fa_valid":68029},{"channel":"拠点","dom":8,"n_all":3,"n_valid":2,"booked_fa_valid":54001},{"channel":"拠点","dom":9,"n_all":3,"n_valid":3,"booked_fa_valid":51601},{"channel":"拠点","dom":10,"n_all":4,"n_valid":3,"booked_fa_valid":29218},{"channel":"拠点","dom":11,"n_all":4,"n_valid":3,"booked_fa_valid":24422},{"channel":"拠点","dom":12,"n_all":3,"n_valid":3,"booked_fa_valid":12276},{"channel":"拠点","dom":13,"n_all":5,"n_valid":3,"booked_fa_valid":50425},{"channel":"拠点","dom":14,"n_all":6,"n_valid":5,"booked_fa_valid":58800},{"channel":"拠点","dom":15,"n_all":4,"n_valid":4,"booked_fa_valid":35206},{"channel":"拠点","dom":16,"n_all":5,"n_valid":4,"booked_fa_valid":38515},{"channel":"拠点","dom":17,"n_all":2,"n_valid":2,"booked_fa_valid":9600},{"channel":"拠点","dom":18,"n_all":4,"n_valid":3,"booked_fa_valid":1216},{"channel":"拠点","dom":19,"n_all":7,"n_valid":6,"booked_fa_valid":40673},{"channel":"拠点","dom":20,"n_all":3,"n_valid":3,"booked_fa_valid":2027},{"channel":"拠点","dom":21,"n_all":4,"n_valid":4,"booked_fa_valid":2838},{"channel":"拠点","dom":22,"n_all":2,"n_valid":2,"booked_fa_valid":11953},{"channel":"拠点","dom":23,"n_all":6,"n_valid":6,"booked_fa_valid":19216},{"channel":"拠点","dom":24,"n_all":5,"n_valid":5,"booked_fa_valid":8877},{"channel":"拠点","dom":25,"n_all":1,"n_valid":1,"booked_fa_valid":0}]}},"meta":{"bytes_processed":{"q1_official_monthly":3234,"q2_lks_pending":938783240,"q3_mny_pd_pending":1410948788,"q4_lks_channel_booked":861674913,"q5_conv_profile":861674913,"q6_conv_actuals":861674913}}},queries:{"q1_official_monthly":"-- q1_official_monthly: 公式月次FA(計上済み実績)。\n-- ソース: monthly_financial_accounting(スプレッドシート公式モニタリングの元テーブル)。\n-- 範囲: 当月(CURRENT_DATE('Asia/Tokyo')基準)の12ヶ月前 〜 テーブルにある未来月まで全部。\n-- 出力列: year_month STRING 'YYYY-MM' / lks INT(likes財務会計) / mny INT(money財務会計) / pd INT(likespro財務会計)\nSELECT\n  year_month,\n  `likes財務会計` AS lks,\n  `money財務会計` AS mny,\n  `likespro財務会計` AS pd\nFROM `shelikes-001.sheinc_marts_output_spreadsheet_official_monitoring.monthly_financial_accounting`\nWHERE year_month >= FORMAT_DATE('%Y-%m', DATE_SUB(DATE_TRUNC(CURRENT_DATE('Asia/Tokyo'), MONTH), INTERVAL 12 MONTH))\nORDER BY year_month","q2_lks_pending":"-- q2_lks_pending: LKS 既存会員の課金更新残(①window)・滞納/処理ラグ(④lag)をプラン×支払種別で集計。\n-- 基準日 = CURRENT_DATE('Asia/Tokyo')。当月トークン(int_membership_tokens, order_status=1, 対象4プラン)を\n--   effective_at < 基準日 → 'early' / それ以外 → 'window' に分け、order別の当月FA(int_likes_financial_accounting)と突合。\n-- 単価: fa_per_day_cur = Σ early FA ÷ Σ early 当月内有効日数。fa_per_day_prev = 前月トークン全体の同計算\n--   (月初で early が空 = fa_per_day_cur が NULL のときのフォールバック用。前月は全日 early 扱いなので全体で計算)。\n-- 新規会員除外 [契約v1.1・R1裁定]: 当月に最初の有効成約をした user(likes_conversions rn=1 が当月)の order は\n--   window(①: n_window/window_days)と lag(④: n_lag/lag_days)の両方から除外する。\n--   ①④=既存会員のみ / ②③(q5×q6)=当月新規のみ、という対称な切り分けで二重計上を防止。\n-- 防御 [契約v1.1]: all_orders は JOIN 前に order_id で1行化(重複ファンアウト防止)。\n--   m_days は COALESCE(GREATEST(...,0),0) で NULL を 0 に正規化(COUNTIF/SUM の非対称防止)。\n-- 出力列: plan_name STRING / payment_type STRING / fa_per_day_cur FLOAT(NULL可) / fa_per_day_prev FLOAT(NULL可)\n--         / n_window INT(window かつ FA=0 の件数) / window_days INT / n_lag INT(early かつ FA=0 の件数) / lag_days INT\nWITH params AS (\n  SELECT basis_date,\n    DATE_TRUNC(basis_date, MONTH) AS m_start,\n    LAST_DAY(basis_date, MONTH) AS m_end,\n    DATE_SUB(DATE_TRUNC(basis_date, MONTH), INTERVAL 1 MONTH) AS pm_start,\n    DATE_SUB(DATE_TRUNC(basis_date, MONTH), INTERVAL 1 DAY) AS pm_end\n  FROM (SELECT CURRENT_DATE('Asia/Tokyo') AS basis_date)\n),\norders AS (\n  -- order_id で1行化(all_orders の重複行による将来ファンアウト防止。MAXで決定的に代表値を選ぶ)\n  SELECT order_id, MAX(payment_type) AS payment_type, MAX(user_id) AS user_id\n  FROM `shelikes-001.sheinc_marts_accounting.all_orders`\n  GROUP BY order_id\n),\nnew_users AS (\n  SELECT e.user_id\n  FROM (\n    SELECT user_id, DATE(purchased_at) AS pdate,\n      ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY purchased_at ASC) AS rn\n    FROM `shelikes-001.sheinc_marts_fy24.likes_conversions`\n    WHERE is_valid_conversions IS TRUE\n  ) e\n  CROSS JOIN params p\n  WHERE e.rn = 1 AND e.pdate >= p.m_start\n),\ntok_cur AS (\n  SELECT t.order_id, t.plan_name, o.payment_type,\n    COALESCE(GREATEST(DATE_DIFF(LEAST(t.expires_at, p.m_end), GREATEST(t.effective_at, p.m_start), DAY) + 1, 0), 0) AS m_days,\n    IF(t.effective_at < p.basis_date, 'early', 'window') AS grp,\n    (nu.user_id IS NOT NULL) AS is_new_user\n  FROM `shelikes-001.sheinc_intermediate.int_membership_tokens` t\n  JOIN orders o USING (order_id)\n  CROSS JOIN params p\n  LEFT JOIN new_users nu ON o.user_id = nu.user_id\n  WHERE t.target_month = p.m_start\n    AND t.order_status = 1\n    AND t.plan_name IN ('レギュラープラン','スタンダードプラン','ライトプラン','卒業生プラン')\n),\nfa_cur AS (\n  SELECT f.order_id,\n    SUM(f.monthly_accounting_without_tax + f.monthly_accounting_discount + f.monthly_accounting_own_expense) AS m_fa\n  FROM `shelikes-001.sheinc_intermediate.int_likes_financial_accounting` f\n  CROSS JOIN params p\n  WHERE f.target_month = p.m_start\n  GROUP BY f.order_id\n),\nj_cur AS (\n  SELECT t.*, COALESCE(f.m_fa, 0) AS m_fa\n  FROM tok_cur t LEFT JOIN fa_cur f USING (order_id)\n),\ncur_agg AS (\n  SELECT plan_name, payment_type,\n    SAFE_DIVIDE(SUM(IF(grp='early', m_fa, 0)), NULLIF(SUM(IF(grp='early', m_days, 0)), 0)) AS fa_per_day_cur,\n    COUNTIF(grp='window' AND m_fa = 0 AND NOT is_new_user) AS n_window,\n    SUM(IF(grp='window' AND m_fa = 0 AND NOT is_new_user, m_days, 0)) AS window_days,\n    COUNTIF(grp='early' AND m_fa = 0 AND NOT is_new_user) AS n_lag,\n    SUM(IF(grp='early' AND m_fa = 0 AND NOT is_new_user, m_days, 0)) AS lag_days\n  FROM j_cur\n  GROUP BY 1, 2\n),\ntok_prev AS (\n  SELECT t.order_id, t.plan_name, o.payment_type,\n    COALESCE(GREATEST(DATE_DIFF(LEAST(t.expires_at, p.pm_end), GREATEST(t.effective_at, p.pm_start), DAY) + 1, 0), 0) AS m_days\n  FROM `shelikes-001.sheinc_intermediate.int_membership_tokens` t\n  JOIN orders o USING (order_id)\n  CROSS JOIN params p\n  WHERE t.target_month = p.pm_start\n    AND t.order_status = 1\n    AND t.plan_name IN ('レギュラープラン','スタンダードプラン','ライトプラン','卒業生プラン')\n),\nfa_prev AS (\n  SELECT f.order_id,\n    SUM(f.monthly_accounting_without_tax + f.monthly_accounting_discount + f.monthly_accounting_own_expense) AS m_fa\n  FROM `shelikes-001.sheinc_intermediate.int_likes_financial_accounting` f\n  CROSS JOIN params p\n  WHERE f.target_month = p.pm_start\n  GROUP BY f.order_id\n),\nprev_agg AS (\n  SELECT t.plan_name, t.payment_type,\n    SAFE_DIVIDE(SUM(COALESCE(f.m_fa, 0)), NULLIF(SUM(t.m_days), 0)) AS fa_per_day_prev\n  FROM tok_prev t LEFT JOIN fa_prev f USING (order_id)\n  GROUP BY 1, 2\n)\nSELECT\n  c.plan_name,\n  c.payment_type,\n  c.fa_per_day_cur,\n  p.fa_per_day_prev,\n  c.n_window,\n  c.window_days,\n  c.n_lag,\n  c.lag_days\nFROM cur_agg c\nLEFT JOIN prev_agg p USING (plan_name, payment_type)\nORDER BY c.plan_name, c.payment_type","q3_mny_pd_pending":"-- q3_mny_pd_pending: MNY(money)・プロデ(multicreator)の課金更新残・滞納/処理ラグを service_key 別に集計。\n-- q2 と同じ手法(基準日 = CURRENT_DATE('Asia/Tokyo')、early/window 分割、1日単価×残日数)。\n-- FA は sheinc_marts_accounting.monthly_accounting(order_id別 当月SUM: without_tax + discount + own_expense)。\n-- 既知の仕様: multicreator の FA は marts monthly_accounting に載らない別パイプライン\n--   → fa_per_day_cur/prev は 0 または NULL になる(正しい挙動)。件数列(n_window, n_active_*)だけ意味を持つ。\n-- 新規会員除外は行わない [契約v1.1]: MNY/プロデには②③(新規成約プロファイル成分)が存在しないため。\n-- 防御 [契約v1.1]: all_orders は JOIN 前に order_id で1行化(重複ファンアウト防止)。\n--   m_days は COALESCE(GREATEST(...,0),0) で NULL を 0 に正規化(COUNTIF/SUM の非対称防止)。\n-- 出力列: service_key STRING / fa_per_day_cur FLOAT(NULL可) / fa_per_day_prev FLOAT(NULL可)\n--         / n_window INT / window_days INT / n_lag INT / lag_days INT\n--         / n_active_cur INT(当月トークン件数) / n_active_prev INT(前月トークン件数)\nWITH params AS (\n  SELECT basis_date,\n    DATE_TRUNC(basis_date, MONTH) AS m_start,\n    LAST_DAY(basis_date, MONTH) AS m_end,\n    DATE_SUB(DATE_TRUNC(basis_date, MONTH), INTERVAL 1 MONTH) AS pm_start,\n    DATE_SUB(DATE_TRUNC(basis_date, MONTH), INTERVAL 1 DAY) AS pm_end\n  FROM (SELECT CURRENT_DATE('Asia/Tokyo') AS basis_date)\n),\norders AS (\n  -- order_id で1行化(all_orders の重複行による将来ファンアウト防止。MAXで決定的に代表値を選ぶ)\n  SELECT order_id, MAX(service_key) AS service_key\n  FROM `shelikes-001.sheinc_marts_accounting.all_orders`\n  GROUP BY order_id\n),\ntok_cur AS (\n  SELECT t.order_id, o.service_key,\n    COALESCE(GREATEST(DATE_DIFF(LEAST(t.expires_at, p.m_end), GREATEST(t.effective_at, p.m_start), DAY) + 1, 0), 0) AS m_days,\n    IF(t.effective_at < p.basis_date, 'early', 'window') AS grp\n  FROM `shelikes-001.sheinc_intermediate.int_membership_tokens` t\n  JOIN orders o USING (order_id)\n  CROSS JOIN params p\n  WHERE t.target_month = p.m_start\n    AND t.order_status = 1\n    AND o.service_key IN ('money', 'multicreator')\n),\nfa_cur AS (\n  SELECT f.order_id,\n    SUM(f.monthly_accounting_without_tax + f.monthly_accounting_discount + f.monthly_accounting_own_expense) AS m_fa\n  FROM `shelikes-001.sheinc_marts_accounting.monthly_accounting` f\n  CROSS JOIN params p\n  WHERE f.target_month = p.m_start\n  GROUP BY f.order_id\n),\nj_cur AS (\n  SELECT t.*, COALESCE(f.m_fa, 0) AS m_fa\n  FROM tok_cur t LEFT JOIN fa_cur f USING (order_id)\n),\ncur_agg AS (\n  SELECT service_key,\n    SAFE_DIVIDE(SUM(IF(grp='early', m_fa, 0)), NULLIF(SUM(IF(grp='early', m_days, 0)), 0)) AS fa_per_day_cur,\n    COUNTIF(grp='window' AND m_fa = 0) AS n_window,\n    SUM(IF(grp='window' AND m_fa = 0, m_days, 0)) AS window_days,\n    COUNTIF(grp='early' AND m_fa = 0) AS n_lag,\n    SUM(IF(grp='early' AND m_fa = 0, m_days, 0)) AS lag_days,\n    COUNT(*) AS n_active_cur\n  FROM j_cur\n  GROUP BY 1\n),\ntok_prev AS (\n  SELECT t.order_id, o.service_key,\n    COALESCE(GREATEST(DATE_DIFF(LEAST(t.expires_at, p.pm_end), GREATEST(t.effective_at, p.pm_start), DAY) + 1, 0), 0) AS m_days\n  FROM `shelikes-001.sheinc_intermediate.int_membership_tokens` t\n  JOIN orders o USING (order_id)\n  CROSS JOIN params p\n  WHERE t.target_month = p.pm_start\n    AND t.order_status = 1\n    AND o.service_key IN ('money', 'multicreator')\n),\nfa_prev AS (\n  SELECT f.order_id,\n    SUM(f.monthly_accounting_without_tax + f.monthly_accounting_discount + f.monthly_accounting_own_expense) AS m_fa\n  FROM `shelikes-001.sheinc_marts_accounting.monthly_accounting` f\n  CROSS JOIN params p\n  WHERE f.target_month = p.pm_start\n  GROUP BY f.order_id\n),\nprev_agg AS (\n  SELECT t.service_key,\n    SAFE_DIVIDE(SUM(COALESCE(f.m_fa, 0)), NULLIF(SUM(t.m_days), 0)) AS fa_per_day_prev,\n    COUNT(*) AS n_active_prev\n  FROM tok_prev t LEFT JOIN fa_prev f USING (order_id)\n  GROUP BY 1\n)\nSELECT\n  service_key,\n  c.fa_per_day_cur,\n  p.fa_per_day_prev,\n  IFNULL(c.n_window, 0) AS n_window,\n  IFNULL(c.window_days, 0) AS window_days,\n  IFNULL(c.n_lag, 0) AS n_lag,\n  IFNULL(c.lag_days, 0) AS lag_days,\n  IFNULL(c.n_active_cur, 0) AS n_active_cur,\n  IFNULL(p.n_active_prev, 0) AS n_active_prev\nFROM cur_agg c\nFULL OUTER JOIN prev_agg p USING (service_key)\nORDER BY service_key","q4_lks_channel_booked":"-- q4_lks_channel_booked: LKS 計上済みFA(当月)のチャネル按分。\n-- entrance = likes_conversions(is_valid_conversions IS TRUE)の user_id ごと最初(purchased_at昇順 rn=1)の trial_lesson_type。\n-- channel: trial_lesson_type LIKE '拠点%' → '拠点' / IN ('OTL','ONS') → 'オンライン' / それ以外(NULL含む) → '分類不能'。\n--          当月FAがあるのに有効成約記録が無い user → '成約記録なし'。\n-- FA: int_likes_financial_accounting の user_id 別 当月SUM(without_tax + discount + own_expense)。\n-- 検証: Σ booked_fa = q1 の当月 lks と一致すること(スレッド実績: 完全一致)。\n-- 出力列: channel STRING / n_users INT / booked_fa INT\nWITH params AS (\n  SELECT DATE_TRUNC(CURRENT_DATE('Asia/Tokyo'), MONTH) AS m_start\n),\nentrance AS (\n  SELECT user_id, trial_lesson_type,\n    ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY purchased_at ASC) AS rn\n  FROM `shelikes-001.sheinc_marts_fy24.likes_conversions`\n  WHERE is_valid_conversions IS TRUE\n),\nuser_ch AS (\n  SELECT user_id,\n    CASE\n      WHEN trial_lesson_type LIKE '拠点%' THEN '拠点'\n      WHEN trial_lesson_type IN ('OTL', 'ONS') THEN 'オンライン'\n      ELSE '分類不能'\n    END AS channel\n  FROM entrance\n  WHERE rn = 1\n),\nfa AS (\n  SELECT f.user_id,\n    SUM(f.monthly_accounting_without_tax + f.monthly_accounting_discount + f.monthly_accounting_own_expense) AS m_fa\n  FROM `shelikes-001.sheinc_intermediate.int_likes_financial_accounting` f\n  CROSS JOIN params p\n  WHERE f.target_month = p.m_start\n  GROUP BY f.user_id\n)\nSELECT\n  COALESCE(uc.channel, '成約記録なし') AS channel,\n  COUNT(*) AS n_users,\n  SUM(fa.m_fa) AS booked_fa\nFROM fa\nLEFT JOIN user_ch uc USING (user_id)\nGROUP BY 1\nORDER BY booked_fa DESC","q5_conv_profile":"-- q5_conv_profile: 成約日別・1件あたり当月FA プロファイル(前月実測)。\n-- 前月に最初の有効成約をした user(likes_conversions rn=1 が前月)について、\n-- 成約日(日 dom)× channel ごとに件数と「その userたちの前月FA合計 ÷ 件数」を出す。\n-- 用途: ③今後の新規成約分 = pace × Σ profile(残日)、②既成約の未計上残 = Σ max(0, n×profile − booked)。\n-- 注意: 拠点の per-dom 単価はノイズが大きい → 利用側はオンラインプロファイル×スケール係数を使う(契約参照)。\n-- 出力列: channel STRING / dom INT(1..31) / n_conv INT / fa_per_conv FLOAT\nWITH params AS (\n  SELECT\n    DATE_SUB(DATE_TRUNC(CURRENT_DATE('Asia/Tokyo'), MONTH), INTERVAL 1 MONTH) AS pm_start,\n    DATE_SUB(DATE_TRUNC(CURRENT_DATE('Asia/Tokyo'), MONTH), INTERVAL 1 DAY) AS pm_end\n),\nentrance AS (\n  SELECT user_id, DATE(purchased_at) AS pdate, trial_lesson_type,\n    ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY purchased_at ASC) AS rn\n  FROM `shelikes-001.sheinc_marts_fy24.likes_conversions`\n  WHERE is_valid_conversions IS TRUE\n),\nprev_conv AS (\n  SELECT e.user_id,\n    EXTRACT(DAY FROM e.pdate) AS dom,\n    CASE\n      WHEN e.trial_lesson_type LIKE '拠点%' THEN '拠点'\n      WHEN e.trial_lesson_type IN ('OTL', 'ONS') THEN 'オンライン'\n      ELSE '分類不能'\n    END AS channel\n  FROM entrance e\n  CROSS JOIN params p\n  WHERE e.rn = 1 AND e.pdate BETWEEN p.pm_start AND p.pm_end\n),\nfa AS (\n  SELECT f.user_id,\n    SUM(f.monthly_accounting_without_tax + f.monthly_accounting_discount + f.monthly_accounting_own_expense) AS m_fa\n  FROM `shelikes-001.sheinc_intermediate.int_likes_financial_accounting` f\n  CROSS JOIN params p\n  WHERE f.target_month = p.pm_start\n  GROUP BY f.user_id\n)\nSELECT\n  c.channel,\n  c.dom,\n  COUNT(*) AS n_conv,\n  SAFE_DIVIDE(SUM(COALESCE(fa.m_fa, 0)), COUNT(*)) AS fa_per_conv\nFROM prev_conv c\nLEFT JOIN fa USING (user_id)\nGROUP BY 1, 2\nORDER BY 1, 2","q6_conv_actuals":"-- q6_conv_actuals: 当月の成約実績(channel×日)。\n-- 当月に purchased_at がある成約(有効/無効両方)を user ごとに purchased_at 昇順で並べ、rn=1 の成約を数える。\n-- n_valid(is_valid_conversions 基準)が事業側認識の成約件数と一致する(スレッド実証: オンライン498 vs 認識500)。\n-- booked_fa_valid = 有効成約 user の当月FA合計(int_likes_financial_accounting の user_id 別SUM)。\n-- 出力列: channel STRING / dom INT / n_all INT / n_valid INT / booked_fa_valid INT\nWITH params AS (\n  SELECT\n    DATE_TRUNC(CURRENT_DATE('Asia/Tokyo'), MONTH) AS m_start,\n    LAST_DAY(CURRENT_DATE('Asia/Tokyo'), MONTH) AS m_end\n),\nent AS (\n  SELECT c.user_id, DATE(c.purchased_at) AS pdate, c.trial_lesson_type, c.is_valid_conversions,\n    ROW_NUMBER() OVER (PARTITION BY c.user_id ORDER BY c.purchased_at ASC) AS rn\n  FROM `shelikes-001.sheinc_marts_fy24.likes_conversions` c\n  CROSS JOIN params p\n  WHERE DATE(c.purchased_at) BETWEEN p.m_start AND p.m_end\n),\nconv AS (\n  SELECT user_id, pdate, is_valid_conversions,\n    EXTRACT(DAY FROM pdate) AS dom,\n    CASE\n      WHEN trial_lesson_type LIKE '拠点%' THEN '拠点'\n      WHEN trial_lesson_type IN ('OTL', 'ONS') THEN 'オンライン'\n      ELSE '分類不能'\n    END AS channel\n  FROM ent\n  WHERE rn = 1\n),\nfa AS (\n  SELECT f.user_id,\n    SUM(f.monthly_accounting_without_tax + f.monthly_accounting_discount + f.monthly_accounting_own_expense) AS m_fa\n  FROM `shelikes-001.sheinc_intermediate.int_likes_financial_accounting` f\n  CROSS JOIN params p\n  WHERE f.target_month = p.m_start\n  GROUP BY f.user_id\n)\nSELECT\n  c.channel,\n  c.dom,\n  COUNT(*) AS n_all,\n  COUNTIF(c.is_valid_conversions) AS n_valid,\n  SUM(IF(c.is_valid_conversions, COALESCE(fa.m_fa, 0), 0)) AS booked_fa_valid\nFROM conv c\nLEFT JOIN fa USING (user_id)\nGROUP BY 1, 2\nORDER BY 1, 2"}};</script>
+<script>window.__APP__={data:{"generated_at":"2026-08-25T19:19:33+09:00","basis_date":"2026-08-25","target_month":"2026-08","queries":{"q1_official_monthly":{"rows":[{"year_month":"2025-08","lks":365725385,"mny":4258938,"pd":6889460},{"year_month":"2025-09","lks":361980265,"mny":4380271,"pd":7576915},{"year_month":"2025-10","lks":375786197,"mny":4447538,"pd":8558880},{"year_month":"2025-11","lks":364396124,"mny":4666338,"pd":9545748},{"year_month":"2025-12","lks":375939467,"mny":4709470,"pd":10165103},{"year_month":"2026-01","lks":371987873,"mny":4548392,"pd":9723534},{"year_month":"2026-02","lks":331649365,"mny":4245214,"pd":9045613},{"year_month":"2026-03","lks":356468137,"mny":4420541,"pd":8654908},{"year_month":"2026-04","lks":335236140,"mny":4164079,"pd":7739234},{"year_month":"2026-05","lks":345393853,"mny":4470075,"pd":8875475},{"year_month":"2026-06","lks":341073716,"mny":4354158,"pd":8670759},{"year_month":"2026-07","lks":356607091,"mny":4619550,"pd":9080741},{"year_month":"2026-08","lks":351200806,"mny":4492633,"pd":10160505},{"year_month":"2026-09","lks":258231292,"mny":1696975,"pd":8034120},{"year_month":"2026-10","lks":213593061,"mny":1166730,"pd":7664829},{"year_month":"2026-11","lks":185989891,"mny":379418,"pd":7008848},{"year_month":"2026-12","lks":173860849,"mny":-42056,"pd":5431998},{"year_month":"2027-01","lks":156233304,"mny":-473666,"pd":3323009},{"year_month":"2027-02","lks":124486848,"mny":-646754,"pd":1673341},{"year_month":"2027-03","lks":120405354,"mny":-864412,"pd":252300},{"year_month":"2027-04","lks":99209939,"mny":-917855,"pd":0},{"year_month":"2027-05","lks":82430782,"mny":-920429,"pd":0},{"year_month":"2027-06","lks":58173404,"mny":-814722,"pd":0},{"year_month":"2027-07","lks":35478694,"mny":-636941,"pd":0},{"year_month":"2027-08","lks":9746449,"mny":-451273,"pd":0}]},"q2_lks_pending":{"rows":[{"plan_name":"スタンダードプラン","payment_type":"一括","fa_per_day_cur":453.27601492435133,"fa_per_day_prev":473.6688170616428,"n_window":430,"window_days":1681,"n_lag":173,"lag_days":3428},{"plan_name":"ライトプラン","payment_type":"一括","fa_per_day_cur":318.8453963190805,"fa_per_day_prev":322.06157828492724,"n_window":236,"window_days":944,"n_lag":25,"lag_days":493},{"plan_name":"レギュラープラン","payment_type":"一括","fa_per_day_cur":1136.5324302713889,"fa_per_day_prev":1313.8776966509113,"n_window":30,"window_days":125,"n_lag":63,"lag_days":1312},{"plan_name":"レギュラープラン","payment_type":"分割","fa_per_day_cur":882.4823488290807,"fa_per_day_prev":1221.4920590564016,"n_window":65,"window_days":308,"n_lag":173,"lag_days":3495},{"plan_name":"卒業生プラン","payment_type":"一括","fa_per_day_cur":155.27361942781104,"fa_per_day_prev":158.6633316658329,"n_window":50,"window_days":196,"n_lag":10,"lag_days":201}]},"q3_mny_pd_pending":{"rows":[{"service_key":"money","fa_per_day_cur":740.2961232260297,"fa_per_day_prev":767.2846258042669,"n_window":19,"window_days":89,"n_lag":5,"lag_days":106,"n_active_cur":262,"n_active_prev":260},{"service_key":"multicreator","fa_per_day_cur":0.0,"fa_per_day_prev":0.0,"n_window":0,"window_days":0,"n_lag":85,"lag_days":2125,"n_active_cur":85,"n_active_prev":87}]},"q4_lks_channel_booked":{"rows":[{"channel":"オンライン","n_users":32596,"booked_fa":322452468},{"channel":"拠点","n_users":3754,"booked_fa":20919091},{"channel":"分類不能","n_users":11290,"booked_fa":7742523},{"channel":"成約記録なし","n_users":888,"booked_fa":86724}]},"q5_conv_profile":{"rows":[{"channel":"オンライン","dom":1,"n_conv":14,"fa_per_conv":22290.5},{"channel":"オンライン","dom":2,"n_conv":26,"fa_per_conv":19719.5},{"channel":"オンライン","dom":3,"n_conv":26,"fa_per_conv":20211.96153846154},{"channel":"オンライン","dom":4,"n_conv":29,"fa_per_conv":15073.310344827587},{"channel":"オンライン","dom":5,"n_conv":25,"fa_per_conv":20840.2},{"channel":"オンライン","dom":6,"n_conv":31,"fa_per_conv":17288.129032258064},{"channel":"オンライン","dom":7,"n_conv":27,"fa_per_conv":14467.481481481482},{"channel":"オンライン","dom":8,"n_conv":17,"fa_per_conv":12833.411764705883},{"channel":"オンライン","dom":9,"n_conv":23,"fa_per_conv":11478.173913043478},{"channel":"オンライン","dom":10,"n_conv":26,"fa_per_conv":13795.038461538461},{"channel":"オンライン","dom":11,"n_conv":23,"fa_per_conv":15024.869565217392},{"channel":"オンライン","dom":12,"n_conv":24,"fa_per_conv":10288.791666666666},{"channel":"オンライン","dom":13,"n_conv":37,"fa_per_conv":11861.378378378378},{"channel":"オンライン","dom":14,"n_conv":24,"fa_per_conv":11825.5},{"channel":"オンライン","dom":15,"n_conv":25,"fa_per_conv":11801.08},{"channel":"オンライン","dom":16,"n_conv":26,"fa_per_conv":10430.23076923077},{"channel":"オンライン","dom":17,"n_conv":22,"fa_per_conv":6878.727272727273},{"channel":"オンライン","dom":18,"n_conv":30,"fa_per_conv":8406.4},{"channel":"オンライン","dom":19,"n_conv":22,"fa_per_conv":7338.590909090909},{"channel":"オンライン","dom":20,"n_conv":23,"fa_per_conv":7452.130434782609},{"channel":"オンライン","dom":21,"n_conv":24,"fa_per_conv":4795.416666666667},{"channel":"オンライン","dom":22,"n_conv":24,"fa_per_conv":4776.0},{"channel":"オンライン","dom":23,"n_conv":20,"fa_per_conv":2776.05},{"channel":"オンライン","dom":24,"n_conv":35,"fa_per_conv":3920.057142857143},{"channel":"オンライン","dom":25,"n_conv":35,"fa_per_conv":3491.657142857143},{"channel":"オンライン","dom":26,"n_conv":32,"fa_per_conv":2037.8125},{"channel":"オンライン","dom":27,"n_conv":19,"fa_per_conv":864.8947368421053},{"channel":"オンライン","dom":28,"n_conv":30,"fa_per_conv":1106.2666666666667},{"channel":"オンライン","dom":29,"n_conv":21,"fa_per_conv":332.95238095238096},{"channel":"オンライン","dom":30,"n_conv":38,"fa_per_conv":217.55263157894737},{"channel":"オンライン","dom":31,"n_conv":28,"fa_per_conv":0.0},{"channel":"分類不能","dom":14,"n_conv":1,"fa_per_conv":27967.0},{"channel":"分類不能","dom":16,"n_conv":1,"fa_per_conv":19233.0},{"channel":"分類不能","dom":22,"n_conv":1,"fa_per_conv":0.0},{"channel":"拠点","dom":1,"n_conv":1,"fa_per_conv":22435.0},{"channel":"拠点","dom":2,"n_conv":1,"fa_per_conv":33600.0},{"channel":"拠点","dom":3,"n_conv":1,"fa_per_conv":15224.0},{"channel":"拠点","dom":4,"n_conv":5,"fa_per_conv":19206.6},{"channel":"拠点","dom":5,"n_conv":1,"fa_per_conv":0.0},{"channel":"拠点","dom":6,"n_conv":4,"fa_per_conv":18081.0},{"channel":"拠点","dom":7,"n_conv":2,"fa_per_conv":21000.0},{"channel":"拠点","dom":8,"n_conv":4,"fa_per_conv":2700.0},{"channel":"拠点","dom":9,"n_conv":2,"fa_per_conv":18156.0},{"channel":"拠点","dom":10,"n_conv":5,"fa_per_conv":17875.6},{"channel":"拠点","dom":11,"n_conv":2,"fa_per_conv":18600.5},{"channel":"拠点","dom":12,"n_conv":2,"fa_per_conv":4200.0},{"channel":"拠点","dom":13,"n_conv":6,"fa_per_conv":9275.833333333334},{"channel":"拠点","dom":14,"n_conv":4,"fa_per_conv":11605.0},{"channel":"拠点","dom":15,"n_conv":3,"fa_per_conv":9600.0},{"channel":"拠点","dom":16,"n_conv":6,"fa_per_conv":10476.0},{"channel":"拠点","dom":17,"n_conv":1,"fa_per_conv":0.0},{"channel":"拠点","dom":18,"n_conv":3,"fa_per_conv":14400.0},{"channel":"拠点","dom":19,"n_conv":4,"fa_per_conv":7909.75},{"channel":"拠点","dom":20,"n_conv":6,"fa_per_conv":1200.0},{"channel":"拠点","dom":21,"n_conv":1,"fa_per_conv":12000.0},{"channel":"拠点","dom":22,"n_conv":1,"fa_per_conv":3599.0},{"channel":"拠点","dom":23,"n_conv":4,"fa_per_conv":2999.75},{"channel":"拠点","dom":24,"n_conv":3,"fa_per_conv":2800.0},{"channel":"拠点","dom":25,"n_conv":2,"fa_per_conv":0.0},{"channel":"拠点","dom":26,"n_conv":6,"fa_per_conv":1108.8333333333333},{"channel":"拠点","dom":27,"n_conv":2,"fa_per_conv":4799.5},{"channel":"拠点","dom":28,"n_conv":5,"fa_per_conv":1440.4},{"channel":"拠点","dom":29,"n_conv":4,"fa_per_conv":101.25},{"channel":"拠点","dom":30,"n_conv":4,"fa_per_conv":332.0},{"channel":"拠点","dom":31,"n_conv":4,"fa_per_conv":37000.0}]},"q6_conv_actuals":{"rows":[{"channel":"オンライン","dom":1,"n_all":40,"n_valid":33,"booked_fa_valid":847599},{"channel":"オンライン","dom":2,"n_all":27,"n_valid":24,"booked_fa_valid":557301},{"channel":"オンライン","dom":3,"n_all":31,"n_valid":29,"booked_fa_valid":541949},{"channel":"オンライン","dom":4,"n_all":26,"n_valid":20,"booked_fa_valid":475106},{"channel":"オンライン","dom":5,"n_all":27,"n_valid":25,"booked_fa_valid":570811},{"channel":"オンライン","dom":6,"n_all":21,"n_valid":14,"booked_fa_valid":200976},{"channel":"オンライン","dom":7,"n_all":27,"n_valid":22,"booked_fa_valid":416033},{"channel":"オンライン","dom":8,"n_all":31,"n_valid":22,"booked_fa_valid":427632},{"channel":"オンライン","dom":9,"n_all":25,"n_valid":23,"booked_fa_valid":255664},{"channel":"オンライン","dom":10,"n_all":26,"n_valid":24,"booked_fa_valid":351166},{"channel":"オンライン","dom":11,"n_all":36,"n_valid":33,"booked_fa_valid":439073},{"channel":"オンライン","dom":12,"n_all":27,"n_valid":21,"booked_fa_valid":309475},{"channel":"オンライン","dom":13,"n_all":21,"n_valid":17,"booked_fa_valid":259038},{"channel":"オンライン","dom":14,"n_all":22,"n_valid":21,"booked_fa_valid":308973},{"channel":"オンライン","dom":15,"n_all":25,"n_valid":24,"booked_fa_valid":303943},{"channel":"オンライン","dom":16,"n_all":34,"n_valid":28,"booked_fa_valid":332248},{"channel":"オンライン","dom":17,"n_all":36,"n_valid":32,"booked_fa_valid":342193},{"channel":"オンライン","dom":18,"n_all":37,"n_valid":34,"booked_fa_valid":318189},{"channel":"オンライン","dom":19,"n_all":39,"n_valid":33,"booked_fa_valid":274994},{"channel":"オンライン","dom":20,"n_all":37,"n_valid":29,"booked_fa_valid":188031},{"channel":"オンライン","dom":21,"n_all":26,"n_valid":25,"booked_fa_valid":343878},{"channel":"オンライン","dom":22,"n_all":39,"n_valid":36,"booked_fa_valid":347858},{"channel":"オンライン","dom":23,"n_all":41,"n_valid":39,"booked_fa_valid":122783},{"channel":"オンライン","dom":24,"n_all":44,"n_valid":42,"booked_fa_valid":104549},{"channel":"オンライン","dom":25,"n_all":27,"n_valid":27,"booked_fa_valid":0},{"channel":"分類不能","dom":18,"n_all":2,"n_valid":2,"booked_fa_valid":27395},{"channel":"分類不能","dom":23,"n_all":1,"n_valid":1,"booked_fa_valid":6931},{"channel":"分類不能","dom":25,"n_all":1,"n_valid":1,"booked_fa_valid":0},{"channel":"拠点","dom":1,"n_all":5,"n_valid":4,"booked_fa_valid":57983},{"channel":"拠点","dom":2,"n_all":7,"n_valid":6,"booked_fa_valid":76800},{"channel":"拠点","dom":3,"n_all":2,"n_valid":2,"booked_fa_valid":33600},{"channel":"拠点","dom":4,"n_all":5,"n_valid":3,"booked_fa_valid":43308},{"channel":"拠点","dom":5,"n_all":4,"n_valid":4,"booked_fa_valid":33633},{"channel":"拠点","dom":6,"n_all":4,"n_valid":4,"booked_fa_valid":67659},{"channel":"拠点","dom":7,"n_all":6,"n_valid":5,"booked_fa_valid":68029},{"channel":"拠点","dom":8,"n_all":3,"n_valid":2,"booked_fa_valid":54001},{"channel":"拠点","dom":9,"n_all":3,"n_valid":3,"booked_fa_valid":51601},{"channel":"拠点","dom":10,"n_all":4,"n_valid":3,"booked_fa_valid":29218},{"channel":"拠点","dom":11,"n_all":4,"n_valid":3,"booked_fa_valid":24422},{"channel":"拠点","dom":12,"n_all":3,"n_valid":3,"booked_fa_valid":12276},{"channel":"拠点","dom":13,"n_all":5,"n_valid":3,"booked_fa_valid":50425},{"channel":"拠点","dom":14,"n_all":6,"n_valid":5,"booked_fa_valid":58800},{"channel":"拠点","dom":15,"n_all":4,"n_valid":4,"booked_fa_valid":35206},{"channel":"拠点","dom":16,"n_all":5,"n_valid":4,"booked_fa_valid":38515},{"channel":"拠点","dom":17,"n_all":2,"n_valid":2,"booked_fa_valid":9600},{"channel":"拠点","dom":18,"n_all":4,"n_valid":3,"booked_fa_valid":1216},{"channel":"拠点","dom":19,"n_all":7,"n_valid":6,"booked_fa_valid":40673},{"channel":"拠点","dom":20,"n_all":3,"n_valid":3,"booked_fa_valid":2027},{"channel":"拠点","dom":21,"n_all":4,"n_valid":4,"booked_fa_valid":2838},{"channel":"拠点","dom":22,"n_all":2,"n_valid":2,"booked_fa_valid":11953},{"channel":"拠点","dom":23,"n_all":6,"n_valid":6,"booked_fa_valid":19216},{"channel":"拠点","dom":24,"n_all":5,"n_valid":5,"booked_fa_valid":8877},{"channel":"拠点","dom":25,"n_all":3,"n_valid":3,"booked_fa_valid":0}]},"q7_conv_plan":{"rows":[{"month":"2026-07","plan_regular":637.0,"plan_sutara":172.0,"src_regular":"実績","src_sutara":"実績","as_of":"2026-08-25"},{"month":"2026-08","plan_regular":639.0,"plan_sutara":207.0,"src_regular":"ヨミ","src_sutara":"ヨミ","as_of":"2026-08-25"},{"month":"2026-09","plan_regular":677.0,"plan_sutara":191.0,"src_regular":"ヨミ","src_sutara":"ヨミ","as_of":"2026-08-25"}]},"q8_yomi":{"rows":[{"month":"2026-08","yomi_total":342266659.4989925,"as_of":"2026-08-25"},{"month":"2026-09","yomi_total":331042371.03698397,"as_of":"2026-08-25"},{"month":"2026-10","yomi_total":344793286.1624259,"as_of":"2026-08-25"}]}},"targets":{"fa_targets":{"lks":null,"mny":null,"pd":null,"total":null},"kyoten_conv_target":null,"yomi":{"comparable":false,"note":"社内売上ヨミ(オンライン)は財務会計と定義が異なるため参考値。T1検証(2026-08-25): 確定3ヶ月(2026-05〜07)の月初時点ヨミはオンラインFA実績比 +2.6〜+3.8% の一貫過大(05: +3.8% / 06: +2.6% / 07: +3.2%、7月中旬時点では+3.6%)で±3%以内に収まらず comparable=false を維持。"},"note":"fa_targets は月次の目標FA(円)。null=未設定(UIは前月実績を基準線として表示)。"},"meta":{"bytes_processed":{"q1_official_monthly":3234,"q2_lks_pending":938801872,"q3_mny_pd_pending":1410966995,"q4_lks_channel_booked":861675478,"q5_conv_profile":861675478,"q6_conv_actuals":861675478,"q7_conv_plan":13580,"q8_yomi":3136}}},queries:{"q1_official_monthly":"-- q1_official_monthly: 公式月次FA(計上済み実績)。\n-- ソース: monthly_financial_accounting(スプレッドシート公式モニタリングの元テーブル)。\n-- 範囲: 当月(CURRENT_DATE('Asia/Tokyo')基準)の12ヶ月前 〜 テーブルにある未来月まで全部。\n-- 出力列: year_month STRING 'YYYY-MM' / lks INT(likes財務会計) / mny INT(money財務会計) / pd INT(likespro財務会計)\nSELECT\n  year_month,\n  `likes財務会計` AS lks,\n  `money財務会計` AS mny,\n  `likespro財務会計` AS pd\nFROM `shelikes-001.sheinc_marts_output_spreadsheet_official_monitoring.monthly_financial_accounting`\nWHERE year_month >= FORMAT_DATE('%Y-%m', DATE_SUB(DATE_TRUNC(CURRENT_DATE('Asia/Tokyo'), MONTH), INTERVAL 12 MONTH))\nORDER BY year_month","q2_lks_pending":"-- q2_lks_pending: LKS 既存会員の課金更新残(①window)・滞納/処理ラグ(④lag)をプラン×支払種別で集計。\n-- 基準日 = CURRENT_DATE('Asia/Tokyo')。当月トークン(int_membership_tokens, order_status=1, 対象4プラン)を\n--   effective_at < 基準日 → 'early' / それ以外 → 'window' に分け、order別の当月FA(int_likes_financial_accounting)と突合。\n-- 単価: fa_per_day_cur = Σ early FA ÷ Σ early 当月内有効日数。fa_per_day_prev = 前月トークン全体の同計算\n--   (月初で early が空 = fa_per_day_cur が NULL のときのフォールバック用。前月は全日 early 扱いなので全体で計算)。\n-- 新規会員除外 [契約v1.1・R1裁定]: 当月に最初の有効成約をした user(likes_conversions rn=1 が当月)の order は\n--   window(①: n_window/window_days)と lag(④: n_lag/lag_days)の両方から除外する。\n--   ①④=既存会員のみ / ②③(q5×q6)=当月新規のみ、という対称な切り分けで二重計上を防止。\n-- 防御 [契約v1.1]: all_orders は JOIN 前に order_id で1行化(重複ファンアウト防止)。\n--   m_days は COALESCE(GREATEST(...,0),0) で NULL を 0 に正規化(COUNTIF/SUM の非対称防止)。\n-- 出力列: plan_name STRING / payment_type STRING / fa_per_day_cur FLOAT(NULL可) / fa_per_day_prev FLOAT(NULL可)\n--         / n_window INT(window かつ FA=0 の件数) / window_days INT / n_lag INT(early かつ FA=0 の件数) / lag_days INT\nWITH params AS (\n  SELECT basis_date,\n    DATE_TRUNC(basis_date, MONTH) AS m_start,\n    LAST_DAY(basis_date, MONTH) AS m_end,\n    DATE_SUB(DATE_TRUNC(basis_date, MONTH), INTERVAL 1 MONTH) AS pm_start,\n    DATE_SUB(DATE_TRUNC(basis_date, MONTH), INTERVAL 1 DAY) AS pm_end\n  FROM (SELECT CURRENT_DATE('Asia/Tokyo') AS basis_date)\n),\norders AS (\n  -- order_id で1行化(all_orders の重複行による将来ファンアウト防止。MAXで決定的に代表値を選ぶ)\n  SELECT order_id, MAX(payment_type) AS payment_type, MAX(user_id) AS user_id\n  FROM `shelikes-001.sheinc_marts_accounting.all_orders`\n  GROUP BY order_id\n),\nnew_users AS (\n  SELECT e.user_id\n  FROM (\n    SELECT user_id, DATE(purchased_at) AS pdate,\n      ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY purchased_at ASC) AS rn\n    FROM `shelikes-001.sheinc_marts_fy24.likes_conversions`\n    WHERE is_valid_conversions IS TRUE\n  ) e\n  CROSS JOIN params p\n  WHERE e.rn = 1 AND e.pdate >= p.m_start\n),\ntok_cur AS (\n  SELECT t.order_id, t.plan_name, o.payment_type,\n    COALESCE(GREATEST(DATE_DIFF(LEAST(t.expires_at, p.m_end), GREATEST(t.effective_at, p.m_start), DAY) + 1, 0), 0) AS m_days,\n    IF(t.effective_at < p.basis_date, 'early', 'window') AS grp,\n    (nu.user_id IS NOT NULL) AS is_new_user\n  FROM `shelikes-001.sheinc_intermediate.int_membership_tokens` t\n  JOIN orders o USING (order_id)\n  CROSS JOIN params p\n  LEFT JOIN new_users nu ON o.user_id = nu.user_id\n  WHERE t.target_month = p.m_start\n    AND t.order_status = 1\n    AND t.plan_name IN ('レギュラープラン','スタンダードプラン','ライトプラン','卒業生プラン')\n),\nfa_cur AS (\n  SELECT f.order_id,\n    SUM(f.monthly_accounting_without_tax + f.monthly_accounting_discount + f.monthly_accounting_own_expense) AS m_fa\n  FROM `shelikes-001.sheinc_intermediate.int_likes_financial_accounting` f\n  CROSS JOIN params p\n  WHERE f.target_month = p.m_start\n  GROUP BY f.order_id\n),\nj_cur AS (\n  SELECT t.*, COALESCE(f.m_fa, 0) AS m_fa\n  FROM tok_cur t LEFT JOIN fa_cur f USING (order_id)\n),\ncur_agg AS (\n  SELECT plan_name, payment_type,\n    SAFE_DIVIDE(SUM(IF(grp='early', m_fa, 0)), NULLIF(SUM(IF(grp='early', m_days, 0)), 0)) AS fa_per_day_cur,\n    COUNTIF(grp='window' AND m_fa = 0 AND NOT is_new_user) AS n_window,\n    SUM(IF(grp='window' AND m_fa = 0 AND NOT is_new_user, m_days, 0)) AS window_days,\n    COUNTIF(grp='early' AND m_fa = 0 AND NOT is_new_user) AS n_lag,\n    SUM(IF(grp='early' AND m_fa = 0 AND NOT is_new_user, m_days, 0)) AS lag_days\n  FROM j_cur\n  GROUP BY 1, 2\n),\ntok_prev AS (\n  SELECT t.order_id, t.plan_name, o.payment_type,\n    COALESCE(GREATEST(DATE_DIFF(LEAST(t.expires_at, p.pm_end), GREATEST(t.effective_at, p.pm_start), DAY) + 1, 0), 0) AS m_days\n  FROM `shelikes-001.sheinc_intermediate.int_membership_tokens` t\n  JOIN orders o USING (order_id)\n  CROSS JOIN params p\n  WHERE t.target_month = p.pm_start\n    AND t.order_status = 1\n    AND t.plan_name IN ('レギュラープラン','スタンダードプラン','ライトプラン','卒業生プラン')\n),\nfa_prev AS (\n  SELECT f.order_id,\n    SUM(f.monthly_accounting_without_tax + f.monthly_accounting_discount + f.monthly_accounting_own_expense) AS m_fa\n  FROM `shelikes-001.sheinc_intermediate.int_likes_financial_accounting` f\n  CROSS JOIN params p\n  WHERE f.target_month = p.pm_start\n  GROUP BY f.order_id\n),\nprev_agg AS (\n  SELECT t.plan_name, t.payment_type,\n    SAFE_DIVIDE(SUM(COALESCE(f.m_fa, 0)), NULLIF(SUM(t.m_days), 0)) AS fa_per_day_prev\n  FROM tok_prev t LEFT JOIN fa_prev f USING (order_id)\n  GROUP BY 1, 2\n)\nSELECT\n  c.plan_name,\n  c.payment_type,\n  c.fa_per_day_cur,\n  p.fa_per_day_prev,\n  c.n_window,\n  c.window_days,\n  c.n_lag,\n  c.lag_days\nFROM cur_agg c\nLEFT JOIN prev_agg p USING (plan_name, payment_type)\nORDER BY c.plan_name, c.payment_type","q3_mny_pd_pending":"-- q3_mny_pd_pending: MNY(money)・プロデ(multicreator)の課金更新残・滞納/処理ラグを service_key 別に集計。\n-- q2 と同じ手法(基準日 = CURRENT_DATE('Asia/Tokyo')、early/window 分割、1日単価×残日数)。\n-- FA は sheinc_marts_accounting.monthly_accounting(order_id別 当月SUM: without_tax + discount + own_expense)。\n-- 既知の仕様: multicreator の FA は marts monthly_accounting に載らない別パイプライン\n--   → fa_per_day_cur/prev は 0 または NULL になる(正しい挙動)。件数列(n_window, n_active_*)だけ意味を持つ。\n-- 新規会員除外は行わない [契約v1.1]: MNY/プロデには②③(新規成約プロファイル成分)が存在しないため。\n-- 防御 [契約v1.1]: all_orders は JOIN 前に order_id で1行化(重複ファンアウト防止)。\n--   m_days は COALESCE(GREATEST(...,0),0) で NULL を 0 に正規化(COUNTIF/SUM の非対称防止)。\n-- 出力列: service_key STRING / fa_per_day_cur FLOAT(NULL可) / fa_per_day_prev FLOAT(NULL可)\n--         / n_window INT / window_days INT / n_lag INT / lag_days INT\n--         / n_active_cur INT(当月トークン件数) / n_active_prev INT(前月トークン件数)\nWITH params AS (\n  SELECT basis_date,\n    DATE_TRUNC(basis_date, MONTH) AS m_start,\n    LAST_DAY(basis_date, MONTH) AS m_end,\n    DATE_SUB(DATE_TRUNC(basis_date, MONTH), INTERVAL 1 MONTH) AS pm_start,\n    DATE_SUB(DATE_TRUNC(basis_date, MONTH), INTERVAL 1 DAY) AS pm_end\n  FROM (SELECT CURRENT_DATE('Asia/Tokyo') AS basis_date)\n),\norders AS (\n  -- order_id で1行化(all_orders の重複行による将来ファンアウト防止。MAXで決定的に代表値を選ぶ)\n  SELECT order_id, MAX(service_key) AS service_key\n  FROM `shelikes-001.sheinc_marts_accounting.all_orders`\n  GROUP BY order_id\n),\ntok_cur AS (\n  SELECT t.order_id, o.service_key,\n    COALESCE(GREATEST(DATE_DIFF(LEAST(t.expires_at, p.m_end), GREATEST(t.effective_at, p.m_start), DAY) + 1, 0), 0) AS m_days,\n    IF(t.effective_at < p.basis_date, 'early', 'window') AS grp\n  FROM `shelikes-001.sheinc_intermediate.int_membership_tokens` t\n  JOIN orders o USING (order_id)\n  CROSS JOIN params p\n  WHERE t.target_month = p.m_start\n    AND t.order_status = 1\n    AND o.service_key IN ('money', 'multicreator')\n),\nfa_cur AS (\n  SELECT f.order_id,\n    SUM(f.monthly_accounting_without_tax + f.monthly_accounting_discount + f.monthly_accounting_own_expense) AS m_fa\n  FROM `shelikes-001.sheinc_marts_accounting.monthly_accounting` f\n  CROSS JOIN params p\n  WHERE f.target_month = p.m_start\n  GROUP BY f.order_id\n),\nj_cur AS (\n  SELECT t.*, COALESCE(f.m_fa, 0) AS m_fa\n  FROM tok_cur t LEFT JOIN fa_cur f USING (order_id)\n),\ncur_agg AS (\n  SELECT service_key,\n    SAFE_DIVIDE(SUM(IF(grp='early', m_fa, 0)), NULLIF(SUM(IF(grp='early', m_days, 0)), 0)) AS fa_per_day_cur,\n    COUNTIF(grp='window' AND m_fa = 0) AS n_window,\n    SUM(IF(grp='window' AND m_fa = 0, m_days, 0)) AS window_days,\n    COUNTIF(grp='early' AND m_fa = 0) AS n_lag,\n    SUM(IF(grp='early' AND m_fa = 0, m_days, 0)) AS lag_days,\n    COUNT(*) AS n_active_cur\n  FROM j_cur\n  GROUP BY 1\n),\ntok_prev AS (\n  SELECT t.order_id, o.service_key,\n    COALESCE(GREATEST(DATE_DIFF(LEAST(t.expires_at, p.pm_end), GREATEST(t.effective_at, p.pm_start), DAY) + 1, 0), 0) AS m_days\n  FROM `shelikes-001.sheinc_intermediate.int_membership_tokens` t\n  JOIN orders o USING (order_id)\n  CROSS JOIN params p\n  WHERE t.target_month = p.pm_start\n    AND t.order_status = 1\n    AND o.service_key IN ('money', 'multicreator')\n),\nfa_prev AS (\n  SELECT f.order_id,\n    SUM(f.monthly_accounting_without_tax + f.monthly_accounting_discount + f.monthly_accounting_own_expense) AS m_fa\n  FROM `shelikes-001.sheinc_marts_accounting.monthly_accounting` f\n  CROSS JOIN params p\n  WHERE f.target_month = p.pm_start\n  GROUP BY f.order_id\n),\nprev_agg AS (\n  SELECT t.service_key,\n    SAFE_DIVIDE(SUM(COALESCE(f.m_fa, 0)), NULLIF(SUM(t.m_days), 0)) AS fa_per_day_prev,\n    COUNT(*) AS n_active_prev\n  FROM tok_prev t LEFT JOIN fa_prev f USING (order_id)\n  GROUP BY 1\n)\nSELECT\n  service_key,\n  c.fa_per_day_cur,\n  p.fa_per_day_prev,\n  IFNULL(c.n_window, 0) AS n_window,\n  IFNULL(c.window_days, 0) AS window_days,\n  IFNULL(c.n_lag, 0) AS n_lag,\n  IFNULL(c.lag_days, 0) AS lag_days,\n  IFNULL(c.n_active_cur, 0) AS n_active_cur,\n  IFNULL(p.n_active_prev, 0) AS n_active_prev\nFROM cur_agg c\nFULL OUTER JOIN prev_agg p USING (service_key)\nORDER BY service_key","q4_lks_channel_booked":"-- q4_lks_channel_booked: LKS 計上済みFA(当月)のチャネル按分。\n-- entrance = likes_conversions(is_valid_conversions IS TRUE)の user_id ごと最初(purchased_at昇順 rn=1)の trial_lesson_type。\n-- channel: trial_lesson_type LIKE '拠点%' → '拠点' / IN ('OTL','ONS') → 'オンライン' / それ以外(NULL含む) → '分類不能'。\n--          当月FAがあるのに有効成約記録が無い user → '成約記録なし'。\n-- FA: int_likes_financial_accounting の user_id 別 当月SUM(without_tax + discount + own_expense)。\n-- 検証: Σ booked_fa = q1 の当月 lks と一致すること(スレッド実績: 完全一致)。\n-- 出力列: channel STRING / n_users INT / booked_fa INT\nWITH params AS (\n  SELECT DATE_TRUNC(CURRENT_DATE('Asia/Tokyo'), MONTH) AS m_start\n),\nentrance AS (\n  SELECT user_id, trial_lesson_type,\n    ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY purchased_at ASC) AS rn\n  FROM `shelikes-001.sheinc_marts_fy24.likes_conversions`\n  WHERE is_valid_conversions IS TRUE\n),\nuser_ch AS (\n  SELECT user_id,\n    CASE\n      WHEN trial_lesson_type LIKE '拠点%' THEN '拠点'\n      WHEN trial_lesson_type IN ('OTL', 'ONS') THEN 'オンライン'\n      ELSE '分類不能'\n    END AS channel\n  FROM entrance\n  WHERE rn = 1\n),\nfa AS (\n  SELECT f.user_id,\n    SUM(f.monthly_accounting_without_tax + f.monthly_accounting_discount + f.monthly_accounting_own_expense) AS m_fa\n  FROM `shelikes-001.sheinc_intermediate.int_likes_financial_accounting` f\n  CROSS JOIN params p\n  WHERE f.target_month = p.m_start\n  GROUP BY f.user_id\n)\nSELECT\n  COALESCE(uc.channel, '成約記録なし') AS channel,\n  COUNT(*) AS n_users,\n  SUM(fa.m_fa) AS booked_fa\nFROM fa\nLEFT JOIN user_ch uc USING (user_id)\nGROUP BY 1\nORDER BY booked_fa DESC","q5_conv_profile":"-- q5_conv_profile: 成約日別・1件あたり当月FA プロファイル(前月実測)。\n-- 前月に最初の有効成約をした user(likes_conversions rn=1 が前月)について、\n-- 成約日(日 dom)× channel ごとに件数と「その userたちの前月FA合計 ÷ 件数」を出す。\n-- 用途: ③今後の新規成約分 = pace × Σ profile(残日)、②既成約の未計上残 = Σ max(0, n×profile − booked)。\n-- 注意: 拠点の per-dom 単価はノイズが大きい → 利用側はオンラインプロファイル×スケール係数を使う(契約参照)。\n-- 出力列: channel STRING / dom INT(1..31) / n_conv INT / fa_per_conv FLOAT\nWITH params AS (\n  SELECT\n    DATE_SUB(DATE_TRUNC(CURRENT_DATE('Asia/Tokyo'), MONTH), INTERVAL 1 MONTH) AS pm_start,\n    DATE_SUB(DATE_TRUNC(CURRENT_DATE('Asia/Tokyo'), MONTH), INTERVAL 1 DAY) AS pm_end\n),\nentrance AS (\n  SELECT user_id, DATE(purchased_at) AS pdate, trial_lesson_type,\n    ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY purchased_at ASC) AS rn\n  FROM `shelikes-001.sheinc_marts_fy24.likes_conversions`\n  WHERE is_valid_conversions IS TRUE\n),\nprev_conv AS (\n  SELECT e.user_id,\n    EXTRACT(DAY FROM e.pdate) AS dom,\n    CASE\n      WHEN e.trial_lesson_type LIKE '拠点%' THEN '拠点'\n      WHEN e.trial_lesson_type IN ('OTL', 'ONS') THEN 'オンライン'\n      ELSE '分類不能'\n    END AS channel\n  FROM entrance e\n  CROSS JOIN params p\n  WHERE e.rn = 1 AND e.pdate BETWEEN p.pm_start AND p.pm_end\n),\nfa AS (\n  SELECT f.user_id,\n    SUM(f.monthly_accounting_without_tax + f.monthly_accounting_discount + f.monthly_accounting_own_expense) AS m_fa\n  FROM `shelikes-001.sheinc_intermediate.int_likes_financial_accounting` f\n  CROSS JOIN params p\n  WHERE f.target_month = p.pm_start\n  GROUP BY f.user_id\n)\nSELECT\n  c.channel,\n  c.dom,\n  COUNT(*) AS n_conv,\n  SAFE_DIVIDE(SUM(COALESCE(fa.m_fa, 0)), COUNT(*)) AS fa_per_conv\nFROM prev_conv c\nLEFT JOIN fa USING (user_id)\nGROUP BY 1, 2\nORDER BY 1, 2","q6_conv_actuals":"-- q6_conv_actuals: 当月の成約実績(channel×日)。\n-- 当月に purchased_at がある成約(有効/無効両方)を user ごとに purchased_at 昇順で並べ、rn=1 の成約を数える。\n-- n_valid(is_valid_conversions 基準)が事業側認識の成約件数と一致する(スレッド実証: オンライン498 vs 認識500)。\n-- booked_fa_valid = 有効成約 user の当月FA合計(int_likes_financial_accounting の user_id 別SUM)。\n-- 出力列: channel STRING / dom INT / n_all INT / n_valid INT / booked_fa_valid INT\nWITH params AS (\n  SELECT\n    DATE_TRUNC(CURRENT_DATE('Asia/Tokyo'), MONTH) AS m_start,\n    LAST_DAY(CURRENT_DATE('Asia/Tokyo'), MONTH) AS m_end\n),\nent AS (\n  SELECT c.user_id, DATE(c.purchased_at) AS pdate, c.trial_lesson_type, c.is_valid_conversions,\n    ROW_NUMBER() OVER (PARTITION BY c.user_id ORDER BY c.purchased_at ASC) AS rn\n  FROM `shelikes-001.sheinc_marts_fy24.likes_conversions` c\n  CROSS JOIN params p\n  WHERE DATE(c.purchased_at) BETWEEN p.m_start AND p.m_end\n),\nconv AS (\n  SELECT user_id, pdate, is_valid_conversions,\n    EXTRACT(DAY FROM pdate) AS dom,\n    CASE\n      WHEN trial_lesson_type LIKE '拠点%' THEN '拠点'\n      WHEN trial_lesson_type IN ('OTL', 'ONS') THEN 'オンライン'\n      ELSE '分類不能'\n    END AS channel\n  FROM ent\n  WHERE rn = 1\n),\nfa AS (\n  SELECT f.user_id,\n    SUM(f.monthly_accounting_without_tax + f.monthly_accounting_discount + f.monthly_accounting_own_expense) AS m_fa\n  FROM `shelikes-001.sheinc_intermediate.int_likes_financial_accounting` f\n  CROSS JOIN params p\n  WHERE f.target_month = p.m_start\n  GROUP BY f.user_id\n)\nSELECT\n  c.channel,\n  c.dom,\n  COUNT(*) AS n_all,\n  COUNTIF(c.is_valid_conversions) AS n_valid,\n  SUM(IF(c.is_valid_conversions, COALESCE(fa.m_fa, 0), 0)) AS booked_fa_valid\nFROM conv c\nLEFT JOIN fa USING (user_id)\nGROUP BY 1, 2\nORDER BY 1, 2","q7_conv_plan":"-- q7_conv_plan: オンライン成約の社内計画(ヨミ)件数 [契約v1.2追加]。\n-- ソース: likes_monthly_online_revenue_forecast_inputs(毎日更新の materialized 出力。\n--   spread_sheet_v2 系の Drive 外部テーブルは権限不可のため使用しない)。\n-- 範囲: 前月〜翌月の3行(CURRENT_DATE('Asia/Tokyo')基準)。\n-- 意味: plan_regular + plan_sutara ≒ オンライン成約(valid)の月間計画。src_* = '実績'(確定月) | 'ヨミ'(計画)。\n--   検証済み: 2026-07 実績行 637+172=809 ≒ q6/q5系の7月オンラインvalid実績806(±1%)。\n--   拠点の計画はBQに存在しない(Drive外部のみ)→ targets.json / UI の手入力で扱う。\n-- 出力列: month STRING 'YYYY-MM' / plan_regular FLOAT / plan_sutara FLOAT\n--         / src_regular STRING / src_sutara STRING / as_of DATE(計算日)\nWITH params AS (\n  SELECT\n    FORMAT_DATE('%Y-%m', DATE_SUB(DATE_TRUNC(CURRENT_DATE('Asia/Tokyo'), MONTH), INTERVAL 1 MONTH)) AS pm,\n    FORMAT_DATE('%Y-%m', DATE_ADD(DATE_TRUNC(CURRENT_DATE('Asia/Tokyo'), MONTH), INTERVAL 1 MONTH)) AS nm\n)\nSELECT\n  f.`対象月` AS month,\n  f.`成約数_レギュラー` AS plan_regular,\n  f.`成約数_スタライ` AS plan_sutara,\n  f.`成約数の出所_レギュラー` AS src_regular,\n  f.`成約数の出所_スタライ` AS src_sutara,\n  f.`計算日_as_of` AS as_of\nFROM `shelikes-001.sheinc_marts_output_spreadsheet_official_monitoring.likes_monthly_online_revenue_forecast_inputs` f\nCROSS JOIN params p\nWHERE f.`対象月` BETWEEN p.pm AND p.nm\nORDER BY month","q8_yomi":"-- q8_yomi: 社内売上ヨミ(オンライン・金額) [契約v1.2追加]。\n-- ソース: likes_monthly_online_revenue_forecast(毎日更新の materialized 出力。\n--   fy24 履歴のシナリオA・当日as_ofと完全一致することを確認済み。Drive外部テーブルは使用しない)。\n-- yomi_total = レギュラー入会金ヨミ + レギュラー月額ヨミ + スタライ入会金ヨミ + スタライ月額ヨミ。\n-- 注意: ヨミは財務会計(FA)と定義が異なる(T1実測: 2026-05〜07の月初時点ヨミはオンラインFA実績比 +2.6〜+3.8% 過大)。\n--   表示上の扱いは targets.json の yomi.comparable フラグに従う(既定 false = 参考値表示)。\n-- 範囲: 当月〜+2ヶ月の3行(CURRENT_DATE('Asia/Tokyo')基準)。\n-- 出力列: month STRING 'YYYY-MM' / yomi_total FLOAT / as_of DATE(計算日)\nWITH params AS (\n  SELECT\n    FORMAT_DATE('%Y-%m', DATE_TRUNC(CURRENT_DATE('Asia/Tokyo'), MONTH)) AS m0,\n    FORMAT_DATE('%Y-%m', DATE_ADD(DATE_TRUNC(CURRENT_DATE('Asia/Tokyo'), MONTH), INTERVAL 2 MONTH)) AS m2\n)\nSELECT\n  f.`対象月` AS month,\n  f.`レギュラー入会金ヨミ` + f.`レギュラー月額ヨミ` + f.`スタライ入会金ヨミ` + f.`スタライ月額ヨミ` AS yomi_total,\n  f.`計算日_as_of` AS as_of\nFROM `shelikes-001.sheinc_marts_output_spreadsheet_official_monitoring.likes_monthly_online_revenue_forecast` f\nCROSS JOIN params p\nWHERE f.`対象月` BETWEEN p.m0 AND p.m2\nORDER BY month"}};</script>
 <script>
 (function () {
   "use strict";
@@ -1431,11 +1768,40 @@ dl { margin: 0; }
     q3_mny_pd_pending: "MNY・プロデ 同等集計",
     q4_lks_channel_booked: "LKS 計上済みFAのチャネル按分",
     q5_conv_profile: "成約日別・1件あたり当月FA（前月実測）",
-    q6_conv_actuals: "当月の成約実績（チャネル×日）"
+    q6_conv_actuals: "当月の成約実績（チャネル×日）",
+    q7_conv_plan: "オンライン成約の社内計画（ヨミ件数）",
+    q8_yomi: "社内売上ヨミ（オンライン・金額）"
   };
+
+  /**
+   * トップレベルは平易な言葉、記号(①〜④)と正確な定義は詳細とツールチップに置く。
+   *  short = 画面に出す言葉 / sym = 契約上の記号 / tip = title 属性に入れる定義
+   */
+  var LABELS = {
+    p1: {
+      short: "これから入る見込み", sym: "①", sub: "既存会員の更新",
+      tip: "① 更新残: 既存会員のうち、基準日以降に当月内で有効化される課金更新分。Σ(window_days × 1日単価)。"
+    },
+    p2: {
+      short: "反映待ち", sym: "②", sub: "成約済み・未計上",
+      tip: "② 既成約未計上: 基準日より前に成約済みなのに、まだ当月FAが載っていない分。Σ max(0, 有効成約数 × プロファイル − 計上済みFA)。"
+    },
+    p3: {
+      short: "これからの新規成約", sym: "③", sub: "残り日数ぶん",
+      tip: "③ 今後の成約: Σ 成約ペース × 残日のプロファイル。プロファイルは前月実測(q5)の成約日別・1件あたり当月FA。"
+    },
+    p4: {
+      short: "上振れの可能性", sym: "④", sub: "入金・処理の遅れ分",
+      tip: "④ 滞納/処理ラグ: early かつ当月FAが 0 の会員。Σ(lag_days × 1日単価)。low では 0、central では既定 50%、high では 100% を織り込む。"
+    }
+  };
+
+  var convDrawers = [];
 
   var STATE = {
     opts: { paceOn: null, paceKyoten: null, lagWeight: L.DEFAULT_LAG_WEIGHT },
+    targetOverride: null,
+    targetSaved: true,
     liveRows: {},           // key -> rows
     liveAt: {},             // key -> epoch ms
     status: {},             // key -> {state:'idle'|'loading'|'ok'|'error'|'nosql', err}
@@ -1598,6 +1964,7 @@ dl { margin: 0; }
       generated_at: base.generated_at,
       basis_date: base.basis_date,
       target_month: base.target_month,
+      targets: base.targets || null,
       meta: base.meta || {},
       queries: {}
     };
@@ -1648,11 +2015,11 @@ dl { margin: 0; }
     svg.appendChild(unit);
 
     var segs = [
-      { key: "p1", label: "① 更新残", v: c.p1, color: cssVar("--c1"), solid: true },
-      { key: "p2", label: "② 既成約未計上", v: c.p2, color: cssVar("--c2"), solid: true },
-      { key: "p3", label: "③ 今後の成約", v: c.p3, color: cssVar("--c3"), solid: true },
-      { key: "p4w", label: "④ 滞納/ラグ（織り込み " + Math.round(w * 100) + "%）", v: c.p4 * w, color: cssVar("--c4"), solid: true },
-      { key: "p4g", label: "④ 未織り込み（上振れ余地）", v: c.p4 * (1 - w), color: cssVar("--c4-ghost"), solid: false }
+      { key: "p1", label: LABELS.p1.short + "（" + LABELS.p1.sub + "）", tip: LABELS.p1.tip, v: c.p1, color: cssVar("--c1"), solid: true },
+      { key: "p2", label: LABELS.p2.short + "（" + LABELS.p2.sub + "）", tip: LABELS.p2.tip, v: c.p2, color: cssVar("--c2"), solid: true },
+      { key: "p3", label: LABELS.p3.short, tip: LABELS.p3.tip, v: c.p3, color: cssVar("--c3"), solid: true },
+      { key: "p4w", label: LABELS.p4.short + "（" + Math.round(w * 100) + "% 織り込み）", tip: LABELS.p4.tip, v: c.p4 * w, color: cssVar("--c4"), solid: true },
+      { key: "p4g", label: LABELS.p4.short + "（未織り込み分）", tip: LABELS.p4.tip, v: c.p4 * (1 - w), color: cssVar("--c4-ghost"), solid: false }
     ];
 
     var acc = 0;
@@ -1708,6 +2075,7 @@ dl { margin: 0; }
       var sw = el("span", "swatch"); sw.style.background = s.color;
       if (!s.solid) sw.style.border = "1px solid " + cssVar("--c4");
       it.appendChild(sw); it.appendChild(document.createTextNode(s.label + " " + m1(s.v)));
+      if (s.tip) it.setAttribute("title", s.tip);
       lg.appendChild(it);
     });
     kbdHint(lg);
@@ -2029,38 +2397,122 @@ dl { margin: 0; }
   /* ================================================================
    * 4. 描画
    * ================================================================ */
+  /* ---------------- 汎用ブレット（実績→見込み→目標/基準線） ---------------- */
+
+  /**
+   * ブレット型の進捗バー。FA（百万円）にも成約件数にも同じ文法で使う。
+   *  value  = 確定している量（計上済み / 実績）        … 実線
+   *  extend = 見込みの到達点（着地 central / ペース着地）… 同色相の淡い塗り
+   *  low/high = 不確実性のレンジ（任意）                … ひげ
+   *  marker = 基準線（目標 / 前月実績 / 計画）          … 縦のティック
+   */
+  function drawBullet(host, o) {
+    clear(host);
+    var W = Math.max(220, host.clientWidth || 480);
+    var barH = o.compact ? 12 : 16;
+    var top = o.compact ? 12 : 18;
+    var H = top + barH + (o.compact ? 20 : 26);
+    var fmt = o.fmt || function (v) { return String(Math.round(v)); };
+
+    var maxCandidate = Math.max(o.value || 0, o.extend || 0, o.high || 0, o.marker || 0);
+    var max = maxCandidate > 0 ? maxCandidate * 1.08 : 1;
+    var padR = 2;
+    function x(v) { return Math.max(0, Math.min(W - padR, (v / max) * (W - padR))); }
+
+    var svg = sv("svg", { viewBox: "0 0 " + W + " " + H, role: "img" });
+    svg.setAttribute("aria-label", o.aria || "");
+
+    // トラック
+    svg.appendChild(sv("rect", { x: 0, y: top, width: W - padR, height: barH, rx: 2, fill: cssVar("--surface-sunk") }));
+
+    // 見込み（淡い塗り）— 実績の先まで伸ばす
+    if (o.extend > (o.value || 0)) {
+      svg.appendChild(sv("rect", {
+        x: x(o.value || 0), y: top, width: Math.max(1.5, x(o.extend) - x(o.value || 0)), height: barH,
+        fill: cssVar("--measure-wash"), stroke: cssVar("--measure-soft"), "stroke-width": 1, rx: 2
+      }));
+    }
+    // 実績（実線）
+    if ((o.value || 0) > 0) {
+      svg.appendChild(sv("rect", { x: 0, y: top, width: Math.max(1, x(o.value)), height: barH, rx: 2, fill: cssVar("--measure") }));
+    }
+    // レンジ ひげ（コンパクト版では省略。値はカード本文の「着地レンジ」で読める）
+    if (!o.compact && o.low !== undefined && o.high !== undefined && o.high > o.low) {
+      var yw = top + barH + 8;
+      svg.appendChild(sv("line", { x1: x(o.low), x2: x(o.high), y1: yw, y2: yw, stroke: cssVar("--ink-3"), "stroke-width": 1 }));
+      [o.low, o.high].forEach(function (v) {
+        svg.appendChild(sv("line", { x1: x(v), x2: x(v), y1: yw - 4, y2: yw + 4, stroke: cssVar("--ink-3"), "stroke-width": 1 }));
+      });
+    }
+    // 基準線（目標 / 前月 / 計画）
+    if (o.marker !== null && o.marker !== undefined && isFinite(o.marker) && o.marker > 0) {
+      var mx = x(o.marker);
+      svg.appendChild(sv("line", {
+        x1: mx, x2: mx, y1: top - 6, y2: top + barH + 3,
+        stroke: o.markerAlert ? cssVar("--warning") : cssVar("--ink"), "stroke-width": 2
+      }));
+      if (o.markerLabel) {
+        var anchor = mx > W * 0.72 ? "end" : "start";
+        var t = sv("text", {
+          x: anchor === "end" ? mx - 4 : mx + 4, y: top - 8,
+          "text-anchor": anchor, fill: cssVar("--ink-2"), "font-size": 10.5, "font-weight": 500
+        });
+        t.setAttribute("style", "font-variant-numeric:tabular-nums");
+        t.textContent = o.markerLabel;
+        svg.appendChild(t);
+      }
+    }
+
+    // 全体を1つの当たり判定に（値は必ずテキストでも出しているので補助）
+    var g = sv("g", {});
+    g.appendChild(sv("rect", { x: 0, y: top - 8, width: W - padR, height: barH + 18, fill: "transparent" }));
+    var rows = [];
+    if (o.valueLabel) rows.push({ label: o.valueLabel, value: fmt(o.value || 0), color: cssVar("--measure") });
+    if (o.extendLabel) rows.push({ label: o.extendLabel, value: fmt(o.extend || 0), color: cssVar("--measure-soft") });
+    if (o.low !== undefined && o.high !== undefined) rows.push({ label: "レンジ", value: fmt(o.low) + " – " + fmt(o.high) });
+    if (o.marker) rows.push({ label: o.markerName || "基準", value: fmt(o.marker) });
+    attachTip(g, o.title || "", rows, o.aria || "");
+    svg.appendChild(g);
+
+    makeRoving(svg);
+    host.appendChild(svg);
+  }
+
+  /* ---------------- サービス別カード（3値 + ミニブレット） ---------------- */
+
   function svcCard(cfg) {
     var c = el("section", "svc");
     c.style.borderTopColor = cfg.accent;
     var name = el("div", "name");
-    var h = el("h3", null, cfg.title);
-    name.appendChild(h);
+    name.appendChild(el("h3", null, cfg.title));
     name.appendChild(el("span", "k", cfg.key));
     c.appendChild(name);
 
-    c.appendChild(el("div", "leadlabel", "着地見込み（中央値）"));
+    c.appendChild(el("div", "leadlabel", "着地見込み"));
     var lead = el("div", "lead big num");
     lead.appendChild(document.createTextNode(cfg.lead));
     lead.appendChild(el("span", "u", "百万円"));
     c.appendChild(lead);
 
+    var host = el("div", "chart");
+    host.style.marginTop = "8px";
+    c.appendChild(host);
+    cfg.bullet(host);
+
     var rows = el("div", "rows");
     cfg.rows.forEach(function (r) {
       var row = el("div", "r");
       row.appendChild(el("span", "lbl", r[0]));
-      var v = el("span", "val num", r[1]);
-      row.appendChild(v);
+      row.appendChild(el("span", "val num", r[1]));
       rows.appendChild(row);
     });
-    if (cfg.delta) {
-      var drow = el("div", "r");
-      drow.appendChild(el("span", "lbl", "前月比"));
-      var dv = el("span", "delta " + cfg.delta.cls);
-      dv.appendChild(el("span", "arw", cfg.delta.arw));
-      dv.appendChild(el("span", "num", cfg.delta.txt));
-      drow.appendChild(dv);
-      rows.appendChild(drow);
-    }
+    var drow = el("div", "r");
+    drow.appendChild(el("span", "lbl", cfg.cmp.label));
+    var dv = el("span", "delta " + cfg.cmp.cls);
+    if (cfg.cmp.arw) dv.appendChild(el("span", "arw", cfg.cmp.arw));
+    dv.appendChild(el("span", "num", cfg.cmp.txt));
+    drow.appendChild(dv);
+    rows.appendChild(drow);
     c.appendChild(rows);
 
     if (cfg.chips.length) {
@@ -2069,6 +2521,7 @@ dl { margin: 0; }
         var chip = el("span", "chip " + (ch.tone || ""));
         chip.appendChild(el("span", "dot"));
         chip.appendChild(document.createTextNode(ch.text));
+        if (ch.tip) chip.setAttribute("title", ch.tip);
         foot.appendChild(chip);
       });
       c.appendChild(foot);
@@ -2076,6 +2529,7 @@ dl { margin: 0; }
     return c;
   }
 
+  /** 前月比のテキスト（目標が無いときの基準）。 */
   function deltaText(svc) {
     if (svc.prev === null || svc.prev === undefined || !(svc.prev > 0)) return { txt: "前月データなし", cls: "flat", arw: "" };
     var up = svc.delta >= 0;
@@ -2089,108 +2543,411 @@ dl { margin: 0; }
     };
   }
 
+  /** 目標比 or 前月比。目標があれば目標を主表示にする。 */
+  function compareText(svc, prevMonthLabel) {
+    if (svc.targetDiff) {
+      var td = svc.targetDiff;
+      var up = td.met;
+      var mag = Math.abs(td.diff);
+      var amt = mag >= 1e6 ? (m1(mag) + " 百万円") : (yen(mag) + " 円");
+      return {
+        label: "目標比",
+        txt: (up ? "+" : "-") + amt + "（達成率 " + pctPlain(td.rate) + "）",
+        cls: up ? "up" : "down",
+        arw: up ? "▲" : "▼",
+        kind: "target"
+      };
+    }
+    var d = deltaText(svc);
+    d.label = "前月比（" + prevMonthLabel + "）";
+    d.kind = "prev";
+    return d;
+  }
+
+  function svcBullet(s, compact) {
+    return function (host) {
+      drawBullet(host, {
+        compact: compact !== false,
+        value: s.booked,
+        valueLabel: "計上済み",
+        extend: s.landing.central,
+        extendLabel: "着地見込み",
+        low: s.landing.low, high: s.landing.high,
+        marker: s.baseline,
+        markerName: s.baselineKind === "target" ? "目標" : "前月実績",
+        markerLabel: s.baseline ? (s.baselineKind === "target" ? "目標 " : "前月 ") + m1(s.baseline) : "",
+        markerAlert: s.baselineKind === "target" && s.targetDiff && !s.targetDiff.met,
+        fmt: function (v) { return m1(v) + " 百万円"; },
+        title: "着地見込み",
+        aria: "計上済み " + m1(s.booked) + "百万円、着地見込み " + m1(s.landing.central) +
+          "百万円（レンジ " + mRange(s.landing.low, s.landing.high) + "）" +
+          (s.baseline ? "、" + (s.baselineKind === "target" ? "目標" : "前月実績") + " " + m1(s.baseline) + "百万円" : "")
+      });
+    };
+  }
+
   function renderCards(m) {
     var host = $("cards"); clear(host);
     var wpc = Math.round(m.inputs.lagWeight * 100) + "%";
     var defs = [
       {
-        title: "SHElikes", key: "lks", accent: cssVar("--measure"), svc: m.lks,
-        chips: [{ text: "④ 織り込み " + wpc, tone: "is-info" }]
+        title: "SHElikes", key: "lks", svc: m.lks,
+        chips: [{ text: "上振れ分 " + wpc + " 織り込み", tone: "is-info", tip: LABELS.p4.tip }]
       },
       {
-        title: "SHEmoney", key: "mny", accent: cssVar("--measure"), svc: m.mny,
-        chips: [{ text: "④ 織り込み " + wpc, tone: "is-info" }, { text: "新規成約分は未算入", tone: "" }]
+        title: "SHEmoney", key: "mny", svc: m.mny,
+        chips: [{ text: "上振れ分 " + wpc + " 織り込み", tone: "is-info", tip: LABELS.p4.tip },
+        { text: "新規成約分は未算入", tone: "", tip: "MNY の新規成約による当月FAは僅少のため見込みに含めていません。" }]
       },
       {
-        title: "SHElikes PRO（プロデ）", key: "pd", accent: cssVar("--measure"), svc: m.pd,
-        chips: [{ text: "残計上は直接算出不可", tone: "is-warn" }, { text: "実質計上済み扱い", tone: "" }]
+        title: "SHElikes PRO（プロデ）", key: "pd", svc: m.pd,
+        chips: [{ text: "残計上は直接算出不可", tone: "is-warn", tip: "別パイプラインのため1日単価から残計上を出せません。" },
+        { text: "実質計上済み扱い", tone: "" }]
       }
     ];
     defs.forEach(function (d) {
       var s = d.svc;
-      var pendLabel = d.key === "pd"
-        ? (s.pending.high > 0 ? "0 – " + m1(s.pending.high) + " 百万円" : "0.0 百万円（上振れ余地なし）")
-        : mRange(s.pending.low, s.pending.high) + " 百万円";
       host.appendChild(svcCard({
-        title: d.title, key: d.key, accent: d.accent,
+        title: d.title, key: d.key, accent: cssVar("--measure"),
         lead: "約 " + m1(s.landing.central),
+        bullet: svcBullet(s),
         rows: [
           ["計上済み", m1(s.booked) + " 百万円"],
-          ["これから計上予定", pendLabel],
-          ["着地レンジ", mRange(s.landing.low, s.landing.high) + " 百万円"],
-          ["前月（" + m.meta.prevMonth + "）", m1(s.prev) + " 百万円"]
+          ["着地レンジ", mRange(s.landing.low, s.landing.high) + " 百万円"]
         ],
-        delta: deltaText(s),
+        cmp: compareText(s, m.meta.prevMonth),
         chips: (d.chips || []).slice()
       }));
     });
   }
 
-  function renderTotal(m) {
-    $("total-fig").textContent = "";
-    var fig = $("total-fig");
-    fig.appendChild(document.createTextNode("約 " + m1(m.total.landing.central)));
-    fig.appendChild(el("span", "u", "百万円"));
+  /* ---------------- ヒーロー ---------------- */
 
-    var side = $("total-side"); clear(side);
+  function renderHero(m) {
+    var t = m.total;
+
+    // 「8月の財務売上は 約371.4百万円 で着地見込み」
+    var lede = $("hero-lede"); clear(lede);
+    var mon = /-(\d{2})$/.exec(m.meta.targetMonth);
+    lede.appendChild(document.createTextNode((mon ? (+mon[1]) + "月" : m.meta.targetMonth) + "の財務売上は "));
+    var fig = el("b", "fig big num", "約 " + m1(t.landing.central));
+    lede.appendChild(fig);
+    lede.appendChild(el("span", "u", "百万円"));
+    lede.appendChild(document.createTextNode(" で着地見込み"));
+
+    // 目標比（無ければ前月比）
+    var cmp = $("hero-cmp"); clear(cmp);
+    var c = compareText(t, m.meta.prevMonth);
+    var prim = el("span", "primary delta " + c.cls);
+    if (c.arw) prim.appendChild(el("span", "arw", c.arw));
+    prim.appendChild(document.createTextNode(c.label + " " + c.txt));
+    cmp.appendChild(prim);
+    if (c.kind === "target") {
+      var sub = el("span", "sub", "目標 " + m1(t.target) + " 百万円" + targetSourceLabel(t.targetSource));
+      cmp.appendChild(sub);
+    } else {
+      cmp.appendChild(el("span", "sub", "目標未設定 — 前月実績を基準線にしています"));
+    }
+
+    var hs = $("hero-sub"); clear(hs);
     [
-      ["計上済み（" + m.meta.targetMonth + " 実績）", m1(m.total.booked) + " 百万円"],
-      ["これから計上予定", mRange(m.total.pending.low, m.total.pending.high) + " 百万円"],
-      ["着地レンジ", mRange(m.total.landing.low, m.total.landing.high) + " 百万円"],
-      ["前月（" + m.meta.prevMonth + "）合計", m1(m.total.prev) + " 百万円"]
+      ["着地レンジ", mRange(t.landing.low, t.landing.high) + " 百万円"],
+      ["計上済み", m1(t.booked) + " 百万円"],
+      ["これから計上予定", mRange(t.pending.low, t.pending.high) + " 百万円"],
+      ["前月（" + m.meta.prevMonth + "）", m1(t.prev) + " 百万円"]
     ].forEach(function (r) {
-      var row = el("div", "r");
-      row.appendChild(el("span", "lbl", r[0]));
-      row.appendChild(el("span", "num", r[1]));
-      side.appendChild(row);
+      var sp = el("span");
+      sp.appendChild(el("span", "k", r[0] + " "));
+      sp.appendChild(el("span", "num", r[1]));
+      hs.appendChild(sp);
     });
-    var dl = deltaText(m.total);
-    var drow = el("div", "r");
-    drow.appendChild(el("span", "lbl", "前月比"));
-    var dv = el("span", "delta " + dl.cls);
-    dv.appendChild(el("span", "arw", dl.arw));
-    dv.appendChild(el("span", "num", dl.txt));
-    drow.appendChild(dv);
-    side.appendChild(drow);
 
-    // レンジメーター
-    var lo = m.total.landing.low, hi = m.total.landing.high, ce = m.total.landing.central;
-    var pad = Math.max((hi - lo) * 0.35, Math.abs(ce) * 0.004, 1);
-    var a = lo - pad, b = hi + pad;
-    function ppos(v) { return ((v - a) / (b - a)) * 100; }
-    $("total-span").style.left = ppos(lo) + "%";
-    $("total-span").style.width = Math.max(0.5, ppos(hi) - ppos(lo)) + "%";
-    $("total-mid").style.left = "calc(" + ppos(ce) + "% - 1px)";
-    $("total-lo").textContent = "low " + m1(lo) + " 百万円";
-    $("total-hi").textContent = "high " + m1(hi) + " 百万円";
     $("total-note").textContent = "基準日 " + m.meta.basisDate + " ／ 残り " + m.meta.remainingDays + " 日"
-      + (m.meta.isMonthStart ? " ／ 月初のため過少に出やすい（前月合計 " + m1(m.total.prev) + " 百万円も目安に）" : "");
+      + (m.meta.isMonthStart ? " ／ 月初のため過少に出やすい" : "");
+
+    // 凡例
+    var lg = $("legend-total-bullet"); clear(lg);
+    var items = [["計上済み（実績）", cssVar("--measure"), "swatch"],
+    ["着地見込み（中央値）", cssVar("--measure-wash"), "ghost"],
+    ["着地レンジ", cssVar("--ink-3"), "line"]];
+    items.push([t.baselineKind === "target"
+      ? "目標（未達のときは注意色）" : "前月実績", cssVar("--ink"), "line"]);
+    items.forEach(function (p) {
+      var it = el("span", "it");
+      var sw = el("span", p[2] === "line" ? "linekey" : "swatch");
+      sw.style.background = p[1];
+      if (p[2] === "ghost") sw.style.border = "1px solid " + cssVar("--measure-soft");
+      it.appendChild(sw); it.appendChild(document.createTextNode(p[0]));
+      lg.appendChild(it);
+    });
+
+    var ng = 0;
+    m.checks.forEach(function (x) { if (!x.ok) ng++; });
+    $("checks-summary").textContent = ng
+      ? "整合チェック — " + ng + " 件が要確認"
+      : "整合チェック — " + m.checks.length + " 件すべて OK";
 
     var ck = $("checks"); clear(ck);
-    m.checks.forEach(function (c) {
+    m.checks.forEach(function (x) {
       var row = el("div", "checkrow");
-      var st = el("span", "st " + (c.ok ? "ok" : "ng"), c.ok ? "✓" : "▲");
-      row.appendChild(st);
-      row.appendChild(el("span", null, c.label));
-      row.appendChild(el("span", "dt", c.detail));
+      row.appendChild(el("span", "st " + (x.ok ? "ok" : "ng"), x.ok ? "✓" : "▲"));
+      row.appendChild(el("span", null, x.label));
+      row.appendChild(el("span", "dt", x.detail));
       ck.appendChild(row);
     });
+  }
+
+  function targetSourceLabel(src) {
+    if (src === "local") return "（この端末の一時設定）";
+    if (src === "derived") return "（3サービスの目標合計）";
+    if (src === "repo") return "（targets.json）";
+    return "";
+  }
+
+  /* ---------------- 成約件数の進捗 ---------------- */
+
+  function convBlock(cp, m, opts) {
+    var blk = el("div", "convblk");
+    var top = el("div", "top");
+    top.appendChild(el("h3", null, cp.label + "の成約"));
+    top.appendChild(el("span", "spacer"));
+    if (cp.hasPlan) {
+      var planChip = el("span", "chip" + (cp.behind ? " is-warn" : ""));
+      planChip.appendChild(el("span", "dot"));
+      var srcTxt = cp.src === "実績" ? "実績値" : cp.src ? cp.src : "計画";
+      planChip.appendChild(document.createTextNode(
+        (cp.src === "実績" ? "確定 " : "計画 ") + Math.round(cp.plan).toLocaleString("ja-JP") + " 件・" + srcTxt +
+        (cp.asOf ? "（as of " + cp.asOf + "）" : "")));
+      top.appendChild(planChip);
+    } else {
+      var noChip = el("span", "chip");
+      noChip.appendChild(el("span", "dot"));
+      noChip.appendChild(document.createTextNode("目標未設定"));
+      noChip.setAttribute("title", opts && opts.noPlanTip ? opts.noPlanTip : "");
+      top.appendChild(noChip);
+    }
+    blk.appendChild(top);
+
+    var host = el("div", "chart");
+    blk.appendChild(host);
+
+    var facts = el("div", "facts");
+    function fact(k, v, small, alert) {
+      var f = el("div", "fact" + (alert ? " alert" : ""));
+      f.appendChild(el("span", "k", k));
+      var vv = el("span", "v", v);
+      if (small) vv.appendChild(el("small", null, small));
+      f.appendChild(vv);
+      return f;
+    }
+    facts.appendChild(fact("実績", Math.round(cp.actual).toLocaleString("ja-JP"), " 件"));
+    if (cp.hasPlan) {
+      facts.appendChild(fact("達成率", cp.rate !== null ? pctPlain(cp.rate) : "—"));
+      facts.appendChild(fact("残り", (cp.remaining !== null ? Math.round(cp.remaining).toLocaleString("ja-JP") : "—"),
+        " 件 / " + cp.remainingDays + "日"));
+      facts.appendChild(fact("必要ペース",
+        cp.unreachable ? "算出不可" : cp.neededPace !== null ? cp.neededPace.toFixed(1) : "—",
+        cp.unreachable ? "" : " 件/日", cp.behind));
+    }
+    facts.appendChild(fact("現ペース", cp.pace.toFixed(1), " 件/日"));
+    blk.appendChild(facts);
+
+    var concl = el("div", "concl");
+    var projTxt = "現ペースだと約 " + Math.round(cp.projected).toLocaleString("ja-JP") + " 件で着地";
+    if (cp.hasPlan) {
+      var d = cp.projectedDiff;
+      projTxt += "（計画比 " + (d >= 0 ? "+" : "-") + Math.abs(Math.round(d)).toLocaleString("ja-JP") + " 件）";
+    }
+    concl.appendChild(document.createTextNode(projTxt));
+    if (cp.behind && cp.hasPlan) {
+      var warn = el("span", "chip is-warn");
+      warn.style.marginLeft = "8px";
+      warn.appendChild(el("span", "dot"));
+      warn.appendChild(document.createTextNode(cp.unreachable
+        ? "残り日数では届かない"
+        : "必要ペースが現ペースを上回っています"));
+      concl.appendChild(warn);
+    }
+    blk.appendChild(concl);
+
+    // ブレット（描画はレイアウト確定後にまとめて行う）
+    blk.__draw = function () {
+      drawBullet(host, {
+        compact: false,
+        value: cp.actual, valueLabel: "実績",
+        extend: cp.projected, extendLabel: "現ペース着地",
+        marker: cp.hasPlan ? cp.plan : null,
+        markerName: cp.src === "実績" ? "確定" : "計画",
+        markerLabel: cp.hasPlan ? ((cp.src === "実績" ? "確定 " : "計画 ") + Math.round(cp.plan)) : "",
+        markerAlert: cp.behind,
+        fmt: function (v) { return Math.round(v).toLocaleString("ja-JP") + " 件"; },
+        title: cp.label + "の成約",
+        aria: cp.label + "の成約。実績 " + Math.round(cp.actual) + " 件" +
+          (cp.hasPlan ? "、計画 " + Math.round(cp.plan) + " 件" : "") +
+          "、現ペースだと約 " + Math.round(cp.projected) + " 件で着地。"
+      });
+    };
+    return blk;
+  }
+
+  function renderConv(m) {
+    var sec = $("sec-conv");
+    var online = m.conv.online, kyoten = m.conv.kyoten;
+    // q6 も q7 も何も無いなら丸ごと隠す
+    var anyData = online.actual > 0 || kyoten.actual > 0 || online.hasPlan || kyoten.hasPlan;
+    sec.hidden = !anyData;
+    if (!anyData) return;
+
+    var grid = $("conv-grid"); clear(grid);
+    convDrawers = [];
+    var b1 = convBlock(online, m, { noPlanTip: "q7_conv_plan（社内計画）が未提供のため計画値がありません。" });
+    grid.appendChild(b1); convDrawers.push(b1.__draw);
+    var b2 = convBlock(kyoten, m, { noPlanTip: "拠点の計画は BigQuery に無いため、上の「目標を設定する」から件数を入れてください。" });
+    grid.appendChild(b2); convDrawers.push(b2.__draw);
+
+    $("conv-note").textContent = "残り " + m.meta.remainingDays + " 日（基準日 " + m.meta.basisDate + " を含む）"
+      + (online.hasPlan && online.src ? " ／ オンライン計画は q7（" + online.src + "）" : "");
+  }
+
+  /* ---------------- 目標の編集（この端末のみ・localStorage） ---------------- */
+
+  var TG_KEY = "fa-monitor-targets-v1";
+
+  function loadLocalTargets() {
+    try {
+      var raw = window.localStorage.getItem(TG_KEY);
+      if (!raw) return null;
+      var o = JSON.parse(raw);
+      return (o && typeof o === "object") ? o : null;
+    } catch (e) { return null; }   // プライベートウィンドウ等では読めない
+  }
+  function saveLocalTargets(o) {
+    try {
+      if (o === null) window.localStorage.removeItem(TG_KEY);
+      else window.localStorage.setItem(TG_KEY, JSON.stringify(o));
+      return true;
+    } catch (e) { return false; }
+  }
+
+  var TG_FIELDS = [["tg-total", "total"], ["tg-lks", "lks"], ["tg-mny", "mny"], ["tg-pd", "pd"]];
+
+  /** 円 → 入力欄の表示（百万円・小数1桁）に丸めた円。比較用。 */
+  function toDisplayYen(v) {
+    return v === null || v === undefined ? null : Math.round(v / 1e5) * 1e5;
+  }
+
+  /**
+   * 入力欄を読み、**repo（targets.json）と実際に違う値だけ**を上書きとして返す。
+   * 全欄をそのまま保存すると、後で targets.json が更新されても
+   * 古いローカル値が勝ち続けてしまうため。
+   */
+  function readTargetInputs() {
+    var base = L.normalizeTargets(APP.data && APP.data.targets, null);
+    var fa = {};
+    TG_FIELDS.forEach(function (f) {
+      var raw = String($(f[0]).value || "").trim();
+      if (raw === "") return;                       // 空欄は「上書きしない」＝ repo 値に従う
+      var v = parseFloat(raw);
+      if (!isFinite(v) || v <= 0) return;
+      var yenv = Math.round(v * 1e6);               // 百万円 → 円
+      if (toDisplayYen(base.fa[f[1]].value) === yenv) return;   // repo と同じなら保存しない
+      fa[f[1]] = yenv;
+    });
+    var out = {};
+    if (Object.keys(fa).length) out.fa_targets = fa;
+    var kraw = String($("tg-kyoten").value || "").trim();
+    if (kraw !== "") {
+      var kv = parseFloat(kraw);
+      if (isFinite(kv) && kv >= 0 && kv !== base.kyotenConvTarget.value) out.kyoten_conv_target = kv;
+    }
+    return Object.keys(out).length ? out : null;
+  }
+
+  function onTargetInput() {
+    STATE.targetOverride = readTargetInputs();
+    STATE.targetSaved = saveLocalTargets(STATE.targetOverride);
+    render();
+  }
+
+  function renderTargets(m) {
+    var t = m.targets;
+    TG_FIELDS.forEach(function (f) {
+      var inp = $(f[0]), slot = t.fa[f[1]];
+      if (document.activeElement !== inp) {
+        inp.value = slot.value === null ? "" : String(Math.round(slot.value / 1e5) / 10);
+      }
+      $(f[0] + "-src").textContent = slot.value === null ? "未設定"
+        : "現在: " + m1(slot.value) + " 百万円" + targetSourceLabel(slot.source);
+    });
+    var kinp = $("tg-kyoten"), kslot = t.kyotenConvTarget;
+    if (document.activeElement !== kinp) kinp.value = kslot.value === null ? "" : String(kslot.value);
+    $("tg-kyoten-src").textContent = kslot.value === null
+      ? "未設定（拠点の計画は BigQuery に存在しないため手入力）"
+      : "現在: " + kslot.value + " 件" + targetSourceLabel(kslot.source);
+
+    $("dt-targets-label").textContent = t.hasAnyFa
+      ? "目標を変更する" + (t.hasLocalOverride ? "（この端末の設定あり）" : "")
+      : "目標を設定する（未設定）";
+
+    $("targets-scope").textContent = STATE.targetSaved === false
+      ? "この端末に保存できませんでした（プライベートウィンドウ等）。入力はこのページを閉じるまで有効です。正はリポジトリの dashboard/data/targets.json。"
+      : "ここでの入力はこの端末のみの一時設定です（ブラウザに保存）。空欄にすると targets.json の値に戻ります。全員に反映する正の値はリポジトリの dashboard/data/targets.json。";
+
+    // 社内ヨミ（q8）
+    var box = $("yomi-box"); clear(box);
+    if (!m.yomi) return;
+    var y = m.yomi;
+    var cal = el("div", "callout" + (y.comparable ? " info" : ""));
+    var h = el("div", "h");
+    h.appendChild(el("span", "ic", y.comparable ? "●" : "▲"));
+    h.appendChild(document.createTextNode(y.comparable
+      ? "社内売上ヨミ（オンライン） " + m1(y.total) + " 百万円 — 目標系列として扱う設定です"
+      : "参考: 社内売上ヨミ（オンライン） " + m1(y.total) + " 百万円"));
+    cal.appendChild(h);
+    cal.appendChild(document.createTextNode(
+      (y.asOf ? "as of " + y.asOf + "。" : "") + (y.comparable ? "" : y.note)));
+    if (y.comparable && y.diff) {
+      var d = el("div");
+      d.style.marginTop = "6px";
+      d.textContent = "SHElikes 着地見込みとの差 "
+        + (y.diff.met ? "+" : "-") + m1(Math.abs(y.diff.diff)) + " 百万円（"
+        + pctPlain(y.diff.rate) + "）";
+      cal.appendChild(d);
+    }
+    var wrap = el("div");
+    wrap.style.marginTop = "8px";
+    var btn = el("button", "btn sm", "SHElikes の目標欄に入れる");
+    btn.type = "button";
+    btn.addEventListener("click", function () {
+      $("tg-lks").value = String(Math.round(y.total / 1e5) / 10);
+      onTargetInput();
+      try { $("dt-targets").open = true; } catch (e) { /* noop */ }
+    });
+    wrap.appendChild(btn);
+    cal.appendChild(wrap);
+    box.appendChild(cal);
   }
 
   function renderBreakdownTable(m) {
     var c = m.lks.components, w = m.inputs.lagWeight;
     var tb = $("tbl-breakdown").querySelector("tbody"); clear(tb);
     var rows = [
-      ["c1", "① 更新残", c.p1, "Σ(window_days × 単価)。基準日以降に有効化される既存会員の課金更新分。"],
-      ["c2", "② 既成約未計上", c.p2, "Σ max(0, n_valid × プロファイル − 計上済み)。基準日より前の成約で、まだFAが載っていない分。"],
-      ["c3", "③ 今後の成約", c.p3, "Σ ペース × 残日のプロファイル。下のシナリオ入力で即再計算。"],
-      ["c4", "④ 滞納・処理ラグ", c.p4, "Σ(lag_days × 単価)。early かつ当月FA=0 の会員。既定は " + Math.round(w * 100) + "% を織り込む。"]
+      ["c1", LABELS.p1, c.p1, "基準日以降に有効化される既存会員の課金更新分。Σ(window_days × 1日単価)。"],
+      ["c2", LABELS.p2, c.p2, "基準日より前の成約で、まだFAが載っていない分。Σ max(0, 有効成約数 × プロファイル − 計上済み)。"],
+      ["c3", LABELS.p3, c.p3, "Σ 成約ペース × 残日のプロファイル。下のシナリオ入力で即再計算。"],
+      ["c4", LABELS.p4, c.p4, "入金・処理が遅れている分（early かつ当月FA=0）。Σ(lag_days × 1日単価)。既定は " + Math.round(w * 100) + "% を織り込む。"]
     ];
     rows.forEach(function (r) {
       var tr = el("tr");
       var td0 = el("td");
       var sw = el("span", "swatch"); sw.style.background = cssVar("--" + r[0]);
-      td0.appendChild(sw); td0.appendChild(document.createTextNode(r[1]));
+      td0.appendChild(sw);
+      td0.appendChild(document.createTextNode(r[1].short));
+      var sub = el("span", null, "  " + r[1].sym + (r[1].sub ? " " + r[1].sub : ""));
+      sub.style.color = cssVar("--ink-3");
+      sub.style.fontSize = "11px";
+      td0.appendChild(sub);
+      td0.setAttribute("title", r[1].tip);
       tr.appendChild(td0);
       tr.appendChild(el("td", "n", yen(r[2])));
       tr.appendChild(el("td", "n", m1(r[2])));
@@ -2200,9 +2957,9 @@ dl { margin: 0; }
       tb.appendChild(tr);
     });
     var tf = $("tbl-breakdown").querySelector("tfoot"); clear(tf);
-    [["low（①+②+③）", m.lks.pending.low],
-    ["central（low + " + Math.round(w * 100) + "% × ④）", m.lks.pending.central],
-    ["high（low + ④）", m.lks.pending.high]].forEach(function (r) {
+    [["かたい線 low（上3つの合計）", m.lks.pending.low],
+    ["見込み central（low + 上振れ " + Math.round(w * 100) + "%）", m.lks.pending.central],
+    ["強気 high（low + 上振れ全額）", m.lks.pending.high]].forEach(function (r) {
       var tr = el("tr");
       tr.appendChild(el("td", null, r[0]));
       tr.appendChild(el("td", "n", yen(r[1])));
@@ -2259,6 +3016,13 @@ dl { margin: 0; }
   }
 
   function renderChannelTable(m) {
+    // ①〜④ の記号ヘッダに平易な言葉と定義をツールチップで添える
+    [["th-c1", "p1"], ["th-c2", "p2"], ["th-c3", "p3"], ["th-c4", "p4"]].forEach(function (h) {
+      var th = $(h[0]);
+      if (!th) return;
+      th.setAttribute("title", LABELS[h[1]].sym + " " + LABELS[h[1]].short + " — " + LABELS[h[1]].tip);
+      th.setAttribute("aria-label", LABELS[h[1]].sym + " " + LABELS[h[1]].short);
+    });
     var tb = $("tbl-channel").querySelector("tbody"); clear(tb);
     m.lks.channels.forEach(function (c) {
       var tr = el("tr");
@@ -2379,7 +3143,11 @@ dl { margin: 0; }
       ["チャネル按分", "①②④ は計上済みFAの構成比（成約記録なしを除く）で按分。③ はチャネル直接。したがって Σチャネル別 と全体は、Σq4 と q1 の差ぶんだけずれる。"],
       ["プロデの扱い", "multicreator は marts の monthly_accounting にFAが載らない別パイプライン。全件一括払いのため当月分は実質計上済みとみなし、central = 計上済み。上振れ余地のみ high に加える。"],
       ["丸め", "内部計算はフル精度。表示は百万円（小数1桁）を基本とし、詳細表は円の3桁区切り。"],
-      ["レンジと「約」", "low / central / high は ④ の織り込み率だけが違う3シナリオ。中央値には「約」を付けて点推定でないことを示す。"]
+      ["レンジと「約」", "low / central / high は「上振れの可能性」の織り込み率だけが違う3シナリオ。中央値には「約」を付けて点推定でないことを示す。"],
+      ["画面の言葉と契約の記号", "「これから入る見込み」＝① 更新残、「反映待ち」＝② 既成約未計上、「これからの新規成約」＝③、「上振れの可能性」＝④ 滞納/処理ラグ。トップは平易な言葉、正確な定義は各項目のツールチップとこの表に置いている。"],
+      ["目標（fa_targets）", "リポジトリの dashboard/data/targets.json が正。設定されていれば着地見込みとの差分・達成率を主表示し、未設定なら前月実績を基準線にする。画面から入れた値はこの端末のブラウザにだけ保存される一時設定で、出所を各欄に明示している。"],
+      ["成約件数の進捗", "オンラインの計画は q7（社内のヨミ件数、レギュラー＋スタライ）。実績は q6 の有効成約（n_valid）合計。必要ペース = max(0, 計画 − 実績) ÷ 残り日数。現ペース着地 = 実績 + 成約ペース × 残り日数。拠点の計画は BigQuery に無いため targets.json か画面入力で与える。"],
+      ["社内売上ヨミ（q8）", (m.yomi && m.yomi.comparable) ? "財務会計と突合可能と判定されているため、目標系列として扱っている。" : "オンライン売上のヨミ。財務会計とは定義が異なる可能性があるため既定では参考値として扱い、目標には自動反映しない（手動で目標欄に入れることは可能）。"]
     ].forEach(function (p) {
       var d = el("div", "d");
       var dt = el("dt", null, p[0]);
@@ -2564,16 +3332,23 @@ dl { margin: 0; }
 
   /* ---- 全体描画 ---- */
   var charts = [
+    { host: "chart-total-bullet", fn: drawTotalBullet },
     { host: "chart-breakdown", fn: chartBreakdown },
     { host: "chart-channel", fn: chartChannel },
     { host: "chart-conv", fn: chartConv },
     { host: "chart-monthly", fn: chartMonthly }
   ];
 
+  function drawTotalBullet(host, m) { svcBullet(m.total, false)(host); }
+
   function render() {
     var m;
     try {
-      m = L.buildModel(effectiveData(), STATE.opts);
+      var opts = {
+        paceOn: STATE.opts.paceOn, paceKyoten: STATE.opts.paceKyoten,
+        lagWeight: STATE.opts.lagWeight, targets: STATE.targetOverride
+      };
+      m = L.buildModel(effectiveData(), opts);
     } catch (e) {
       $("hd-sub").textContent = "モデルの計算に失敗しました: " + (e && e.message ? e.message : String(e));
       return;
@@ -2581,8 +3356,10 @@ dl { margin: 0; }
     STATE.model = m;
     renderHeader(m);
     renderNotices(m);
+    renderHero(m);
     renderCards(m);
-    renderTotal(m);
+    renderConv(m);
+    renderTargets(m);
     renderBreakdownTable(m);
     renderProfileTable(m);
     renderPlanTable(m);
@@ -2601,6 +3378,14 @@ dl { margin: 0; }
       var host = $(c.host);
       if (host) c.fn(host, STATE.model);
     });
+    // サービスカードのミニブレット（カード再生成のたびに幅が確定する）
+    var cardHosts = document.querySelectorAll("#cards .svc .chart");
+    for (var i = 0; i < cardHosts.length; i++) {
+      var svc = [STATE.model.lks, STATE.model.mny, STATE.model.pd][i];
+      if (svc) svcBullet(svc)(cardHosts[i]);
+    }
+    // 成約進捗のブレット
+    convDrawers.forEach(function (d) { try { d(); } catch (e) { /* 非表示時など */ } });
   }
 
   /* ================================================================
@@ -2638,6 +3423,21 @@ dl { margin: 0; }
       }
     });
   });
+  var tgDeb = null;
+  function onTargetInputDebounced() {
+    if (tgDeb) clearTimeout(tgDeb);
+    tgDeb = setTimeout(onTargetInput, 160);
+  }
+  ["tg-total", "tg-lks", "tg-mny", "tg-pd", "tg-kyoten"].forEach(function (id) {
+    $(id).addEventListener("input", onTargetInputDebounced);
+  });
+  $("btn-targets-reset").addEventListener("click", function () {
+    STATE.targetOverride = null;
+    STATE.targetSaved = saveLocalTargets(null);
+    ["tg-total", "tg-lks", "tg-mny", "tg-pd", "tg-kyoten"].forEach(function (id) { $(id).value = ""; });
+    render();
+  });
+
   $("btn-reset").addEventListener("click", function () {
     STATE.opts.paceOn = null; STATE.opts.paceKyoten = null;
     STATE.opts.lagWeight = L.DEFAULT_LAG_WEIGHT;
@@ -2881,6 +3681,7 @@ dl { margin: 0; }
   /* ================================================================
    * 7. 起動
    * ================================================================ */
+  STATE.targetOverride = loadLocalTargets();
   render();
   if (typeof ResizeObserver === "function") {
     try {

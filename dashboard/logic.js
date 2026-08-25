@@ -4,11 +4,14 @@
  * 純関数のみ / DOM 非依存。スナップショット経路(build.py が埋め込んだ latest.json)と
  * ライブ経路(BigQuery MCP の実行結果)が同じ関数を通る。
  *
- * 契約: data-contract v1.1（リポジトリ外の設計文書）。列名・計算式は契約どおり。変更しないこと。
+ * 契約: data-contract v1.2（リポジトリ外の設計文書）。列名・計算式は契約どおり。変更しないこと。
  *
  * export:
  *   parseBqResult(bqJson[, rows])  -> 型付き rows[]
  *   buildModel(data, opts)         -> 表示用モデル
+ *   normalizeTargets(base, override)   -> 目標の正規化（出所つき）
+ *   targetDiff(landingCentral, target) -> 目標差分・達成率
+ *   convProgress({plan, actual, remainingDays, pace}) -> 成約件数の進捗
  *   （補助）CHANNELS, QUERY_KEYS, defaultPaces, lastDayOfMonth, prevMonth, fmt*
  */
 (function (root, factory) {
@@ -29,8 +32,20 @@
     "q3_mny_pd_pending",
     "q4_lks_channel_booked",
     "q5_conv_profile",
-    "q6_conv_actuals"
+    "q6_conv_actuals",
+    "q7_conv_plan",
+    "q8_yomi"
   ];
+
+  /** targets.json が無い / 欠けているときの既定（契約 v1.2）。 */
+  var DEFAULT_TARGETS = {
+    fa_targets: { lks: null, mny: null, pd: null, total: null },
+    kyoten_conv_target: null,
+    yomi: { comparable: false, note: "社内売上ヨミ(オンライン)は財務会計と定義が異なる可能性があるため参考値" },
+    note: ""
+  };
+
+  var SERVICE_KEYS = ["lks", "mny", "pd", "total"];
 
   var CH_ONLINE = "オンライン";
   var CH_KYOTEN = "拠点";
@@ -310,6 +325,148 @@
   }
 
   /* ------------------------------------------------------------------ *
+   * 目標（targets.json / UI 上書き） — 契約 v1.2
+   * ------------------------------------------------------------------ */
+
+  /**
+   * repo の targets.json と、閲覧者ローカルの上書きを畳んで正規化する。
+   * 値ごとに出所（repo / local / derived）を持たせ、UI が「どこから来た数字か」
+   * を明示できるようにする。純関数。
+   *
+   * @param {object} base     data.targets（build.py が注入した targets.json）
+   * @param {object} override UI/localStorage 由来の部分上書き（同じ形）
+   */
+  function normalizeTargets(base, override) {
+    base = base && typeof base === "object" ? base : {};
+    override = override && typeof override === "object" ? override : {};
+
+    var baseFa = (base.fa_targets && typeof base.fa_targets === "object") ? base.fa_targets : {};
+    var ovFa = (override.fa_targets && typeof override.fa_targets === "object") ? override.fa_targets : {};
+
+    var fa = {};
+    for (var i = 0; i < SERVICE_KEYS.length; i++) {
+      var k = SERVICE_KEYS[i];
+      var ov = num(ovFa[k]);
+      var bv = num(baseFa[k]);
+      if (ov !== null && ov > 0) fa[k] = { value: ov, source: "local" };
+      else if (bv !== null && bv > 0) fa[k] = { value: bv, source: "repo" };
+      else fa[k] = { value: null, source: null };
+    }
+
+    // total 未設定でも 3 サービスすべてに目標があれば合計を導出（出所を derived と明示）
+    if (fa.total.value === null) {
+      var sum = 0, all = true;
+      ["lks", "mny", "pd"].forEach(function (k2) {
+        if (fa[k2].value === null) all = false; else sum += fa[k2].value;
+      });
+      if (all && sum > 0) fa.total = { value: sum, source: "derived" };
+    }
+
+    var ovK = num(override.kyoten_conv_target);
+    var baseK = num(base.kyoten_conv_target);
+    var kyoten;
+    if (ovK !== null && ovK >= 0) kyoten = { value: ovK, source: "local" };
+    else if (baseK !== null && baseK >= 0) kyoten = { value: baseK, source: "repo" };
+    else kyoten = { value: null, source: null };
+
+    var baseYomi = (base.yomi && typeof base.yomi === "object") ? base.yomi : {};
+    var ovYomi = (override.yomi && typeof override.yomi === "object") ? override.yomi : {};
+    var comparable = ovYomi.comparable !== undefined ? !!ovYomi.comparable
+      : baseYomi.comparable !== undefined ? !!baseYomi.comparable
+        : DEFAULT_TARGETS.yomi.comparable;
+
+    var hasAnyFa = false;
+    for (var j = 0; j < SERVICE_KEYS.length; j++) if (fa[SERVICE_KEYS[j]].value !== null) hasAnyFa = true;
+
+    return {
+      fa: fa,
+      kyotenConvTarget: kyoten,
+      yomi: {
+        comparable: comparable,
+        note: (ovYomi.note || baseYomi.note || DEFAULT_TARGETS.yomi.note)
+      },
+      note: base.note || "",
+      hasAnyFa: hasAnyFa,
+      hasLocalOverride: (function () {
+        for (var x = 0; x < SERVICE_KEYS.length; x++) if (fa[SERVICE_KEYS[x]].source === "local") return true;
+        return kyoten.source === "local";
+      })()
+    };
+  }
+
+  /**
+   * 着地見込み(central) と目標の差分。
+   * 目標が未設定 / 0 以下なら null（呼び出し側は前月比にフォールバックする）。
+   *
+   * @returns {null|{target,diff,rate,met,shortfall}}
+   */
+  function targetDiff(landingCentral, target) {
+    var t = num(target);
+    var l = num(landingCentral);
+    if (t === null || !(t > 0) || l === null) return null;
+    var diff = l - t;
+    return {
+      target: t,
+      diff: diff,
+      rate: l / t,
+      met: diff >= 0,
+      shortfall: Math.max(0, -diff)
+    };
+  }
+
+  /**
+   * 成約件数の進捗（計画 vs 実績 vs 現ペース着地）。
+   *
+   * ゼロ除算・欠損の扱い:
+   *  - plan が無い → remaining / neededPace / rate / projectedDiff はすべて null
+   *  - 実績が計画以上 → remaining = 0、neededPace = 0（負にしない）
+   *  - 残日数 0 でまだ残がある → neededPace は算出不能(null) かつ unreachable = true
+   *
+   * @param {{plan:?number, actual:number, remainingDays:number, pace:?number,
+   *          label:?string, src:?string, asOf:?string}} o
+   */
+  function convProgress(o) {
+    o = o || {};
+    var plan = num(o.plan);
+    if (plan !== null && plan < 0) plan = 0;
+    var actual = Math.max(0, n0(o.actual, 0));
+    var days = Math.max(0, n0(o.remainingDays, 0));
+    var pace = num(o.pace);
+    if (pace === null || pace < 0) pace = 0;
+
+    var remaining = plan === null ? null : Math.max(0, plan - actual);
+    var neededPace = null;
+    var unreachable = false;
+    if (remaining !== null) {
+      if (remaining === 0) neededPace = 0;
+      else if (days <= 0) { neededPace = null; unreachable = true; }
+      else neededPace = remaining / days;
+    }
+
+    var projected = actual + pace * days;
+    var behind = unreachable || (neededPace !== null && neededPace > pace);
+
+    return {
+      label: o.label || "",
+      plan: plan,
+      hasPlan: plan !== null,
+      actual: actual,
+      remaining: remaining,
+      remainingDays: days,
+      neededPace: neededPace,
+      unreachable: unreachable,
+      pace: pace,
+      projected: projected,
+      projectedDiff: plan === null ? null : projected - plan,
+      rate: (plan !== null && plan > 0) ? actual / plan : null,
+      projectedRate: (plan !== null && plan > 0) ? projected / plan : null,
+      behind: behind,
+      src: o.src || null,
+      asOf: o.asOf || null
+    };
+  }
+
+  /* ------------------------------------------------------------------ *
    * buildModel
    * ------------------------------------------------------------------ */
 
@@ -327,12 +484,15 @@
     var q4 = rowsOf(data, "q4_lks_channel_booked");
     var q5 = rowsOf(data, "q5_conv_profile");
     var q6 = rowsOf(data, "q6_conv_actuals");
+    var q7 = rowsOf(data, "q7_conv_plan");
+    var q8 = rowsOf(data, "q8_yomi");
 
     var basisDate = data.basis_date || "";
     var targetMonth = data.target_month || monthOf(basisDate) || "";
     var basisDom = domOf(basisDate);
     var lastDom = lastDayOfMonth(targetMonth);
     if (basisDom > lastDom) basisDom = lastDom;
+    var remainingDays = Math.max(0, lastDom - basisDom + 1);
     var pm = prevMonth(targetMonth);
 
     // --- q1 履歴 ---
@@ -593,6 +753,76 @@
     withDelta(pd, prv.pd);
     withDelta(total, prv.total);
 
+    /* ---------------- 目標との差分（契約 v1.2） ---------------- */
+
+    var targets = normalizeTargets(data.targets, opts.targets);
+    var svcByKey = { lks: lks, mny: mny, pd: pd, total: total };
+    SERVICE_KEYS.forEach(function (k) {
+      var s = svcByKey[k];
+      var t = targets.fa[k];
+      s.target = t.value;
+      s.targetSource = t.source;
+      s.targetDiff = targetDiff(s.landing.central, t.value);
+      // 主表示の基準線: 目標があれば目標、無ければ前月実績
+      s.baseline = t.value !== null ? t.value : (s.prev > 0 ? s.prev : null);
+      s.baselineKind = t.value !== null ? "target" : (s.prev > 0 ? "prev" : null);
+    });
+
+    /* ---------------- 成約件数の進捗（q7 / 拠点目標） ---------------- */
+
+    function q7Row(ym) {
+      for (var i = 0; i < q7.length; i++) if (String(q7[i].month) === ym) return q7[i];
+      return null;
+    }
+    var planRow = q7Row(targetMonth);
+    var planOnline = null, planSrc = null, planAsOf = null;
+    if (planRow) {
+      var pr = num(planRow.plan_regular), ps = num(planRow.plan_sutara);
+      if (pr !== null || ps !== null) planOnline = (pr || 0) + (ps || 0);
+      var sr = planRow.src_regular ? String(planRow.src_regular) : null;
+      var ss = planRow.src_sutara ? String(planRow.src_sutara) : null;
+      // 片方でも「実績」なら実績寄りの行。両方同じならそれを採用。
+      planSrc = (sr && ss) ? (sr === ss ? sr : sr + "/" + ss) : (sr || ss);
+      planAsOf = planRow.as_of ? String(planRow.as_of) : null;
+    }
+
+    var validTotals = paceDefaults.validTotals;
+    var convProgressOnline = convProgress({
+      label: CH_ONLINE,
+      plan: planOnline,
+      actual: validTotals[CH_ONLINE] || 0,
+      remainingDays: remainingDays,
+      pace: paceOn,
+      src: planSrc,
+      asOf: planAsOf
+    });
+    var convProgressKyoten = convProgress({
+      label: CH_KYOTEN,
+      plan: targets.kyotenConvTarget.value,
+      actual: validTotals[CH_KYOTEN] || 0,
+      remainingDays: remainingDays,
+      pace: paceKy,
+      src: targets.kyotenConvTarget.source === "local" ? "手入力(この端末)"
+        : targets.kyotenConvTarget.source === "repo" ? "手入力(targets.json)" : null,
+      asOf: null
+    });
+
+    /* ---------------- 社内売上ヨミ（q8） ---------------- */
+
+    var yomiRow = null;
+    for (var iy = 0; iy < q8.length; iy++) if (String(q8[iy].month) === targetMonth) yomiRow = q8[iy];
+    var yomi = yomiRow ? {
+      month: targetMonth,
+      total: n0(yomiRow.yomi_total, 0),
+      asOf: yomiRow.as_of ? String(yomiRow.as_of) : null,
+      comparable: targets.yomi.comparable,
+      note: targets.yomi.note,
+      // comparable のときだけ「目標系列」として扱ってよい
+      role: targets.yomi.comparable ? "target" : "reference",
+      // オンライン売上のヨミなので、比較先は LKS 着地
+      diff: targets.yomi.comparable ? targetDiff(lks.landing.central, n0(yomiRow.yomi_total, 0)) : null
+    } : null;
+
     /* ---------------- 不変条件チェック ---------------- */
 
     var q6BookedSum = 0;
@@ -648,7 +878,7 @@
       lastDom: lastDom,
       targetMonth: targetMonth,
       prevMonth: pm,
-      remainingDays: Math.max(0, lastDom - basisDom + 1),
+      remainingDays: remainingDays,
       elapsedDays: Math.max(0, basisDom - 1),
       monthProgress: lastDom > 0 ? clamp((basisDom - 1) / lastDom, 0, 1) : 0,
       isMonthStart: isMonthStart,
@@ -715,9 +945,17 @@
       history: hist,
       checks: checks,
       notices: notices,
+      targets: targets,
+      conv: {
+        online: convProgressOnline,
+        kyoten: convProgressKyoten,
+        hasPlan: convProgressOnline.hasPlan || convProgressKyoten.hasPlan
+      },
+      yomi: yomi,
       rowCounts: {
         q1_official_monthly: q1.length, q2_lks_pending: q2.length, q3_mny_pd_pending: q3.length,
-        q4_lks_channel_booked: q4.length, q5_conv_profile: q5.length, q6_conv_actuals: q6.length
+        q4_lks_channel_booked: q4.length, q5_conv_profile: q5.length, q6_conv_actuals: q6.length,
+        q7_conv_plan: q7.length, q8_yomi: q8.length
       }
     };
   }
@@ -778,6 +1016,11 @@
     K_FALLBACK: K_FALLBACK,
     DEFAULT_LAG_WEIGHT: DEFAULT_LAG_WEIGHT,
     MONTH_START_DOM: MONTH_START_DOM,
+    DEFAULT_TARGETS: DEFAULT_TARGETS,
+    SERVICE_KEYS: SERVICE_KEYS,
+    normalizeTargets: normalizeTargets,
+    targetDiff: targetDiff,
+    convProgress: convProgress,
     rateOf: rateOf,
     buildProfile: buildProfile,
     defaultPaces: defaultPaces,
