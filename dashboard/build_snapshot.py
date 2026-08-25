@@ -16,12 +16,18 @@ from pathlib import Path
 # 生レスポンスの置き場。引数 --raw-dir か環境変数 RAW_DIR で指定(既定: このファイルと同階層の raw/)
 import os as _os
 _default_raw = Path(__file__).resolve().parent / "raw"
-if "--raw-dir" in sys.argv:
-    _default_raw = Path(sys.argv[sys.argv.index("--raw-dir") + 1])
-elif _os.environ.get("RAW_DIR"):
-    _default_raw = Path(_os.environ["RAW_DIR"])
+def _arg_path(flag, default):
+    if flag in sys.argv:
+        i = sys.argv.index(flag)
+        if i + 1 >= len(sys.argv):
+            sys.exit(f"ERROR: {flag} には値が必要です")
+        return Path(sys.argv[i + 1])
+    return default
+
+_default_raw = _arg_path("--raw-dir", Path(_os.environ["RAW_DIR"]) if _os.environ.get("RAW_DIR") else _default_raw)
 RAW_DIR = _default_raw
-OUT_PATH = Path("/home/user/triptrip/dashboard/data/latest.json")
+# 出力先。--out で上書き可(既定: このファイルと同階層の data/latest.json)
+OUT_PATH = _arg_path("--out", Path(__file__).resolve().parent / "data" / "latest.json")
 
 QUERIES = [
     "q1_official_monthly",

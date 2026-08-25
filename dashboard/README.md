@@ -7,7 +7,7 @@ LKS(SHElikes)・MNY(SHEmoney)・プロデ(SHElikes PRO)の当月末FA(財務会�
 ## 概要
 
 - ページはClaude Artifactとして公開する自己完結HTML。
-- 閲覧者が「Google Cloud BigQuery」コネクタを持っていれば、ページ内で6本のSQLをその場でライブ実行し、閲覧時点の日付を基準日として再計算する(mcp capability)。
+- 閲覧者が「Google Cloud BigQuery」コネクタを持っていれば、ページ内の「ライブ更新」ボタンで6本のSQLをその場で再実行し、閲覧時点の日付を基準日として再計算できる(mcp capability。閲覧しただけではクエリは実行されない)。
 - コネクタを持たない閲覧者には、ビルド時に埋め込まれた最新スナップショットを表示する。
 - 計算ロジックはすべて `logic.js` の純関数(DOM非依存)に集約されており、ライブ経路・スナップショット経路の両方が同じ関数を通る。これにより2経路の計算結果が常に一致する。
 
@@ -22,9 +22,13 @@ dashboard/
 │   ├── q4_lks_channel_booked.sql LKS 計上済みFAのチャネル(オンライン/拠点)按分
 │   ├── q5_conv_profile.sql       成約日別・1件あたり当月FA プロファイル(前月実測)
 │   └── q6_conv_actuals.sql       当月の成約実績(channel×日、有効/無効件数)
-├── build_snapshot.py             生のBigQuery RESTレスポンス(raw/q*.json相当)→ data/latest.json への型付き変換+不変条件チェッカー
+├── build_snapshot.py             生のBigQuery RESTレスポンス(raw/q*.json)→ data/latest.json への型付き変換+不変条件チェッカー
+├── raw/
+│   └── q*.json                   6クエリの生BigQuery RESTレスポンス(最終更新時の断面)
 ├── data/
 │   └── latest.json               6クエリの結果を型付きで格納したスナップショット
+├── testdata/
+│   └── snapshot-2026-08-25.json  回帰テスト専用の凍結スナップショット(日次更新の影響を受けない)
 ├── template.html                 /*__DATA__*/ プレースホルダを持つダッシュボードのHTML雛形
 ├── logic.js                      計算ロジック(純関数・DOM非依存)。スナップショット/ライブ経路共通
 ├── build.py                      latest.json を template.html に注入し out/dashboard.html を生成
@@ -38,7 +42,7 @@ dashboard/
 各SQLの要点:
 
 - **q1_official_monthly**: ソースは `sheinc_marts_output_spreadsheet_official_monitoring.monthly_financial_accounting`。当月の12ヶ月前〜テーブル上の未来月まで、`year_month`/`lks`/`mny`/`pd` を返す。全計算の起点(「現時点計上済み額」)。
-- **q2_lks_pending**: `int_membership_tokens` × `all_orders` に `int_likes_financial_accounting` のFAを突き合わせ、プラン(レギュラー/スタンダード/ライト/卒業生)×支払種別ごとに1日単価・①(未計上の残日数/件数)・④(滞納/処理ラグの残日数/件数)を出す。当月に最初の有効成約をした会員のオーダーは、②③との二重計上を避けるため①④の両方(window集計・early/lag集計)から除外を試みる(`all_orders` にユーザーIDが引けることが前提。引けない場合は除外なしで実装し、その旨をT1の検証結果に明記する)。
+- **q2_lks_pending**: `int_membership_tokens` × `all_orders` に `int_likes_financial_accounting` のFAを突き合わせ、プラン(レギュラー/スタンダード/ライト/卒業生)×支払種別ごとに1日単価・①(未計上の残日数/件数)・④(滞納/処理ラグの残日数/件数)を出す。当月に最初の有効成約をした会員のオーダーは、②③との二重計上を避けるため①④の両方(window集計・early/lag集計)から除外する(`all_orders` のユーザーIDで紐付け。実装・検証済み — 2026-08-25実測の除外規模: window側80件・約¥36万円/lag側45件・約¥62万円)。
 - **q3_mny_pd_pending**: q2と同じロジックだが `service_key IN ('money','multicreator')`、FAは `sheinc_marts_accounting.monthly_accounting` から取る。multicreator(プロデ)はこのテーブルにFAが載らない別パイプラインのため、`fa_per_day` がNULL/0になるのが仕様通りの挙動。件数列(`n_window`等)だけが意味を持つ。
 - **q4_lks_channel_booked**: `likes_conversions` の入会時(最初の有効成約)`trial_lesson_type` から `channel`(オンライン/拠点/分類不能)を判定し、`int_likes_financial_accounting` の当月FAをchannel別に集計する。成約記録が無いユーザーは「成約記録なし」。
 - **q5_conv_profile**: 前月に最初の有効成約をした会員について、成約日(dom)×channelごとの件数と1件あたり前月FA平均を出す。②・③の単価カーブの元になる。

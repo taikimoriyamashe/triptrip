@@ -667,6 +667,11 @@ dl { margin: 0; }
     if (text !== undefined && text !== null) e.textContent = String(text);
     return e;
   }
+  function icEl(glyph) {  // 装飾アイコン(意味は隣接テキストが担う)
+    var e = el("span", "ic", glyph);
+    e.setAttribute("aria-hidden", "true");
+    return e;
+  }
   function sv(tag, attrs) {
     var e = document.createElementNS(SVGNS, tag);
     if (attrs) for (var k in attrs) if (Object.prototype.hasOwnProperty.call(attrs, k)) e.setAttribute(k, String(attrs[k]));
@@ -1645,7 +1650,7 @@ dl { margin: 0; }
         var cal = el("div", "callout");
         cal.style.marginTop = "8px";
         var hh = el("div", "h");
-        hh.appendChild(el("span", "ic", "▲"));
+        hh.appendChild(icEl("▲"));
         hh.appendChild(document.createTextNode(errTitle(st.err.code)));
         cal.appendChild(hh);
         cal.appendChild(document.createTextNode(errBody(st.err)));
@@ -1703,7 +1708,7 @@ dl { margin: 0; }
       var n0 = ns[0];
       var c1 = el("div", "callout" + (n0.level === "info" ? " info" : ""));
       var h1 = el("div", "h");
-      h1.appendChild(el("span", "ic", n0.level === "info" ? "●" : "▲"));
+      h1.appendChild(icEl(n0.level === "info" ? "●" : "▲"));
       h1.appendChild(document.createTextNode(n0.title));
       c1.appendChild(h1);
       c1.appendChild(document.createTextNode(n0.body));
@@ -1715,7 +1720,7 @@ dl { margin: 0; }
     var worstWarn = ns.some(function (n) { return n.level !== "info"; });
     var c = el("div", "callout" + (worstWarn ? "" : " info"));
     var h = el("div", "h");
-    h.appendChild(el("span", "ic", worstWarn ? "▲" : "●"));
+    h.appendChild(icEl(worstWarn ? "▲" : "●"));
     h.appendChild(document.createTextNode("読み取り上の注意（" + ns.length + " 件）"));
     c.appendChild(h);
     var ul = el("ul");
@@ -1923,7 +1928,7 @@ dl { margin: 0; }
     host.hidden = false;
     var c = el("div", "callout" + (kind === "info" ? " info" : ""));
     var h = el("div", "h");
-    h.appendChild(el("span", "ic", kind === "info" ? "●" : "▲"));
+    h.appendChild(icEl(kind === "info" ? "●" : "▲"));
     h.appendChild(document.createTextNode(title));
     c.appendChild(h);
     c.appendChild(document.createTextNode(body));
