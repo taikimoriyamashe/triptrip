@@ -7,7 +7,7 @@ LKS(SHElikes)・MNY(SHEmoney)・プロデ(SHElikes PRO)の当月末FA(財務会�
 ## 概要
 
 - ページはClaude Artifactとして公開する自己完結HTML。
-- 閲覧者が「Google Cloud BigQuery」コネクタを持っていれば、ページ内の「ライブ更新」ボタンで6本のSQLをその場で再実行し、閲覧時点の日付を基準日として再計算できる(mcp capability。閲覧しただけではクエリは実行されない)。
+- 閲覧者が「Google Cloud BigQuery」コネクタを持っていれば、ページ内の「ライブ更新」ボタンで8本のSQLをその場で再実行し、閲覧時点の日付を基準日として再計算できる(mcp capability。閲覧しただけではクエリは実行されない)。
 - コネクタを持たない閲覧者には、ビルド時に埋め込まれた最新スナップショットを表示する。
 - 計算ロジックはすべて `logic.js` の純関数(DOM非依存)に集約されており、ライブ経路・スナップショット経路の両方が同じ関数を通る。これにより2経路の計算結果が常に一致する。
 
@@ -21,12 +21,15 @@ dashboard/
 │   ├── q3_mny_pd_pending.sql     MNY・プロデ 同等集計(service_key別)
 │   ├── q4_lks_channel_booked.sql LKS 計上済みFAのチャネル(オンライン/拠点)按分
 │   ├── q5_conv_profile.sql       成約日別・1件あたり当月FA プロファイル(前月実測)
-│   └── q6_conv_actuals.sql       当月の成約実績(channel×日、有効/無効件数)
-├── build_snapshot.py             生のBigQuery RESTレスポンス(raw/q*.json)→ data/latest.json への型付き変換+不変条件チェッカー
+│   ├── q6_conv_actuals.sql       当月の成約実績(channel×日、有効/無効件数)
+│   ├── q7_conv_plan.sql          オンライン成約の社内計画(ヨミ)件数 [v1.2]
+│   └── q8_yomi.sql               社内売上ヨミ(オンライン・金額) [v1.2]
+├── build_snapshot.py             生のBigQuery RESTレスポンス(raw/q*.json)→ data/latest.json への型付き変換+targets注入+不変条件チェッカー
 ├── raw/
-│   └── q*.json                   6クエリの生BigQuery RESTレスポンス(最終更新時の断面)
+│   └── q*.json                   8クエリの生BigQuery RESTレスポンス(最終更新時の断面)
 ├── data/
-│   └── latest.json               6クエリの結果を型付きで格納したスナップショット
+│   ├── latest.json               8クエリの結果を型付きで格納したスナップショット
+│   └── targets.json              月次FA目標・拠点成約目標・ヨミ比較可否フラグ(リポジトリ管理・人が編集する正)[v1.2]
 ├── testdata/
 │   └── snapshot-2026-08-25.json  回帰テスト専用の凍結スナップショット(日次更新の影響を受けない)
 ├── template.html                 /*__DATA__*/ プレースホルダを持つダッシュボードのHTML雛形
@@ -37,7 +40,7 @@ dashboard/
     └── dashboard.html            ビルド成果物。Claude Artifactとして公開する対象
 ```
 
-`build_snapshot.py` は、6クエリ実行で得た生のBigQuery RESTレスポンス(`raw/q1_official_monthly.json` 等)を読み込み、型付き変換を行って `data/latest.json` を生成し、続けてデータ契約の不変条件チェックを実行するスクリプト。次の2つのガードを持つ: (1) JST 00:00〜00:10の実行を中断する(月境界レースの回避)、(2) 生レスポンスの取得月と基準日の月が一致しない場合に中断する。
+`build_snapshot.py` は、8クエリ実行で得た生のBigQuery RESTレスポンス(`raw/q1_official_monthly.json` 等)を読み込み、型付き変換を行って `data/latest.json` を生成し、`dashboard/data/targets.json` の内容を `targets` として注入し、続けてデータ契約の不変条件チェック(v1.2で追加した「q7前月実績 vs q5実績」の整合チェック[7]を含む)を実行するスクリプト。次の2つのガードを持つ: (1) JST 00:00〜00:10の実行を中断する(月境界レースの回避)、(2) 生レスポンスの取得月と基準日の月が一致しない場合に中断する。
 
 各SQLの要点:
 
@@ -47,6 +50,8 @@ dashboard/
 - **q4_lks_channel_booked**: `likes_conversions` の入会時(最初の有効成約)`trial_lesson_type` から `channel`(オンライン/拠点/分類不能)を判定し、`int_likes_financial_accounting` の当月FAをchannel別に集計する。成約記録が無いユーザーは「成約記録なし」。
 - **q5_conv_profile**: 前月に最初の有効成約をした会員について、成約日(dom)×channelごとの件数と1件あたり前月FA平均を出す。②・③の単価カーブの元になる。
 - **q6_conv_actuals**: 当月の成約実績をchannel×domで集計し、全件数・有効件数(`is_valid_conversions`)・有効成約者の当月計上済みFAを返す。シナリオ入力のデフォルトペース算出と、事業側の件数認識との突き合わせに使う。
+- **q7_conv_plan** [v1.2]: ソースは `likes_monthly_online_revenue_forecast_inputs`(毎日更新のmaterialized出力。Drive外部テーブルは権限外のため使わない)。前月〜翌月の3行を返し、月ごとにオンライン成約の社内計画件数(レギュラー/スタライ)と出所(`src_regular`/`src_sutara` = '実績'|'ヨミ')を持つ(2026年8月はレギュラー639件+スタライ207件=846件)。拠点の計画はBigQuery上に存在しないため対象外(`targets.json`または画面入力で代替)。追加スキャンコストは実質ゼロ(実測13.6KB)。
+- **q8_yomi** [v1.2]: ソースは同データセットの `likes_monthly_online_revenue_forecast`。当月〜+2ヶ月のオンライン売上ヨミ(入会金ヨミ+月額ヨミの4成分合計)を返す。表示上の扱いは `targets.json` の `yomi.comparable` フラグに従う(既定false=参考値表示。バックテストで財務会計実績比+2.6〜3.8%過大と判定されたため)。追加スキャンコストは実質ゼロ(実測3.1KB)。
 
 SQLはすべて `CURRENT_DATE('Asia/Tokyo')` 基準で自己完結しており、パラメータは不要(いつ実行しても当月が対象になる)。BigQuery scripting(`DECLARE`)は使えないため単一SELECT文(`WITH`可)のみで書く。列エイリアスはそのまま `latest.json` のキーになるため、SQLを変更する場合は必ず `logic.js` と `test.js` を同期させること。
 
@@ -63,8 +68,11 @@ SQLはすべて `CURRENT_DATE('Asia/Tokyo')` 基準で自己完結しており�
     "q3_mny_pd_pending": {"rows": [...]},
     "q4_lks_channel_booked": {"rows": [...]},
     "q5_conv_profile": {"rows": [...]},
-    "q6_conv_actuals": {"rows": [...]}
+    "q6_conv_actuals": {"rows": [...]},
+    "q7_conv_plan": {"rows": [...]},
+    "q8_yomi": {"rows": [...]}
   },
+  "targets": { "...": "targets.json の内容(build_snapshot.pyが注入)" },
   "meta": {"bytes_processed": {"q1_official_monthly": 3234, "...": 0}}
 }
 ```
@@ -92,7 +100,7 @@ sql/q6_conv_actuals.sql ─────┘         │ /*__DATA__*/ プレース
                     │                                       │
       閲覧者がBigQueryコネクタを持つ場合              持たない場合
                     │                                       │
-   ページ内でq1〜q6を同一SQLでライブ再実行          埋め込み済みlatest.jsonを表示
+   ページ内でq1〜q8を同一SQLでライブ再実行          埋め込み済みlatest.jsonを表示
    (基準日=閲覧時点の日付)                                   │
                     │                                       │
                     └─────────────────┬─────────────────────┘
@@ -106,9 +114,9 @@ sql/q6_conv_actuals.sql ─────┘         │ /*__DATA__*/ プレース
 
 ### Claudeセッションが行う場合(自動)
 
-1. `sql/` 配下の6クエリを `shelikes-001` プロジェクト(読み取り専用)に対して実行する。`CURRENT_DATE('Asia/Tokyo')` 基準で自己完結しているため、パラメータの変更は不要。**6クエリは必ず1パスでまとめて取得し、クエリ間で時間を空けないこと**(基準日の断面の一貫性を保つため)。
-2. 各クエリの生のBigQuery RESTレスポンスを保存する(`raw/q1_official_monthly.json` 等)。
-3. `build_snapshot.py` を実行する。生レスポンスを `latest.json` のスキーマ(`generated_at`/`basis_date`/`target_month`/`queries.*.rows`/`meta.bytes_processed`)に型付き変換して `data/latest.json` を生成し(変換ロジックは `logic.js` の型変換処理と同一)、続けてデータ契約の不変条件チェックを実行して結果を出力する(下記「検証」参照)。**JST深夜0時台(00:00〜00:10)の実行は避けること**(月境界レース回避のガードにより中断される)。生レスポンスの取得月と基準月が一致しない場合も中断される。
+1. `sql/` 配下の8クエリを `shelikes-001` プロジェクト(読み取り専用)に対して実行する。`CURRENT_DATE('Asia/Tokyo')` 基準で自己完結しているため、パラメータの変更は不要。**8クエリは必ず1パスでまとめて取得し、クエリ間で時間を空けないこと**(基準日の断面の一貫性を保つため)。
+2. 各クエリの生のBigQuery RESTレスポンスを保存する(`raw/q1_official_monthly.json` 等、計8ファイル)。
+3. `build_snapshot.py` を実行する。生レスポンスを `latest.json` のスキーマ(`generated_at`/`basis_date`/`target_month`/`queries.*.rows`/`targets`/`meta.bytes_processed`)に型付き変換して `data/latest.json` を生成し(変換ロジックは `logic.js` の型変換処理と同一)、`dashboard/data/targets.json` の内容を `targets` として注入し、続けてデータ契約の不変条件チェック(v1.2で追加した「q7前月実績 vs q5実績」の整合チェック[7]を含む)を実行して結果を出力する(下記「検証」参照)。**JST深夜0時台(00:00〜00:10)の実行は避けること**(月境界レース回避のガードにより中断される)。生レスポンスの取得月と基準月が一致しない場合も中断される。
 4. `build.py` を実行して `out/dashboard.html` を再生成する。
 5. `out/dashboard.html` の内容でArtifactを再公開する(同一URLへの再デプロイ)。
 6. (日次Routineの場合)次回実行時刻まで待機する。
@@ -118,11 +126,37 @@ sql/q6_conv_actuals.sql ─────┘         │ /*__DATA__*/ プレース
 
 ### 人間が手動で行う場合
 
-1. BigQueryコンソールまたは `bq` コマンドで、`sql/` 配下の6本のSQLを `shelikes-001` プロジェクトに対して実行する(要・認証情報)。**6クエリは必ず1パスでまとめて取得し、クエリ間で時間を空けないこと**(基準日の断面の一貫性を保つため)。
-2. 各クエリの生のBigQuery RESTレスポンスを保存する(`raw/q1_official_monthly.json` 等)。
-3. `python build_snapshot.py` を実行して `data/latest.json` を生成する(データ契約の不変条件チェックも同時に実行される)。**JST深夜0時台(00:00〜00:10)の実行は避けること**(月境界レース回避のガードにより中断される)。
+1. BigQueryコンソールまたは `bq` コマンドで、`sql/` 配下の8本のSQLを `shelikes-001` プロジェクトに対して実行する(要・認証情報)。**8クエリは必ず1パスでまとめて取得し、クエリ間で時間を空けないこと**(基準日の断面の一貫性を保つため)。
+2. 各クエリの生のBigQuery RESTレスポンスを保存する(`raw/q1_official_monthly.json` 等、計8ファイル)。
+3. `python build_snapshot.py` を実行して `data/latest.json` を生成する(`dashboard/data/targets.json` の注入とデータ契約の不変条件チェックも同時に実行される)。**JST深夜0時台(00:00〜00:10)の実行は避けること**(月境界レース回避のガードにより中断される)。
 4. `python build.py` を実行して `out/dashboard.html` を生成する。
 5. `out/dashboard.html` の内容を、既存のArtifact URL(https://claude.ai/code/artifact/35c78380-ed5b-4438-8c85-4f928347034f)に再公開する、または当該URLを管理しているClaudeセッションに更新を依頼する。
+
+## 目標の設定方法 [v1.2]
+
+月次のFA目標・拠点の成約目標は `dashboard/data/targets.json`(リポジトリ管理・チーム共通の正)で設定する。スキーマ:
+
+```json
+{
+  "fa_targets": {"lks": null, "mny": null, "pd": null, "total": null},
+  "kyoten_conv_target": null,
+  "yomi": {"comparable": false, "note": "社内売上ヨミ(オンライン)は財務会計と定義が異なるため参考値。..."},
+  "note": "fa_targets は月次の目標FA(円)。null=未設定(UIは前月実績を基準線として表示)。"
+}
+```
+
+- `fa_targets.lks`/`mny`/`pd`/`total`: 各サービスの月次FA目標額(円)。`null`(未設定)の項目は、ダッシュボード側で前月実績を仮の基準線として表示する。
+- `kyoten_conv_target`: 拠点の当月成約目標件数。拠点の成約計画がBigQuery上に存在しないための代替設定値(オンラインの計画は `q7_conv_plan` から自動取得するため設定不要)。
+- `yomi.comparable`: 社内売上ヨミをFA目標として比較表示してよいかのフラグ。既定 `false`(バックテストでオンラインFA実績比+2.6〜3.8%の一貫した過大バイアスが確認されているため)。判定根拠は同フィールドの `note` に記録する。
+
+**編集手順**:
+
+1. `dashboard/data/targets.json` を直接編集し、値を入れる(`null` のままなら未設定=前月実績を基準線として扱う)。
+2. `python build_snapshot.py` → `python build.py` の順に実行し、`out/dashboard.html` を再生成する(`build_snapshot.py` が `targets.json` の内容を `data/latest.json` の `targets` に注入する)。
+3. `out/dashboard.html` の内容でArtifactを再公開する。
+4. 上記1〜3は、Claudeセッションに依頼すればまとめて実行してもらえる(例:「LKSの目標を¥3.6億に設定して」)。
+
+なお画面上で直接入力した目標値は、その端末の `localStorage` にのみ保存される一時的な上書きであり、`targets.json`(リポジトリの正)には反映されない。チーム全体に共有する目標にする場合は、上記手順で `targets.json` 自体を更新すること。
 
 ## 検証(test.js と不変条件)
 
