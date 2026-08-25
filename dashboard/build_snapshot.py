@@ -207,16 +207,21 @@ def main():
     print(f"[2] P1={p1:,.0f} P4={p4:,.0f}, negative count/day fields: {len(neg_fields)}, negative rates: {len(neg_rates)} -> {'OK' if cond2 else 'FAIL'}")
     ok &= cond2
 
-    # 3. q1 の固定アンカー月(契約不変条件3: 2026-07 検証済み実績)との一致。
-    #    q1 は当月-12ヶ月のローリング窓なので、アンカーが窓から外れた月(2027-08以降)は SKIP(FAILにしない)。
+    # 3. q1 の固定アンカー月(契約不変条件3: 2026-07 の2026-08-25検証時点実績)との一致。
+    #    許容誤差±0.1%: 公式テーブルは日次バッチで過去月も微修正される(契約既知事項、実測例:
+    #    2026-08-26 に 2026-07 lks が −69,493 円 = −0.019% 再計上)。差分は必ず表示し、±0.1%超はFAIL。
+    #    q1 の窓は前年度4/1起点のローリングなので、アンカーが窓から外れた月は SKIP(FAILにしない)。
     ANCHOR_MONTH = "2026-07"
     ANCHOR_VALUES = {"lks": 356607091, "mny": 4619550, "pd": 9080741}
+    ANCHOR_TOL_PCT = 0.1
     anchor = next((r for r in q1 if r["year_month"] == ANCHOR_MONTH), None)
     if anchor is None:
         print(f"[3] q1 anchor {ANCHOR_MONTH} is outside the rolling window (basis {target_month}) -> SKIP")
     else:
-        cond3 = all(anchor[k] == v for k, v in ANCHOR_VALUES.items())
-        print(f"[3] q1 {ANCHOR_MONTH} lks={anchor['lks']:,} mny={anchor['mny']:,} pd={anchor['pd']:,} -> {'OK' if cond3 else 'FAIL'}")
+        devs = {k: abs(anchor[k] - v) / v * 100 for k, v in ANCHOR_VALUES.items()}
+        cond3 = all(d <= ANCHOR_TOL_PCT for d in devs.values())
+        detail = " ".join(f"{k}={anchor[k]:,}({anchor[k] - ANCHOR_VALUES[k]:+,}, {devs[k]:.3f}%)" for k in ("lks", "mny", "pd"))
+        print(f"[3] q1 {ANCHOR_MONTH} vs 2026-08-25 anchor (tol ±{ANCHOR_TOL_PCT}%): {detail} -> {'OK' if cond3 else 'FAIL'}")
         ok &= cond3
 
     # 4. MNY rate in 500..900
@@ -262,6 +267,21 @@ def main():
         print(f"q1 {prev_month} (前月): lks={prev['lks']:,} mny={prev['mny']:,} pd={prev['pd']:,}")
     else:
         print(f"q1 {prev_month} (前月): not in q1 window")
+    # 年度(4月〜3月)サマリ [v1.3]: 当年度実績合計(4月〜前月・確定分)と前年度通期実績
+    fy_start_year = now.year if now.month >= 4 else now.year - 1
+    def fy_months(start_year):
+        return [f"{start_year}-{m:02d}" for m in range(4, 13)] + [f"{start_year + 1}-{m:02d}" for m in range(1, 4)]
+    q1map = {r["year_month"]: r for r in q1}
+    def fy_sum(months):
+        rows = [q1map[m] for m in months if m in q1map]
+        return {k: sum(r[k] for r in rows) for k in ("lks", "mny", "pd")}, len(rows)
+    cur_fy_actual_months = [m for m in fy_months(fy_start_year) if m < target_month]
+    s_cur, n_cur = fy_sum(cur_fy_actual_months)
+    print(f"FY{fy_start_year} 実績合計(4月〜前月, {n_cur}ヶ月): lks={s_cur['lks']:,} mny={s_cur['mny']:,} pd={s_cur['pd']:,} "
+          f"total={s_cur['lks'] + s_cur['mny'] + s_cur['pd']:,}")
+    s_prev_fy, n_prev_fy = fy_sum(fy_months(fy_start_year - 1))
+    print(f"FY{fy_start_year - 1} 通期実績({n_prev_fy}ヶ月): lks={s_prev_fy['lks']:,} mny={s_prev_fy['mny']:,} pd={s_prev_fy['pd']:,} "
+          f"total={s_prev_fy['lks'] + s_prev_fy['mny'] + s_prev_fy['pd']:,}")
     basis_dom = now.day
     last_dom = calendar.monthrange(now.year, now.month)[1]  # 当月末日を動的算出(30日月対応)
     for r in q2:
