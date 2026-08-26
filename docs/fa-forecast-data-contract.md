@@ -1,6 +1,6 @@
 > 注: 本文書はダッシュボード構築時の確定仕様(データ契約)の写しである。原本はセッション作業領域で管理されていたため、参照用にリポジトリへ収載した。文中のscratchpadパスは構築時の作業環境のもの。
 
-# 財務売上着地モニター データ契約 v1.1
+# 財務売上着地モニター データ契約 v1.3
 
 依頼元スレッド: Slack「7月財務売上」(C0AMVPZEN5N / 1784613152.986259)。全文: scratchpad/thread_messages.txt
 目的: LKS(SHElikes)・MNY(SHEmoney)・プロデ(SHElikes PRO=multicreator)の「今月これから計上予定の財務売上(FA)」と「月末着地見込み」を、Devinへの都度依頼なしで自動確認できるダッシュボードにする。
@@ -53,6 +53,48 @@
 - 出力列: `channel` STRING / `dom` INT / `n_all` INT / `n_valid` INT(is_valid_conversions) / `booked_fa_valid` INT(有効成約userの当月FA合計)
 - 検証: 事業側認識の成約件数は n_valid 基準と一致する(スレッド実証: オンライン498 vs 認識500)。
 
+### q7_conv_plan — オンライン成約の社内計画(ヨミ)件数 [v1.2追加]
+ソース: `sheinc_marts_output_spreadsheet_official_monitoring.likes_monthly_online_revenue_forecast_inputs`(毎日更新のmaterialized出力。Drive外部テーブルは権限不可のため使わない)
+- 範囲: 前月〜翌月(3行)。
+- 出力列: `month` STRING 'YYYY-MM'(=対象月) / `plan_regular` FLOAT(成約数_レギュラー) / `plan_sutara` FLOAT(成約数_スタライ=スタンダード+ライト) / `src_regular` STRING(成約数の出所: '実績'|'ヨミ') / `src_sutara` STRING / `as_of` DATE(計算日_as_of)
+- 意味: plan_regular+plan_sutara ≒ オンライン成約(valid)の月間計画。検証済み: 2026-07実績行 637+172=809 ≒ q6ベース7月オンラインvalid実績806。2026-08ヨミ 639+207=846。
+- 拠点の計画はBQに存在しない(Drive外部のみ)→ 手入力(targets.json / UI)で扱う。
+
+### q8_yomi — 社内売上ヨミ(オンライン・金額) [v1.2追加]
+ソース: 同データセット `likes_monthly_online_revenue_forecast`
+- 範囲: 当月〜+2ヶ月。出力列: `month` STRING / `yomi_total` FLOAT(入会金ヨミ+月額ヨミの4成分合計) / `as_of` DATE
+- 表示上の扱いは targets.json の `yomi.comparable` フラグに従う(T4が過去ヨミvs FA実績の突合で判定。既定 false=「参考値(定義が財務会計と異なる可能性)」表示)。
+
+### targets.json [v1.2追加] — repo `dashboard/data/targets.json`(コミット対象・人が編集)
+```json
+{
+  "fa_targets": {"lks": null, "mny": null, "pd": null, "total": null},
+  "kyoten_conv_target": null,
+  "yomi": {"comparable": false, "note": "社内売上ヨミ(オンライン)は財務会計と定義が異なる可能性があるため参考値"},
+  "note": "fa_targets は月次の目標FA(円)。null=未設定(UIは前月実績を基準線として表示)。"
+}
+```
+- build.py が DATA.targets として注入。UI: fa_targets 設定時は着地見込みとの差分・達成率を主表示、未設定時は前月実績比を基準に。閲覧者ローカルの一時上書き(localStorage、try/catch必須)可・明示リセット可。
+- 成約件数の目標差分(自動) [v1.2.1改定・R4 Important-1裁定]: 当月オンライン = q7 の plan 合計 vs q6 オンライン n_valid 実績。**実績には基準日当日分が含まれるため、成約進捗の残日数は基準日を除く**: convDays = max(0, 残日数−1)。残り必要ペース/日 = max(0, plan−実績) ÷ convDays(convDays=0 のときはゼロ除算せず「残0日」表示)。現ペース着地見込み = 実績 + paceオンライン × convDays。※③(FA)の残日数・シナリオペース定義は従来どおり(凍結回帰に波及させない)。拠点は kyoten_conv_target(またはUI入力)があれば同計算。kyoten_conv_target=0 は「未設定」として扱う。
+
+## v1.3: 通期達成シミュレーション(ユーザー要望「通期達成SIM機能もほしい」)
+
+前提(2026-08-25 実査で確定): SHEの年度は4月〜3月(社内計画テーブルが2027-03で途切れ、年度日数=365)。当年度=2026-04〜2027-03。売上ヨミ(q8ソース)は当月〜2027-03の全月が存在。
+
+### 契約変更
+1. **q1範囲拡張**: 下限を「前年度開始(=当年度開始の12ヶ月前)」に変更(現行の当月-12ヶ月より広い。列・意味は不変。行が増えるだけ)。前年度通期実績の算出を可能にする。
+2. **q8範囲拡張**: 上限を撤廃し「当月以降に存在する全月」(実質FY末まで)。列不変。
+3. **targets.json 追加フィールド**: `"fy_targets": {"total": null, "lks": null, "mny": null, "pd": null}`(当年度の通期目標FA、円) と `"fy_note"`。
+4. **logic.js: fySim(純関数)** — 入力: buildModelの結果 + data + simInputs {lksAdjPct(既定0), mnyMonthly(既定=直近3確定月平均), pdMonthly(同), perMonthLksOverride{ym→円}}。
+   - 年度月リスト: 4月..3月。各月 status = actual(過去月: q1実績) / current(当月: 着地モデル low/central/high) / future(将来月: 推定)。
+   - **LKS将来月推定** = max( q1のbooked_forward(M), yomi_total(M) × bias補正 × (1/オンライン構成比) × (1+lksAdjPct/100) )。bias補正: central=1/1.031、low=1/1.038、high=1/1.026(T4バックテストの+2.6〜3.8%)。オンライン構成比=q4当月構成比(≈0.918)。perMonthLksOverride があればその月はoverride値(band無し)。yomi欠損月は直近3確定月平均にフォールバック。
+   - **MNY/PD将来月推定** = max(q1 booked_forward(M), 編集可能な月次値: 既定=直近3確定月実績平均)。
+   - 通期見込み(central/low/high) = Σ実績 + 当月(low/central/high) + Σ将来月(band合成は単純加算)。
+   - fy_targets設定時: 達成率、差分、「残り月あたり必要FA」= max(0, 目標−実績−当月central) ÷ 残り将来月数。
+   - 前年度通期実績合計(q1から)を比較表示(前年度比)。
+5. **UI**: 新セクション「通期達成シミュレーション(2026年度)」— 年度サマリ(見込み・目標比・前年度比)、月次テーブル(実績=確定表記/当月=レンジ/将来=推定・編集可)、調整つまみ(LKS一括%・MNY/PD月次値・月別上書き・リセット)、月次+累積チャート(実績濃・当月レンジ・将来淡、目標線)。将来月は「ヨミ×補正の粗い推定で当月モデルと精度が異なる」旨を明示。localStorage(try/catch・端末のみ表示・出所表示)。
+6. 検証: fySimのユニットテスト(目標null/override/欠損yomi/年度境界=4月1日と3月31日/残0将来月)、実績月合計がq1と一致、当月がbuildModelと一致。
+
 ## latest.json スキーマ
 
 ```json
@@ -66,8 +108,11 @@
     "q3_mny_pd_pending": {"rows": [...]},
     "q4_lks_channel_booked": {"rows": [...]},
     "q5_conv_profile": {"rows": [...]},
-    "q6_conv_actuals": {"rows": [...]}
+    "q6_conv_actuals": {"rows": [...]},
+    "q7_conv_plan": {"rows": [...]},
+    "q8_yomi": {"rows": [...]}
   },
+  "targets": { "...": "targets.json の内容(build.pyが注入)" },
   "meta": {"bytes_processed": {"q1_official_monthly": 3234, "...": 0}}
 }
 ```
@@ -98,7 +143,7 @@ rows は型付きオブジェクト(数値は number、NULL は null)。BigQuery
 
 1. Σ q4.booked_fa ≒ q1当月lks(誤差 ±1%以内。スレッドでは完全一致)
 2. pending_low ≤ central ≤ high、各成分 ≥ 0
-3. q1 の 2026-07 が lks=356,607,091 / mny=4,619,550 / pd=9,080,741 と一致
+3. q1 の 2026-07 が 8/25検証時点アンカー(lks=356,607,091 / mny=4,619,550 / pd=9,080,741)と**±0.1%以内で一致** [v1.3.1改定: 公式テーブルは日次の修正再計上で過去月が数万円単位でドリフトするため(8/26実測 −0.019%)、完全一致でなく許容誤差付き照合とする。差分は常時表示し、超過はFAIL]
 4. MNY の rate が 500〜900円/日の範囲(スレッド実測 658〜706)
 5. Σ q6.booked_fa_valid ≤ q1当月lks
 6. multicreator の fa_per_day_cur が NULL または 0(別パイプライン仕様の確認)

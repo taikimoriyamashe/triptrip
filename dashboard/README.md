@@ -44,14 +44,14 @@ dashboard/
 
 各SQLの要点:
 
-- **q1_official_monthly**: ソースは `sheinc_marts_output_spreadsheet_official_monitoring.monthly_financial_accounting`。当月の12ヶ月前〜テーブル上の未来月まで、`year_month`/`lks`/`mny`/`pd` を返す。全計算の起点(「現時点計上済み額」)。
+- **q1_official_monthly**: ソースは `sheinc_marts_output_spreadsheet_official_monitoring.monthly_financial_accounting`。範囲は前年度開始(=当年度開始の12ヶ月前)〜テーブル上の未来月まで[v1.3で拡張。従来は当月の12ヶ月前まで]、`year_month`/`lks`/`mny`/`pd` を返す。全計算の起点(「現時点計上済み額」)であり、通期達成シミュレーション(前年度通期実績の算出・当年度実績月の確定値)にも使う。
 - **q2_lks_pending**: `int_membership_tokens` × `all_orders` に `int_likes_financial_accounting` のFAを突き合わせ、プラン(レギュラー/スタンダード/ライト/卒業生)×支払種別ごとに1日単価・①(未計上の残日数/件数)・④(滞納/処理ラグの残日数/件数)を出す。当月に最初の有効成約をした会員のオーダーは、②③との二重計上を避けるため①④の両方(window集計・early/lag集計)から除外する(`all_orders` のユーザーIDで紐付け。実装・検証済み — 2026-08-25実測の除外規模: window側80件・約¥36万円/lag側45件・約¥62万円)。
 - **q3_mny_pd_pending**: q2と同じロジックだが `service_key IN ('money','multicreator')`、FAは `sheinc_marts_accounting.monthly_accounting` から取る。multicreator(プロデ)はこのテーブルにFAが載らない別パイプラインのため、`fa_per_day` がNULL/0になるのが仕様通りの挙動。件数列(`n_window`等)だけが意味を持つ。
 - **q4_lks_channel_booked**: `likes_conversions` の入会時(最初の有効成約)`trial_lesson_type` から `channel`(オンライン/拠点/分類不能)を判定し、`int_likes_financial_accounting` の当月FAをchannel別に集計する。成約記録が無いユーザーは「成約記録なし」。
 - **q5_conv_profile**: 前月に最初の有効成約をした会員について、成約日(dom)×channelごとの件数と1件あたり前月FA平均を出す。②・③の単価カーブの元になる。
 - **q6_conv_actuals**: 当月の成約実績をchannel×domで集計し、全件数・有効件数(`is_valid_conversions`)・有効成約者の当月計上済みFAを返す。シナリオ入力のデフォルトペース算出と、事業側の件数認識との突き合わせに使う。
 - **q7_conv_plan** [v1.2]: ソースは `likes_monthly_online_revenue_forecast_inputs`(毎日更新のmaterialized出力。Drive外部テーブルは権限外のため使わない)。前月〜翌月の3行を返し、月ごとにオンライン成約の社内計画件数(レギュラー/スタライ)と出所(`src_regular`/`src_sutara` = '実績'|'ヨミ')を持つ(2026年8月はレギュラー639件+スタライ207件=846件)。拠点の計画はBigQuery上に存在しないため対象外(`targets.json`または画面入力で代替)。追加スキャンコストは実質ゼロ(実測13.6KB)。
-- **q8_yomi** [v1.2]: ソースは同データセットの `likes_monthly_online_revenue_forecast`。当月〜+2ヶ月のオンライン売上ヨミ(入会金ヨミ+月額ヨミの4成分合計)を返す。表示上の扱いは `targets.json` の `yomi.comparable` フラグに従う(既定false=参考値表示。バックテストで財務会計実績比+2.6〜3.8%過大と判定されたため)。追加スキャンコストは実質ゼロ(実測3.1KB)。
+- **q8_yomi** [v1.2]: ソースは同データセットの `likes_monthly_online_revenue_forecast`。範囲は当月以降に存在する全月(実質FY末=3月まで)[v1.3で上限を撤廃。従来は当月〜+2ヶ月]のオンライン売上ヨミ(入会金ヨミ+月額ヨミの4成分合計)を返す。表示上の扱いは `targets.json` の `yomi.comparable` フラグに従う(既定false=参考値表示。バックテストで財務会計実績比+2.6〜3.8%過大と判定されたため)。通期達成シミュレーションのLKS将来月推定にも使う。追加スキャンコストは実質ゼロ(実測3.1KB)。
 
 SQLはすべて `CURRENT_DATE('Asia/Tokyo')` 基準で自己完結しており、パラメータは不要(いつ実行しても当月が対象になる)。BigQuery scripting(`DECLARE`)は使えないため単一SELECT文(`WITH`可)のみで書く。列エイリアスはそのまま `latest.json` のキーになるため、SQLを変更する場合は必ず `logic.js` と `test.js` を同期させること。
 
@@ -82,15 +82,18 @@ SQLはすべて `CURRENT_DATE('Asia/Tokyo')` 基準で自己完結しており�
 ## データフロー図
 
 ```
-[BigQuery: shelikes-001]  (読み取り専用 SELECT ×6、CURRENT_DATE('Asia/Tokyo')基準・パラメータ不要)
+[BigQuery: shelikes-001]  (読み取り専用 SELECT ×8、CURRENT_DATE('Asia/Tokyo')基準・パラメータ不要)
         │
         ▼
 sql/q1_official_monthly.sql ─┐
 sql/q2_lks_pending.sql       │
-sql/q3_mny_pd_pending.sql    ├─▶ data/latest.json (型付きスナップショット)
-sql/q4_lks_channel_booked.sql│         │
-sql/q5_conv_profile.sql      │         │ build.py が template.html の
-sql/q6_conv_actuals.sql ─────┘         │ /*__DATA__*/ プレースホルダに注入
+sql/q3_mny_pd_pending.sql    │
+sql/q4_lks_channel_booked.sql├─▶ raw/q*.json ─▶ build_snapshot.py ─▶ data/latest.json
+sql/q5_conv_profile.sql      │   (生レスポンス)  (型付き変換+検証     (+ data/targets.json
+sql/q6_conv_actuals.sql      │                    +targets注入)        を注入)
+sql/q7_conv_plan.sql         │         │
+sql/q8_yomi.sql ─────────────┘         │ build.py が template.html の
+                                        │ /*__DATA__*/ プレースホルダに注入
                                         ▼
                               out/dashboard.html
                                         │
@@ -141,6 +144,8 @@ sql/q6_conv_actuals.sql ─────┘         │ /*__DATA__*/ プレース
   "fa_targets": {"lks": null, "mny": null, "pd": null, "total": null},
   "kyoten_conv_target": null,
   "yomi": {"comparable": false, "note": "社内売上ヨミ(オンライン)は財務会計と定義が異なるため参考値。..."},
+  "fy_targets": {"total": null, "lks": null, "mny": null, "pd": null},
+  "fy_note": "fy_targets は当年度(4月〜3月)の通期目標FA(円)。null=未設定(UIは前年度通期実績を基準線として表示)。",
   "note": "fa_targets は月次の目標FA(円)。null=未設定(UIは前月実績を基準線として表示)。"
 }
 ```
@@ -148,15 +153,21 @@ sql/q6_conv_actuals.sql ─────┘         │ /*__DATA__*/ プレース
 - `fa_targets.lks`/`mny`/`pd`/`total`: 各サービスの月次FA目標額(円)。`null`(未設定)の項目は、ダッシュボード側で前月実績を仮の基準線として表示する。
 - `kyoten_conv_target`: 拠点の当月成約目標件数。拠点の成約計画がBigQuery上に存在しないための代替設定値(オンラインの計画は `q7_conv_plan` から自動取得するため設定不要)。
 - `yomi.comparable`: 社内売上ヨミをFA目標として比較表示してよいかのフラグ。既定 `false`(バックテストでオンラインFA実績比+2.6〜3.8%の一貫した過大バイアスが確認されているため)。判定根拠は同フィールドの `note` に記録する。
+- `fy_targets.total`/`lks`/`mny`/`pd` [v1.3]: 当年度(2026年4月〜2027年3月)の通期目標FA(円)。現在は全項目 `null`(未設定)。設定すると通期達成シミュレーションで達成率・差分・「残り将来月あたり必要FA」を表示する。未設定時は前年度通期実績(FY2025合計¥4,354,284,641)との比較のみになる。
 
 **編集手順**:
 
-1. `dashboard/data/targets.json` を直接編集し、値を入れる(`null` のままなら未設定=前月実績を基準線として扱う)。
+1. `dashboard/data/targets.json` を直接編集し、値を入れる(`null` のままなら未設定=前月実績・前年度通期実績を基準線として扱う)。
 2. `python build_snapshot.py` → `python build.py` の順に実行し、`out/dashboard.html` を再生成する(`build_snapshot.py` が `targets.json` の内容を `data/latest.json` の `targets` に注入する)。
 3. `out/dashboard.html` の内容でArtifactを再公開する。
-4. 上記1〜3は、Claudeセッションに依頼すればまとめて実行してもらえる(例:「LKSの目標を¥3.6億に設定して」)。
+4. 上記1〜3は、Claudeセッションに依頼すればまとめて実行してもらえる(例:「LKSの目標を¥3.6億に設定して」「通期目標を¥42億に設定して」)。
 
-なお画面上で直接入力した目標値は、その端末の `localStorage` にのみ保存される一時的な上書きであり、`targets.json`(リポジトリの正)には反映されない。チーム全体に共有する目標にする場合は、上記手順で `targets.json` 自体を更新すること。
+**画面編集で使うlocalStorageキー** [v1.3で一覧化]:
+
+- `fa-monitor-targets-v1`: 月次目標(`fa_targets`)・通期目標(`fy_targets`)の画面上書き値。リポジトリの値との差分のみを保持し、値ごとの出所(`origin`: リポジトリ値かローカル上書きか)を記録する。
+- `fa-monitor-fysim-v1`: 通期達成シミュレーションの調整値(LKS一括調整%・LKS月別上書き・MNY/プロデの月次値)。
+
+いずれもその端末のブラウザにのみ保存され、`targets.json`(リポジトリの正)には反映されない。チーム全体に共有する目標・前提にする場合は、上記手順で `targets.json` 自体を更新すること。
 
 ## 検証(test.js と不変条件)
 
@@ -164,7 +175,7 @@ sql/q6_conv_actuals.sql ─────┘         │ /*__DATA__*/ プレース
 
 1. Σ `q4.booked_fa` ≒ q1当月の `lks`(誤差±1%以内)
 2. `low ≤ central ≤ high`、各成分は0以上
-3. q1の2026-07が `lks=356,607,091` / `mny=4,619,550` / `pd=9,080,741` と一致(固定の回帰チェック)
+3. q1の2026-07が `lks=356,607,091` / `mny=4,619,550` / `pd=9,080,741` と±0.1%以内で一致(固定の回帰チェック。[v1.3.1改定] 公式テーブルは日次の修正再計上で過去月が数万円単位でドリフトするため、完全一致ではなく許容誤差付きで照合する。差分は常時表示し、超過時はFAILとする。8/26実測: 7月lksの差分−69,493円)
 4. MNYの1日単価(`rate`)が500〜900円/日の範囲内(スレッド実測は658〜706円/日)
 5. Σ `q6.booked_fa_valid` ≤ q1当月の `lks`
 6. `multicreator` の `fa_per_day_cur` がNULLまたは0(別パイプライン仕様であることの確認)
