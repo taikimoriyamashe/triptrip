@@ -348,6 +348,9 @@ td.n, th.n { font-variant-numeric: tabular-nums; }
 #tbl-fy input[type="number"] {
   font-size: 13px; padding: 2px 6px; text-align: right; max-width: 110px; min-width: 74px;
 }
+/* 将来月の推定値は placeholder で出す。既定の placeholder 色は AA 未満になるため
+   本文系トークンまで持ち上げる（--ink-3 は --surface-2 上 5.16:1 / --surface 上 5.59:1）。 */
+#tbl-fy input[type="number"]::placeholder { color: var(--ink-3); opacity: 1; }
 #tbl-fy tr.is-current > td { background: var(--surface-2); }
 #tbl-fy tr.is-future > td { color: var(--ink-2); }
 #tbl-fy td.ovr { color: var(--ink); font-weight: 600; }
@@ -645,7 +648,7 @@ dl { margin: 0; }
     <div class="smallmult" id="chart-monthly"></div>
     <div class="legend" id="legend-monthly"></div>
     <details style="margin-top:12px">
-      <summary>月次推移を表で見る</summary>
+      <summary>月次推移を表で見る（グラフ範囲外＝前年度ぶんも含む全期間）</summary>
       <div class="body tablewrap">
         <table id="tbl-monthly">
           <thead><tr><th>年月</th><th class="n">SHElikes</th><th class="n">SHEmoney</th><th class="n">プロデ</th><th class="n">合計</th><th>区分</th></tr></thead>
@@ -683,7 +686,7 @@ dl { margin: 0; }
       </div>
       <div class="panel">
         <h3>累積（通期目標に届くか）</h3>
-        <div class="axisnote">縦軸: 百万円の累計。将来は帯が low–high。</div>
+        <div class="axisnote">縦軸: 百万円の累計。将来ぶんに low–high の帯を重ねるが、幅が数%未満の月は帯としてほぼ見えない（レンジの数値は上の本文と表に併記）。</div>
         <div class="chart" id="chart-fy-cum"></div>
       </div>
     </div>
@@ -746,6 +749,8 @@ dl { margin: 0; }
         </div>
       </div>
     </details>
+
+    <div id="fy-sim-warn" class="warnrow" hidden></div>
 
     <div class="tablewrap" style="margin-top:14px">
       <table id="tbl-fy">
@@ -953,6 +958,11 @@ dl { margin: 0; }
     return (neg ? "-" : "") + s.join(".");
   }
   function mRangeG(a, b, d) { return m1g(a, d) + " – " + m1g(b, d); }
+  /** 'YYYY-MM' → '2026年9月'（読み上げ用。ハイフン区切りは読みが崩れる）。 */
+  function ymJa(ym) {
+    var s = String(ym || "");
+    return /^\d{4}-\d{2}/.test(s) ? s.slice(0, 4) + "年" + (+s.slice(5, 7)) + "月" : s;
+  }
   function pct(v, d) { return L.fmtPct(v, d); }
   function pctPlain(v, d) { if (v === null || !isFinite(v)) return "—"; return (v * 100).toFixed(d === undefined ? 1 : d) + "%"; }
 
@@ -1287,7 +1297,7 @@ dl { margin: 0; }
       var panel = el("div", "panel");
       var h3 = el("h3", null, p.title);
       panel.appendChild(h3);
-      var note = el("div", "axisnote", "縦軸: 百万円（この面だけのスケール）");
+      var note = el("div", "axisnote", "縦軸: 百万円（この面だけのスケール）。横軸: 直近12ヶ月＋未来月");
       panel.appendChild(note);
       var holder = el("div", "chart");
       panel.appendChild(holder);
@@ -1311,12 +1321,25 @@ dl { margin: 0; }
     kbdHint(lg);
   }
 
+  /* 月次推移チャートの表示範囲: 過去12ヶ月 + 当月 + 未来月。
+     q1 は v1.3 で前年度頭まで伸びた（29 ヶ月）が、それを丸ごと描くと軸ラベルが衝突し
+     バーも 4px まで痩せる。前年度ぶんは通期SIM が別途扱うので、ここは表示だけ絞る。
+     fySim・前年度合計・下の表は m.history の全行をそのまま使う。 */
+  var MONTHLY_BACK = 12;
+  function monthlyWindow(m) {
+    var hist = (m && m.history) || [];
+    var cur = -1;
+    for (var i = 0; i < hist.length; i++) { if (hist[i].isCurrent) cur = i; }
+    var from = cur >= 0 ? cur - MONTHLY_BACK : hist.length - (MONTHLY_BACK + 1);
+    return hist.slice(Math.max(0, from));
+  }
+
   function drawMonthlyPanel(host, m, p) {
     clear(host);
     var W = Math.max(240, host.clientWidth || 340);
     var padL = 34, padR = 6, top = 10, plotH = 132, axisH = 26;
     var H = top + plotH + axisH;
-    var hist = m.history;
+    var hist = monthlyWindow(m);
     var n = hist.length || 1;
     var innerW = Math.max(30, W - padL - padR);
     var band = innerW / n;
@@ -1341,7 +1364,9 @@ dl { margin: 0; }
     function y(v) { return top + plotH - ((v - domainMin) / span) * plotH; }
 
     var svg = sv("svg", { viewBox: "0 0 " + W + " " + H, role: "img" });
-    svg.setAttribute("aria-label", p.title + " の月次公式FA推移。当月 " + m.meta.targetMonth +
+    svg.setAttribute("aria-label", p.title + " の月次公式FA推移" +
+      (hist.length ? "（" + hist[0].ym + "〜" + hist[hist.length - 1].ym + "）" : "") +
+      "。当月 " + m.meta.targetMonth +
       " の着地見込みは中央値 " + m1(p.svc.landing.central) + "百万円（レンジ " + mRange(p.svc.landing.low, p.svc.landing.high) + "）。");
 
     ticks.forEach(function (t) {
@@ -2664,7 +2689,8 @@ dl { margin: 0; }
     bits.push("オンライン構成比 " + pctPlain(fy.params.onlineShare) +
       (fy.params.onlineShareFallback ? "（q4 が取れず 100% として計算）" : "（q4 当月）"));
     if (fy.counts.floored) bits.push("前受計上分が推定を上回った月が " + fy.counts.floored + " ヶ月（フロア適用）");
-    if (fy.counts.overrides) bits.push("手入力で上書きした月が " + fy.counts.overrides + " ヶ月");
+    if (fy.counts.overrides) bits.push("手入力で上書きした月が " + fy.counts.overrides + " ヶ月" +
+      (fy.counts.clampedOverrides ? "（うち " + fy.counts.clampedOverrides + " ヶ月は前受計上分の下限に丸め）" : ""));
     if (fy.counts.missingActual) bits.push("q1 に無い実績月が " + fy.counts.missingActual + " ヶ月あり 0 円として扱っている");
     host.textContent = bits.join(" ／ ");
   }
@@ -2736,7 +2762,8 @@ dl { margin: 0; }
         var inp = el("input");
         inp.type = "number"; inp.min = "0"; inp.step = "0.1"; inp.inputMode = "decimal";
         inp.id = "fy-m-" + r.ym;
-        inp.setAttribute("aria-label", r.ym + " の SHElikes を上書き（百万円）");
+        // 値そのものを含む aria-label は updateFyValues が毎回付け直す（推定は再計算で動く）。
+        inp.setAttribute("aria-label", ymJa(r.ym) + "の SHElikes を上書き（百万円）");
         inp.addEventListener("input", onFyMonthInput);
         tdL.appendChild(inp);
         fyCells[r.ym] = { lksInput: inp, lksTd: tdL };
@@ -2768,9 +2795,22 @@ dl { margin: 0; }
         }
         c.lksInput.placeholder = m1(r.lks.central);
         c.lksTd.className = "n" + (r.basis === "override" ? " ovr" : "");
-        c.lksInput.title = r.basis === "override"
-          ? "上書き中。空欄にすると推定（" + m1g(r.lks.central) + " 百万円）に戻ります。"
-          : "推定 " + m1g(r.lks.central) + " 百万円（レンジ " + mRangeG(r.lks.low, r.lks.high) + "）。数値を入れると上書きできます。";
+        if (r.basis === "override") {
+          // 上書き中の欄は「いま効いている値」を読み上げる。丸めが効いた月はその事実も。
+          c.lksInput.title = r.overrideClamped
+            ? "入力 " + m1g(r.overrideInput) + " 百万円は計上済み前受（" + yen(r.bookedForward.lks) +
+              " 円）を下回るため、下限に丸めています。空欄にすると推定に戻ります。"
+            : "上書き中。空欄にすると推定（" + m1g(r.lks.central) + " 百万円）に戻ります。";
+          c.lksInput.setAttribute("aria-label",
+            ymJa(r.ym) + "の SHElikes 上書き " + m1g(r.lks.central) + " 百万円" +
+            (r.overrideClamped ? "（入力 " + m1g(r.overrideInput) + " を計上済み前受の下限に丸め）" : "") +
+            "。空欄にすると推定に戻る");
+        } else {
+          c.lksInput.title = "推定 " + m1g(r.lks.central) + " 百万円（レンジ " + mRangeG(r.lks.low, r.lks.high) +
+            "）。数値を入れると上書きできます。";
+          c.lksInput.setAttribute("aria-label",
+            ymJa(r.ym) + "の SHElikes 推定 " + m1g(r.lks.central) + " 百万円（上書き可・百万円で入力）");
+        }
       } else {
         c.lksTd.textContent = r.status === "current"
           ? m1g(r.lks.central) + "（" + mRangeG(r.lks.low, r.lks.high) + "）"
@@ -2783,13 +2823,35 @@ dl { margin: 0; }
         : m1g(r.total.central);
       c.cum.textContent = m1g(fy.cumulative[i].central);
       c.basis.textContent = FY_BASIS[r.basis] || r.basis || "";
-      if (r.floored) {
+      if (r.overrideClamped) {
+        // 入力値そのものは入力欄・上の注意チップ・title・aria-label に出る。ここは列幅を優先して短く。
+        c.basis.textContent += "（前受 " + m1g(r.bookedForward.lks) + " に丸め）";
+      } else if (r.floored) {
         c.basis.textContent += "（前受 " + m1g(r.bookedForward.lks) + " がフロア）";
       }
     });
+    renderFySimWarn(fy);
     $("fy-table-note").textContent =
       "金額は百万円・小数1桁。将来月の SHElikes 欄は上書きできます（空欄で推定に戻る）。" +
+      "上書きが計上済みの前受分を下回る場合は、その前受分を下限として丸めます。" +
       "当月は着地レンジを括弧で併記。累積は central の積み上げ。";
+  }
+
+  /** 上書きが前受計上分に丸められた月の注意表示（表の直上・常時見える位置）。 */
+  function renderFySimWarn(fy) {
+    var host = $("fy-sim-warn");
+    if (!host) return;
+    clear(host);
+    var hit = fy.months.filter(function (r) { return r.overrideClamped; });
+    host.hidden = !hit.length;
+    hit.forEach(function (r) {
+      var c = el("span", "chip is-warn");
+      c.appendChild(el("span", "dot"));
+      c.appendChild(document.createTextNode(
+        ymJa(r.ym) + "の入力値 " + m1g(r.overrideInput) + " 百万円は計上済み前受（" +
+        yen(r.bookedForward.lks) + " 円）を下回るため下限に丸めました"));
+      host.appendChild(c);
+    });
   }
 
   function renderFyTargets(m, fy) {

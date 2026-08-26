@@ -87,7 +87,7 @@
 3. **targets.json 追加フィールド**: `"fy_targets": {"total": null, "lks": null, "mny": null, "pd": null}`(当年度の通期目標FA、円) と `"fy_note"`。
 4. **logic.js: fySim(純関数)** — 入力: buildModelの結果 + data + simInputs {lksAdjPct(既定0), mnyMonthly(既定=直近3確定月平均), pdMonthly(同), perMonthLksOverride{ym→円}}。
    - 年度月リスト: 4月..3月。各月 status = actual(過去月: q1実績) / current(当月: 着地モデル low/central/high) / future(将来月: 推定)。
-   - **LKS将来月推定** = max( q1のbooked_forward(M), yomi_total(M) × bias補正 × (1/オンライン構成比) × (1+lksAdjPct/100) )。bias補正: central=1/1.031、low=1/1.038、high=1/1.026(T4バックテストの+2.6〜3.8%)。オンライン構成比=q4当月構成比(≈0.918)。perMonthLksOverride があればその月はoverride値(band無し)。yomi欠損月は直近3確定月平均にフォールバック。
+   - **LKS将来月推定** = max( q1のbooked_forward(M), yomi_total(M) × bias補正 × (1/オンライン構成比) × (1+lksAdjPct/100) )。bias補正: central=1/1.031、low=1/1.038、high=1/1.026(T4バックテストの+2.6〜3.8%)。オンライン構成比=q4当月構成比(≈0.918)。perMonthLksOverride があればその月はoverride値(band無し)。[v1.3.2] override は q1 の booked_forward(計上済み前受)を下限にクランプし、クランプ時はその旨を表示する(計上済み額を下回る月次FAは論理的にあり得ないため)。yomi欠損月は直近3確定月平均にフォールバック。
    - **MNY/PD将来月推定** = max(q1 booked_forward(M), 編集可能な月次値: 既定=直近3確定月実績平均)。
    - 通期見込み(central/low/high) = Σ実績 + 当月(low/central/high) + Σ将来月(band合成は単純加算)。
    - fy_targets設定時: 達成率、差分、「残り月あたり必要FA」= max(0, 目標−実績−当月central) ÷ 残り将来月数。

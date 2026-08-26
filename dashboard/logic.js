@@ -1062,6 +1062,11 @@
    * 精度の注意: 将来月は「社内売上ヨミ × バイアス補正 ÷ オンライン構成比」という粗い推定で、
    * 当月の ①〜④ 積み上げモデルとは精度が別物。UI で必ず明示すること。
    *
+   * 契約 v1.3 からの明示的な逸脱が 1 点: 月別上書き（perMonthLksOverride）にも
+   * booked_forward のフロアを掛ける。契約本文は「override 値（band 無し）」だが、
+   * すでに確定している前受計上額を下回る通期見込みを無警告で出さないための措置
+   * （R5 Minor-B）。丸めた月は row.overrideClamped=true / counts.clampedOverrides で分かる。
+   *
    * @param {object} model buildModel の結果
    * @param {object} data  latest.json 形状（q1 / q8 / targets を参照する）
    * @param {object} [sim] {lksAdjPct, mnyMonthly, pdMonthly, perMonthLksOverride:{ym:円}, targets}
@@ -1154,7 +1159,7 @@
       ? sim.perMonthLksOverride : {};
 
     // --- 月次行 ---
-    var months = [], overrideCount = 0, missingActual = 0, flooredCount = 0;
+    var months = [], overrideCount = 0, missingActual = 0, flooredCount = 0, clampedOverrides = 0;
     var sums = {
       actual: { lks: 0, mny: 0, pd: 0, total: 0 },
       future: { lks: band(0), mny: band(0), pd: band(0), total: band(0) }
@@ -1192,8 +1197,18 @@
         row.editable = true;
         var ov = num(ovr[ym]);
         if (ov !== null) {
-          row.lks = band(Math.max(0, ov));
+          // 上書きも booked_forward（すでに計上済みの前受分）をフロアにする。
+          // 契約 v1.3 の素の記述は「override 値（band 無し）」だが、確定済みの額を
+          // 下回る通期見込みを無警告で出さないため、他の 2 経路（yomi / avg3）と
+          // 同じフロアを適用し、丸めた事実を overrideClamped で UI に渡す（R5 Minor-B）。
+          var ovIn = Math.max(0, ov);
+          var ovFl = bf.lks > ovIn;
+          row.lks = band(ovFl ? bf.lks : ovIn);
           row.basis = "override";
+          row.overrideInput = ovIn;
+          row.overrideClamped = ovFl;
+          row.floored = ovFl;
+          if (ovFl) { flooredCount++; clampedOverrides++; }
           overrideCount++;
         } else if (yomiMap[ym] !== undefined) {
           var yv2 = yomiMap[ym];
@@ -1314,7 +1329,8 @@
       fyTotal: fyTotal,
       counts: {
         actual: actualCount, future: futureCount, current: current ? 1 : 0,
-        overrides: overrideCount, missingActual: missingActual, floored: flooredCount
+        overrides: overrideCount, missingActual: missingActual, floored: flooredCount,
+        clampedOverrides: clampedOverrides
       },
       goals: goals,
       prevFy: prevFy,

@@ -852,11 +852,49 @@ describe("fySim — 調整つまみ（一括%・月次値・月別上書き）",
   eq(ov.months[5].lks.low, 12345, "上書き月に band は無い");
   eq(ov.months[5].lks.high, 12345, "同上");
   eq(ov.counts.overrides, 1, "上書き件数");
+  eq(ov.months[5].overrideClamped, false, "前受 50 を上回る上書きは丸めない");
+  eq(ov.months[5].overrideInput, 12345, "入力値そのものを保持する");
+  eq(ov.counts.clampedOverrides, 0, "丸めた月は 0 件");
+  eq(ov.months[5].floored, false, "フロアは効いていない");
   near(ov.months[6].lks.central, base.months[6].lks.central, 1e-9, "他の月は変わらない");
-  var ovNeg = L.fySim(FYM, FYMINI, { perMonthLksOverride: { "2026-09": -5 } });
-  eq(ovNeg.months[5].lks.central, 0, "負の上書きは 0 に丸める");
   var ovBad = L.fySim(FYM, FYMINI, { perMonthLksOverride: { "2026-09": "abc" } });
   eq(ovBad.months[5].basis, "yomi", "数値でない上書きは無視（ヨミに戻る）");
+
+  // 上書きが前受計上分を下回るとき（R5 Minor-B）。9月の前受 lks は 50。
+  var ovLow = L.fySim(FYM, FYMINI, { perMonthLksOverride: { "2026-09": 10 } });
+  eq(ovLow.months[5].basis, "override", "丸めても根拠は override のまま");
+  eq(ovLow.months[5].bookedForward.lks, 50, "9月の前受計上分は 50");
+  eq(ovLow.months[5].lks.central, 50, "前受 50 を下回る上書きは 50 に丸める");
+  eq(ovLow.months[5].lks.low, 50, "丸めた月も band は無い");
+  eq(ovLow.months[5].lks.high, 50, "同上");
+  eq(ovLow.months[5].overrideInput, 10, "入力値は overrideInput に残す（UI の注意表示用）");
+  eq(ovLow.months[5].overrideClamped, true, "丸めたことを記録する");
+  eq(ovLow.months[5].floored, true, "フロア適用として扱う");
+  eq(ovLow.counts.overrides, 1, "上書き 1 件");
+  eq(ovLow.counts.clampedOverrides, 1, "うち丸めた月 1 件");
+  near(ovLow.fyTotal.lks.central, base.fyTotal.lks.central - base.months[5].lks.central + 50, 1e-9,
+    "通期 LKS は 9月ぶんだけ 50 に置き換わる");
+  var ovNeg = L.fySim(FYM, FYMINI, { perMonthLksOverride: { "2026-09": -5 } });
+  eq(ovNeg.months[5].overrideInput, 0, "負の上書きはまず 0 に丸める");
+  eq(ovNeg.months[5].lks.central, 50, "そのうえで前受 50 のフロアが効く");
+  eq(ovNeg.months[5].overrideClamped, true, "0 も前受を下回るので丸め扱い");
+  // 前受ちょうどの上書きは丸め扱いにしない（10月の前受 lks は 10）
+  var ovEq = L.fySim(FYM, FYMINI, { perMonthLksOverride: { "2026-10": 10 } });
+  eq(ovEq.months[6].lks.central, 10, "前受と同額の上書きはそのまま");
+  eq(ovEq.months[6].overrideClamped, false, "同額は丸めではない");
+  eq(ovEq.counts.clampedOverrides, 0, "丸めた月は 0 件");
+
+  // 前受が 1 円も無い月は 0 の上書きがそのまま通る（q1 に行が無いケース）
+  var noBf = clone(FYMINI);
+  noBf.queries.q1_official_monthly.rows = noBf.queries.q1_official_monthly.rows.filter(function (r) {
+    return r.year_month !== "2027-03";
+  });
+  var mNoBf = L.buildModel(noBf, { paceOn: 2, paceKyoten: 4, lagWeight: 0.5 });
+  var ovZero = L.fySim(mNoBf, noBf, { perMonthLksOverride: { "2027-03": 0 } });
+  eq(ovZero.months[11].bookedForward.lks, 0, "2027-03 に前受 LKS は無い");
+  eq(ovZero.months[11].lks.central, 0, "前受が無ければ 0 の上書きは 0 のまま");
+  eq(ovZero.months[11].overrideClamped, false, "丸めていない");
+  eq(ovZero.counts.clampedOverrides, 0, "丸めた月は 0 件");
 
   // MNY / PD の月次値
   var mp = L.fySim(FYM, FYMINI, { mnyMonthly: 500, pdMonthly: 700 });
@@ -1137,16 +1175,18 @@ describe("契約の不変条件（フィクスチャ / スナップショット�
 
   // 不変条件 3: q1 の 2026-07 実績
   // 契約の検証値は 2026-08-25 断面のもの。公式FAはバッチ更新で確定後も数万〜数十万円
-  // 動く（契約「既知の注意点」/ 8/20 実例 差 ¥68,287）ため、生データ側は 0.05% の
-  // 許容で見る。桁・列取り違えのような本物の回帰はこの幅では通らない。
+  // 動く（契約「既知の注意点」/ 8/20 実例 差 ¥68,287）ため、生データ側は許容つきで見る。
+  // 許容は契約 v1.3.1 と build_snapshot.py の ANCHOR_TOL_PCT に合わせて ±0.1%（R5 Minor-C）。
+  // 桁・列取り違えのような本物の回帰はこの幅では通らない。
   // 断面固定の厳密一致は testdata/snapshot-2026-08-25.json の凍結ブロックが担保する。
+  var ANCHOR_TOL = 0.001;  // = ±0.1%（契約 v1.3.1 / build_snapshot.py と同値）
   var jul = q1.filter(function (r) { return r.year_month === "2026-07"; })[0];
   if (jul) {
     [["lks", 356607091], ["mny", 4619550], ["pd", 9080741]].forEach(function (p) {
       var got = Number(jul[p[0]]), want = p[1], drift = got - want;
-      ok(Math.abs(drift) <= want * 0.0005,
-        "③ 2026-07 " + p[0] + " ≒ " + want.toLocaleString("ja-JP") + "（バッチ更新差 ±0.05%）",
-        "actual=" + got + " drift=" + drift);
+      ok(Math.abs(drift) <= want * ANCHOR_TOL,
+        "③ 2026-07 " + p[0] + " ≒ " + want.toLocaleString("ja-JP") + "（バッチ更新差 ±0.1%）",
+        "actual=" + got + " drift=" + drift + "（" + (want ? (drift / want * 100).toFixed(3) : "0") + "%）");
       if (drift !== 0) console.log("    note: 2026-07 " + p[0] + " は契約検証値から " + drift + " 円ずれている（バッチ更新差）");
     });
   } else { skipped("③ q1 に 2026-07 が無い"); }
