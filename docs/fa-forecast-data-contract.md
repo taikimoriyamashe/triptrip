@@ -54,11 +54,11 @@
 - 検証: 事業側認識の成約件数は n_valid 基準と一致する(スレッド実証: オンライン498 vs 認識500)。
 
 ### q7_conv_plan — オンライン成約の社内計画(ヨミ)件数 [v1.2追加]
-ソース: `sheinc_marts_output_spreadsheet_official_monitoring.likes_monthly_online_revenue_forecast_inputs`(毎日更新のmaterialized出力。Drive外部テーブルは権限不可のため使わない)
+ソース: `sheinc_marts_output_spreadsheet_official_monitoring.likes_monthly_online_revenue_forecast_inputs`(VIEW。実体は `sheinc_intermediate.int_likes_online_revenue_forecast_inputs` を `is_current_boundary AND scenario='A'` で絞ったもの)
 - 範囲: 前月〜翌月(3行)。
 - 出力列: `month` STRING 'YYYY-MM'(=対象月) / `plan_regular` FLOAT(成約数_レギュラー) / `plan_sutara` FLOAT(成約数_スタライ=スタンダード+ライト) / `src_regular` STRING(成約数の出所: '実績'|'ヨミ') / `src_sutara` STRING / `as_of` DATE(計算日_as_of)
 - 意味: plan_regular+plan_sutara ≒ オンライン成約(valid)の月間計画。検証済み: 2026-07実績行 637+172=809 ≒ q6ベース7月オンラインvalid実績806。2026-08ヨミ 639+207=846。
-- 拠点の計画はBQに存在しない(Drive外部のみ)→ 手入力(targets.json / UI)で扱う。
+- 拠点の計画は上流の `kyoten_regular_conversions`/`kyoten_stali_conversions` に存在するが、参照中のVIEWがオンライン専用のため未取込 → 現状は手入力(targets.json / UI)で扱う。
 
 ### q8_yomi — 社内売上ヨミ(オンライン・金額) [v1.2追加]
 ソース: 同データセット `likes_monthly_online_revenue_forecast`

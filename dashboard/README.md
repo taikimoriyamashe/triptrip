@@ -50,7 +50,7 @@ dashboard/
 - **q4_lks_channel_booked**: `likes_conversions` の入会時(最初の有効成約)`trial_lesson_type` から `channel`(オンライン/拠点/分類不能)を判定し、`int_likes_financial_accounting` の当月FAをchannel別に集計する。成約記録が無いユーザーは「成約記録なし」。
 - **q5_conv_profile**: 前月に最初の有効成約をした会員について、成約日(dom)×channelごとの件数と1件あたり前月FA平均を出す。②・③の単価カーブの元になる。
 - **q6_conv_actuals**: 当月の成約実績をchannel×domで集計し、全件数・有効件数(`is_valid_conversions`)・有効成約者の当月計上済みFAを返す。シナリオ入力のデフォルトペース算出と、事業側の件数認識との突き合わせに使う。
-- **q7_conv_plan** [v1.2]: ソースは `likes_monthly_online_revenue_forecast_inputs`(毎日更新のmaterialized出力。Drive外部テーブルは権限外のため使わない)。前月〜翌月の3行を返し、月ごとにオンライン成約の社内計画件数(レギュラー/スタライ)と出所(`src_regular`/`src_sutara` = '実績'|'ヨミ')を持つ(2026年8月はレギュラー639件+スタライ207件=846件)。拠点の計画はBigQuery上に存在しないため対象外(`targets.json`または画面入力で代替)。追加スキャンコストは実質ゼロ(実測13.6KB)。
+- **q7_conv_plan** [v1.2]: ソースは `likes_monthly_online_revenue_forecast_inputs`(VIEW。実体は `sheinc_intermediate.int_likes_online_revenue_forecast_inputs` を `is_current_boundary AND scenario='A'`=Aヨミで絞ったもの)。前月〜翌月の3行を返し、月ごとにオンライン成約の社内計画件数(レギュラー/スタライ)と出所(`src_regular`/`src_sutara` = '実績'|'ヨミ')を持つ(2026年8月はレギュラー639件+スタライ207件=846件)。拠点の計画は上流テーブルの `kyoten_regular_conversions`/`kyoten_stali_conversions` に存在するが、このVIEWがオンライン専用のため未取込(現状は`targets.json`または画面入力で代替。上流を直接参照すれば自動化可能)。追加スキャンコストは実質ゼロ(実測13.6KB)。
 - **q8_yomi** [v1.2]: ソースは同データセットの `likes_monthly_online_revenue_forecast`。範囲は当月以降に存在する全月(実質FY末=3月まで)[v1.3で上限を撤廃。従来は当月〜+2ヶ月]のオンライン売上ヨミ(入会金ヨミ+月額ヨミの4成分合計)を返す。表示上の扱いは `targets.json` の `yomi.comparable` フラグに従う(既定false=参考値表示。バックテストで財務会計実績比+2.6〜3.8%過大と判定されたため)。通期達成シミュレーションのLKS将来月推定にも使う。追加スキャンコストは実質ゼロ(実測3.1KB)。
 
 SQLはすべて `CURRENT_DATE('Asia/Tokyo')` 基準で自己完結しており、パラメータは不要(いつ実行しても当月が対象になる)。BigQuery scripting(`DECLARE`)は使えないため単一SELECT文(`WITH`可)のみで書く。列エイリアスはそのまま `latest.json` のキーになるため、SQLを変更する場合は必ず `logic.js` と `test.js` を同期させること。
@@ -151,7 +151,7 @@ sql/q8_yomi.sql ─────────────┘         │ build.py 
 ```
 
 - `fa_targets.lks`/`mny`/`pd`/`total`: 各サービスの月次FA目標額(円)。`null`(未設定)の項目は、ダッシュボード側で前月実績を仮の基準線として表示する。
-- `kyoten_conv_target`: 拠点の当月成約目標件数。拠点の成約計画がBigQuery上に存在しないための代替設定値(オンラインの計画は `q7_conv_plan` から自動取得するため設定不要)。
+- `kyoten_conv_target`: 拠点の当月成約目標件数。拠点の計画は上流テーブルに存在するものの現行クエリが取り込んでいないための代替設定値(オンラインの計画は `q7_conv_plan` から自動取得するため設定不要)。
 - `yomi.comparable`: 社内売上ヨミをFA目標として比較表示してよいかのフラグ。既定 `false`(バックテストでオンラインFA実績比+2.6〜3.8%の一貫した過大バイアスが確認されているため)。判定根拠は同フィールドの `note` に記録する。
 - `fy_targets.total`/`lks`/`mny`/`pd` [v1.3]: 当年度(2026年4月〜2027年3月)の通期目標FA(円)。現在は全項目 `null`(未設定)。設定すると通期達成シミュレーションで達成率・差分・「残り将来月あたり必要FA」を表示する。未設定時は前年度通期実績(FY2025合計¥4,354,284,641)との比較のみになる。
 
