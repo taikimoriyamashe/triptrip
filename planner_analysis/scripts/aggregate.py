@@ -176,7 +176,7 @@ def build(sub_df, keys):
 # ---------- ②個人×月×役割 ----------
 keys = ['planner_id','planner_name','lesson_month','role_category','role_subcategory']
 ind = build(df, keys)
-ind['is_employee'] = ind['role_category'].eq('SE') | ind['role_subcategory'].isin(['その他_generalist(社員)','その他_社員等(メタなし/未設定)','その他_CMM(拠点)'])
+ind['is_employee'] = ind['role_category'].eq('SE') | ind['role_subcategory'].isin(['その他_generalist(社員)','その他_社員等(メタなし/未設定)','その他_CMM(拠点)','その他_other'])
 multi = ind.groupby(['planner_id','lesson_month'])['role_category'].nunique().rename('n_roles_in_month').reset_index()
 ind = ind.merge(multi, on=['planner_id','lesson_month'], how='left')
 ind['role_changed_in_month'] = ind['n_roles_in_month'] > 1

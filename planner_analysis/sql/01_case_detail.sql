@@ -150,9 +150,9 @@ SELECT
   -- 報酬（業務委託レートカード 2026-07-16版 業務規定 / 成約インセンティブはBQ算出値）
   d.conversion_incentive AS incentive_yen_bq,  -- BQ算出の成約インセンティブ（ご入会かつ支払対象のみ値が入る）
   CASE WHEN d.conversion_status = 'ご入会' AND d.incentive_conversion_flg = 1 THEN d.conversion_incentive ELSE 0 END AS incentive_yen_payable,
-  CASE WHEN d.role_category = 'SE' OR d.role_subcategory IN ('その他_generalist(社員)','その他_社員等(メタなし/未設定)','その他_CMM(拠点)') THEN TRUE ELSE FALSE END AS is_employee_no_shift_fee,
+  CASE WHEN d.role_category = 'SE' OR d.role_subcategory IN ('その他_generalist(社員)','その他_社員等(メタなし/未設定)','その他_CMM(拠点)','その他_other') THEN TRUE ELSE FALSE END AS is_employee_no_shift_fee,
   CASE
-    WHEN d.role_category = 'SE' OR d.role_subcategory IN ('その他_generalist(社員)','その他_社員等(メタなし/未設定)','その他_CMM(拠点)') THEN 0  -- 社員（SE/generalist/CMM/メタなし社員）: 給与制、シフト単価なし
+    WHEN d.role_category = 'SE' OR d.role_subcategory IN ('その他_generalist(社員)','その他_社員等(メタなし/未設定)','その他_CMM(拠点)','その他_other') THEN 0  -- 社員（SE/generalist/CMM/メタなし社員/旧other=2026-06-03以前のgeneralist・CMM相当）: 給与制、シフト単価なし
     WHEN IFNULL(d.attendance_status, 0) = 5 THEN 1500  -- 最低保証（開催なし）
     WHEN IFNULL(d.attendance_status, 0) <> 2 THEN 0    -- 未実施（登録中/欠席/ご自愛/フィジビリ）
     WHEN d.role_name = 'リーダー' THEN 10000
