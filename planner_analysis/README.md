@@ -5,7 +5,7 @@
 - データソース: BigQuery `shelikes-001`（dbt marts）。Lightdash プロジェクト `SHE_planner` / `SHE` の同名 Explore と同じテーブルを参照。
 - 成果物（`planner_analysis/output/`）
   - `planner_productivity_2026.xlsx` … 全シート入り（明細は2026-07以降のみ。全期間明細はCSV）
-  - `01_case_detail_2026.csv` … ①案件単位明細（2026-01-01〜2026-09-30 登録分、119列）
+  - `01_case_detail_2026.csv.gz` … ①案件単位明細（2026-01-01〜2026-09-30 登録分、35,848行×122列。gzip圧縮。`gunzip -k` で展開）
   - `02_individual_month.csv` / `02b_individual_period.csv` … ②個人×月×役割区分 / 個人×期間（2026-07以降、2026-01以降）
   - `03_role_month.csv` / `03b_role_subcategory_month.csv` / `03c_role_period.csv` … ③役割別月次 / サブ区分別 / 期間合計
   - `04_top_performers_period.csv` / `04b_top_performers_month.csv` … 成約率とシフト数の両方が役割中央値以上の上位者
