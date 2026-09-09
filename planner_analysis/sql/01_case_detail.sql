@@ -160,7 +160,7 @@ SELECT
     WHEN d.role_name = 'サポートプランナー' THEN 1500
     WHEN d.role_name = 'プランナー' AND d.role_category = 'EP' THEN 4000
     WHEN d.role_name = 'プランナー' AND d.role_category = 'CP' THEN 2500
-    WHEN d.role_name = 'プランナー' THEN 2500 -- その他の業務委託（legacy/other）は暫定CP単価
+    WHEN d.role_name = 'プランナー' THEN 2500 -- 残りは legacy(lead/specialist)/unknown のみ。暫定CP単価
     ELSE 0 END AS shift_unit_yen,
   -- 収益
   e.entranceamount_without_tax, e.membership_plan_amount, e.membership_plan_discount_amount, e.entrance_plan_discount_amount,

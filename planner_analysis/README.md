@@ -12,7 +12,9 @@
   - `05_reconciliation.csv` … 既存集計「その他」参考値との検算
   - `06_planner_roster_check.csv` … SE15名リスト照合・表記揺れ・SE判定
   - `07_role_change_history.csv` … 対象期間中に役割区分が変わった人の履歴
-- 再現手順: `sql/01_case_detail.sql` の `@start_date/@end_date` を置換して BigQuery で実行 → `scripts/bq_result_to_csv.py` でCSV化 → `python3 scripts/aggregate.py output/01_case_detail_2026.csv output 2026-09-09`
+- 再現手順: `sql/01_case_detail.sql` の `@start_date/@end_date` を置換して BigQuery で実行 → `scripts/bq_result_to_csv.py` でCSV化 → `gunzip -k output/01_case_detail_2026.csv.gz`（配布物から再集計する場合）→ `python3 scripts/aggregate.py output/01_case_detail_2026.csv output 2026-09-09`
+- Excel「①明細(2026-07以降)」は CSV の122列に集計用の派生列7本（`is_primary_participant_row`, `is_dup_participant_row`, `incentive_yen_paid`, `*_valid` 収益列 等）を加えた129列。
+- 報酬関連の注意: SE・その他（社員）の `total_reward_yen=0` は「無償」ではなく**給与制のためBQで取得不能**。③系には `is_employee_category` / `reward_note` 列、②系には `is_employee` / `reward_note` 列を付け、社員行の 報酬÷成約 等は空欄にしている。
 
 ## 1. 最新確定日・データ更新日時（2026-09-09 13:00 JST 時点）
 
@@ -129,6 +131,7 @@
 | 2026-08 | 669 / 264 / 39.46% | 682 / 266 / 39.00% | 713 / 278 / 38.99% | **670 / 264 / 39.40%** |
 | 2026-09途中 | 191 / 59 / 30.89% | 212 / 65 / 30.66% | 212 / 65 / 30.66% | 195 / 61 / 31.28% |
 
+- ③役割別月次の `participants_lead` は**個人ごとにユニーク化した参加者の合計（延べ）**のため、同一予約に2人のリードが付いた予約（2026年通期で76件/約2万件）は2人分に数える。⑤検算 C の `participants` は月単位ユニーク（803 vs 798 の差はこの共同リード分）。`participants_gross_per_planner` 列に延べ値を併記。
 - 既存集計の「その他」は **SE社員14〜15名の成績**（`planner_grade='other'` = SE のグレード値）であり、社員一般ではない。本抽出の C（SE・リード）と8月は最終成約数が完全一致、7月も参加数±5・成約数±4で整合。
 - 差分理由: ①データ取得日の差（9月は本抽出が9/9まで含む。7月の成約は後日成約・お試し→本入会の反映で増加、クーオフ確定で減少）②役割判定の差（既存は現在値のため、8/25にCPへ変更された大場史子の7〜8月分がSEから外れる。本抽出は実施日時点でSEに含める）③集計行の差（既存集計は GCアシスト行や複数役割行を含む可能性。本抽出は主行のみ・リードのみ）④成約定義は同一（`conversion_status='ご入会'`＝Lightdash「最終レッスン成約数（クーオフ除く）」）。
 

@@ -176,12 +176,15 @@ def build(sub_df, keys):
 # ---------- ②個人×月×役割 ----------
 keys = ['planner_id','planner_name','lesson_month','role_category','role_subcategory']
 ind = build(df, keys)
-ind['is_employee'] = ind['role_category'].eq('SE') | ind['role_subcategory'].isin(['その他_generalist(社員)','その他_社員等(メタなし/未設定)','その他_CMM(拠点)','その他_other'])
+ind = ind.merge(df.groupby(keys)['is_employee'].max().reset_index(), on=keys, how='left')
+ind['is_employee'] = ind['is_employee'].fillna(False).astype(bool)
 multi = ind.groupby(['planner_id','lesson_month'])['role_category'].nunique().rename('n_roles_in_month').reset_index()
 ind = ind.merge(multi, on=['planner_id','lesson_month'], how='left')
 ind['role_changed_in_month'] = ind['n_roles_in_month'] > 1
 ind['sample_insufficient_flag'] = ind['participants_lead'] < MIN_SAMPLE_PARTICIPANTS
 ind['reward_note'] = np.where(ind['is_employee'], '社員（給与）: 業務委託レート非適用。total_reward_yen=0。incentive_yen_payable_ref は業務委託レート換算の参考額', '')
+for c in ['reward_per_valid_yen','valid_per_reward_1man_yen','first_month_revenue_per_reward','entrance_fee_per_reward']:
+    ind[c] = np.where(ind['is_employee'], np.nan, ind[c])
 ind = ind.sort_values(['lesson_month','role_category','planner_id'])
 
 # 役割区分粒度（サブ区分を畳む）: 上位者・分布用
@@ -190,6 +193,8 @@ def collapse_to_role(t, extra_keys):
     sum_cols = [c for c in t.columns if c not in k + ['role_subcategory','is_employee','n_roles_in_month','role_changed_in_month','sample_insufficient_flag','reward_note','period','months_active']
                 and not (c.endswith('_rate_lead') or c.endswith('_rate_all') or c.endswith('_rate_shift') or c.startswith('valid_per') or c.startswith('participants_per') or c.endswith('_per_reward') or c in ['reward_per_valid_yen','weighted_vcv_achievement','total_reward_yen','valid_per_100_lead_shift'])]
     g = t.groupby(k, dropna=False)[sum_cols].sum().reset_index()
+    if 'is_employee' in t.columns:
+        g = g.merge(t.groupby(k, dropna=False)['is_employee'].max().reset_index(), on=k, how='left')
     return add_rates(g)
 
 # ---------- 個人別 期間合計 ----------
@@ -197,8 +202,13 @@ def period_summary(mask, label):
     t = build(df[mask], ['planner_id','planner_name','role_category'])
     ma = df[mask & (df['attendance_status'] == 2)].groupby(['planner_id','planner_name','role_category'])['lesson_month'].nunique().rename('months_active').reset_index()
     t = t.merge(ma, on=['planner_id','planner_name','role_category'], how='left').fillna({'months_active': 0})
-    t['is_employee'] = t['role_category'].eq('SE') | (t['role_category'].eq('その他') & (t['shift_fee_yen'] == 0) & (t['incentive_yen_paid'] == 0) & (t['incentive_yen_payable_ref'] > 0))
+    emp = df[mask].groupby(['planner_id','planner_name','role_category'])['is_employee'].max().reset_index()
+    t = t.merge(emp, on=['planner_id','planner_name','role_category'], how='left')
+    t['is_employee'] = t['is_employee'].fillna(False).astype(bool)
     t['sample_insufficient_flag'] = t['participants_lead'] < MIN_SAMPLE_PARTICIPANTS
+    t['reward_note'] = np.where(t['is_employee'], '社員（給与）: 業務委託レート非適用。total_reward_yen=0 は未取得。incentive_yen_payable_ref は業務委託レート換算の参考額', '')
+    for c in ['reward_per_valid_yen','valid_per_reward_1man_yen','first_month_revenue_per_reward','entrance_fee_per_reward']:
+        t[c] = np.where(t['is_employee'], np.nan, t[c])
     t['period'] = label
     return t
 ind_period = pd.concat([period_summary(df['lesson_month'] >= '2026-07', '2026-07以降'),
@@ -226,6 +236,7 @@ def role_agg(t_ind, group_cols):
         r['headcount_active'] = g.loc[g['shift_attended'] > 0, 'planner_id'].nunique()
         r['headcount_with_lead'] = g.loc[g['participants_lead'] > 0, 'planner_id'].nunique()
         r['headcount_sample_ge30'] = g.loc[g['participants_lead'] >= MIN_SAMPLE_PARTICIPANTS, 'planner_id'].nunique()
+        r['headcount_employee'] = g.loc[g['is_employee'], 'planner_id'].nunique() if 'is_employee' in g.columns else 0
         for c in SUM_COLS:
             r[c] = g[c].sum()
         # 個人分布（分母がある個人=リード参加者1人以上。全個人で算出し、サンプル不足は headcount_sample_ge30 で判断）
@@ -241,9 +252,15 @@ def role_agg(t_ind, group_cols):
     t['subsidy_valid_rate_lead'] = rate(t['lead_valid_subsidy_target'], t['lead_subsidy_target'])
     t['difficulty456_valid_rate_lead'] = rate(t['lead_valid_difficulty_4_5_6'], t['lead_difficulty_4_5_6'])
     t['utm_other_valid_rate_lead'] = rate(t['lead_valid_utm_other'], t['lead_utm_other'])
+    t['is_employee_category'] = (t['headcount_employee'] > 0) & (t['headcount_employee'] == t['headcount_registered'])
+    t['reward_note'] = np.where(t['headcount_employee'] > 0,
+        np.where(t['is_employee_category'], '全員社員（給与制・BQ未取得）: total_reward_yen=0 は無償ではなく未取得。業務委託レート換算のインセンティブ参考額は incentive_yen_payable_ref',
+                 '社員と業務委託が混在: 報酬は業務委託分のみ'), '')
+    for c in ['reward_per_valid_yen','valid_per_reward_1man_yen','first_month_revenue_per_reward','entrance_fee_per_reward','reward_per_active_planner']:
+        if c in t.columns: t[c] = np.where(t['total_reward_yen'] > 0, t[c], np.nan)
     t['shifts_per_active_planner'] = rate(t['shift_attended'], t['headcount_active'])
     t['valid_per_active_planner'] = rate(t['valid_lead'], t['headcount_active'])
-    t['reward_per_active_planner'] = rate(t['total_reward_yen'], t['headcount_active'])
+    t['reward_per_active_planner'] = np.where(t['total_reward_yen'] > 0, rate(t['total_reward_yen'], t['headcount_active']), np.nan)
     return t
 
 ind_role_month = collapse_to_role(ind, ['lesson_month'])
@@ -273,7 +290,7 @@ top_month = pd.concat([top_performers(ind_role_month[ind_role_month['lesson_mont
 # ---------- 検算表 ----------
 def recon_block(mask, basis):
     sub = df[mask & df['is_primary_participant_row']]
-    t = sub.groupby('lesson_month').agg(participants=('trial_lesson_reservation_id','nunique'), gross=('is_conversion_gross','sum'),
+    t = sub.groupby('lesson_month').agg(participants=('trial_lesson_reservation_id','nunique'), participants_gross_per_planner=('trial_lesson_reservation_id','size'), gross=('is_conversion_gross','sum'),
                                        coolingoff=('is_coolingoff','sum'), valid=('is_valid_conversion','sum')).reset_index()
     t['valid_rate'] = rate(t['valid'], t['participants']); t['basis'] = basis
     return t
