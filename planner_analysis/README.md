@@ -47,20 +47,20 @@
 
 | 指標 | 定義（`likes_trial_lesson_planner_results` の列） |
 | --- | --- |
-| シフト単位 | `shift_key = trial_lesson_id-planner_id-position_no`（1体験レッスンの1ポジション） |
+| シフト単位 | `shift_key = trial_lesson_id-planner_id-trial_lesson_role_requirement_id-position_no`（1体験レッスンの1ロール要件×1ポジション）。同一レッスンで2ポジション（例: プランナー＋ファシ）を持つ場合は **2シフト・2件分の報酬**として計上（2026年で約2,700 lesson×planner ペア） |
 | シフト登録数 `shift_registered` | assign_status=approved の全シフト（未来日含む。`shift_registered_future` で内訳） |
 | 確定シフト数 `shift_confirmed` | 登録のうちご自愛（シフトカット, attendance=4）されていないもの |
 | 実施シフト数 `shift_attended` | `attendance_status=2 (出席)` |
 | 最低保証 `shift_min_guarantee` | `attendance_status=5`（開催なし。業務委託は1,500円） |
-| シフトキャンセル数 | `shift_jiai_cancel`（ご自愛=シフトカット, 4）＋`shift_absent`（欠席, 3）。**プランナー本人の事前キャンセル（assign削除）はソースに残らないため取得不可**（`assign_cancelled_at` は全行NULL）。`cancel_rate_shift` = (ご自愛+欠席)/登録 |
-| 参加者数 `participants_lead / participants_all` | プランナーに紐づく `trial_lesson_reservation_id` のユニーク数（紐づく予約は実質全て参加済み。53行のみ enhanced 側 is_attended=false）。`_lead` は 1on1/1on2/1on3 と GCリードのみ、`_all` は GCアシスト・Lounge・離脱を含む |
-| 1on1リード数 / GCリード数 / GCアシスト数 | `counselings_style IN ('1on1','1on2','1on3')` / `counselings_style='GC' AND gc_style='lead'` / `gc_style='assistant'` の参加者行数 |
+| シフトキャンセル数 | `shift_jiai_cancel`（ご自愛=シフトカット, 4）＋`shift_absent`（欠席, 3）。**プランナー本人の事前キャンセル（assign削除）はソースに残らないため取得不可**（`assign_cancelled_at` は全行NULL）。`cancel_rate_shift` = (ご自愛+欠席)/実施日到来済み登録数 `shift_registered_past` |
+| 参加者数 `participants_lead / participants_all` | プランナーに紐づく `trial_lesson_reservation_id` のユニーク数。**同一プランナー×同一予約に役割違いの行（プランナー行＋ファシ/リーダー/サポプラ行）が複数存在**するため、`participant_row_rank=1`（プランナー>サポプラ>ファシ>リーダー の優先）の主行のみで成果・参加者を集計する（2026年で2,851行を除外。除外しないと成約数が約13%過大）。紐づく予約は実質全て参加済み（53行のみ enhanced 側 is_attended=false）。`_lead` は 1on1/1on2/1on3 と GCリードのみ、`_all` は GCアシスト・Lounge・離脱を含む |
+| 1on1リード数 / GCリード数 / GCアシスト数 | 主行のうち `counselings_style IN ('1on1','1on2','1on3')` / `counselings_style='GC' AND gc_style='lead'` / `gc_style='assistant'` の参加者数（1on2/1on3 は1on1リードに含む） |
 | その場成約 | `conversion_status IN ('ご入会','クーリングオフ') AND is_the_day_cv=TRUE`（レッスン当日成約、クーオフ前） |
 | 追客成約（後日成約） | 同上で `is_the_day_cv=FALSE`（レッスン後の入会。体験レッスンに紐づいた注文のみ） |
 | 合計成約（クーオフ前） `gross_lead` | ご入会＋クーリングオフ |
 | クーリングオフ `coolingoff_lead` | `conversion_status='クーリングオフ'`（`refunded_at` = クーオフ日）。`coolingoff_rate_lead` = クーオフ/合計成約 |
 | 最終有効成約 `valid_lead` | `conversion_status='ご入会'`（＝Lightdash「最終レッスン成約数（クーオフ除く）」`countd_valid_conversion_uu` と同定義）。お試し入会（`is_trial_membership`）は本入会移行後にご入会となる |
-| 成約率 | 分子=リード成約数、分母=リード参加者数（`participants_lead`）。`valid_rate_all` は GCアシスト等も分母・分子に含めた参考値（既存集計に近い） |
+| 成約率 | 分子=リード成約数、分母=リード参加者数（`participants_lead`）。`same_day_rate_lead`（その場成約率）、`gross_rate_lead`（クーオフ前）、`valid_rate_lead`（最終有効）はいずれも分母が同じ。`valid_rate_all` は GCアシスト等も分母・分子に含めた参考値（既存集計に近い） |
 | VCV | `likes_trial_lesson_enhanced.virtual_cv`（参加者属性から予測した期待成約数）。`weighted_vcv_achievement` = 加重成約 / 加重VCV（1on1=1.0, GCリード=0.7, GCアシスト=0.3。`likes_trial_lesson_planner_vcv_monitoring` と同じ重み） |
 | 成約難易度 | `incentive_status` から抽出（難易度1〜6 = `virtual_cv_rank`）。2025-08以降は参加時意向度ではなく難易度でインセンティブが決まる |
 
@@ -72,7 +72,7 @@
 ### キャンセル・担当変更・重複・空欄の処理
 - レッスン自体のキャンセル（開催なし）は最低保証（attendance=5）として残る。参加者の予約キャンセルは planner_results に行が残らない。
 - 担当変更: 参加者行は planner_results の紐付け（カウンセリング担当）に従う。`planner_relation_in_enhanced` で enhanced 側のリード/アシストと照合できる（`other` は不一致）。
-- 重複: `shift_key × trial_lesson_reservation_id` で重複行なし（テスト済）。同一氏名の複数ID（鎌田莉佳: 162308 と 408913）は `⑥b同名複数ID` に記載。
+- 重複: 同一プランナー×同一予約の役割違い行は主行1行に集約（上記）。同一氏名の複数ID（鎌田莉佳: 162308 と 408913）は `⑥b同名複数ID` に記載。
 - 担当者空欄: planner_results は planner_id 必須のため空欄なし。`role_source='current_from_results'` で planner_metas がない社員 47名（2026年）は「その他_社員等」に分類。
 - 再注文キャンセル（3行）は成約・クーオフのどちらにも数えない。
 
@@ -87,12 +87,15 @@
 | ファシリテーター / サポートプランナー | 1,500円/回 | `shift_fee_leader_facil_support_yen` |
 | リーダー | 10,000円/回 | 同上 |
 | 最低保証（開催なし） | 1,500円（役割問わず） | `shift_fee_min_guarantee_yen` |
-| 成約インセンティブ（難易度1〜6） | 500 / 1,000 / 3,000 / 3,700 / 4,500 / 5,000円（GCアシストは半額） | `incentive_yen_payable`（BQ `conversion_incentive`、ご入会のみ。翌月末までのクーオフは対象外＝ `incentive_conversion_flg`） |
+| 成約インセンティブ（難易度1〜6） | 500 / 1,000 / 3,000 / 3,700 / 4,500 / 5,000円（GCアシストは半額） | `incentive_yen_payable`（BQ `conversion_incentive`。BQ側で既に「ご入会かつ支払対象」の行にのみ値が入っている。クーオフ分の相当額は取得不可） |
 | 拠点スポットプランナー加算（ファシ1,500・シフキャン1,000等） | 拠点により異なる | **未計上**（OTL単価で計上。拠点行は `lesson_type LIKE '拠点_%'` で識別可） |
 | プレプランナー研修費 5,000円、交通費 | — | 未計上 |
 
 - **SE・generalist・CMM・社員等は給与制**のためシフト報酬・インセンティブは 0 円で計上（`is_employee=TRUE`）。SE の給与・人件費は BigQuery に存在しないため、年収1,000万円の採算性検証には別途人事データが必要。参考として、SEが業務委託レートだった場合のインセンティブ相当額を `incentive_yen_payable` に残している。
-- `total_reward_yen` = シフト報酬 + 支払対象インセンティブ（業務委託のみ）。実施月ベース（実際の支払はシフト報酬=翌月末、インセンティブ=翌々月末）。
+- `total_reward_yen` = シフト報酬 `shift_fee_yen` + 支払対象インセンティブ `incentive_yen_paid`（業務委託のみ。社員は0）。実施月ベース（実際の支払はシフト報酬=翌月末、インセンティブ=翌々月末）。
+- 1シフト当たり成約: `valid_per_lead_shift` = リード最終有効成約 ÷ **リード参加者を1人以上担当した実施シフト数** `shift_attended_with_lead`（リーダー/ファシ/サポプラのみのシフトを分母から除く）。`valid_per_shift_all` は全実施シフトを分母にした参考値。
+- 分布（③の `*_min/p25/median/p75/max`）は **リード参加者1人以上の個人**全員で算出。`headcount_sample_ge30` で月間リード参加者30人以上の人数を併記。②個人×月の `sample_insufficient_flag` は月間リード参加者30人未満。
+- 上位者（④）: リード参加者10人以上の個人を対象に、役割内で `valid_rate_lead` と `shift_attended_with_lead` が**ともに中央値以上**の人を `is_top_both=TRUE`。順位列も併記。
 
 ## 5. 収益・LTV
 

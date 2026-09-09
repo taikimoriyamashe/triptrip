@@ -53,8 +53,8 @@ classified AS (
          WHEN a.first_effective_at IS NOT NULL THEN 'backfilled_first_meta'
          WHEN a.planner_term IS NOT NULL OR a.planner_grade IS NOT NULL THEN 'current_from_results'
          ELSE 'no_meta' END AS role_source,
-    COALESCE(a.asof_generation,  a.first_generation,  a.planner_term)  AS eff_generation,
-    COALESCE(a.asof_career_path, a.first_career_path, a.planner_grade) AS eff_career_path
+    CASE WHEN a.asof_effective_at IS NOT NULL THEN a.asof_generation  WHEN a.first_effective_at IS NOT NULL THEN a.first_generation  ELSE a.planner_term  END AS eff_generation,
+    CASE WHEN a.asof_effective_at IS NOT NULL THEN a.asof_career_path WHEN a.first_effective_at IS NOT NULL THEN a.first_career_path ELSE a.planner_grade END AS eff_career_path
   FROM asof a
 ),
 detail AS (
@@ -86,8 +86,14 @@ SELECT
   d.participants_user_id,
   d.planner_id,
   d.planner_name,
-  CONCAT(CAST(d.trial_lesson_id AS STRING), '-', CAST(d.planner_id AS STRING), '-', IFNULL(CAST(d.position_no AS STRING),'x')) AS shift_key,
-  ROW_NUMBER() OVER (PARTITION BY d.trial_lesson_id, d.planner_id, d.position_no ORDER BY d.trial_lesson_reservation_id) AS row_no_in_shift,
+  -- シフトキー: 体験レッスン×プランナー×ロール要件×ポジション（同一ポジションに役割違いが存在するため role_requirement_id を含める）
+  CONCAT(CAST(d.trial_lesson_id AS STRING), '-', CAST(d.planner_id AS STRING), '-', IFNULL(CAST(d.trial_lesson_role_requirement_id AS STRING),'x'), '-', IFNULL(CAST(d.position_no AS STRING),'x')) AS shift_key,
+  d.trial_lesson_role_requirement_id, d.role_id,
+  ROW_NUMBER() OVER (PARTITION BY d.trial_lesson_id, d.planner_id, d.trial_lesson_role_requirement_id, d.position_no ORDER BY d.trial_lesson_reservation_id) AS row_no_in_shift,
+  -- 参加者の主担当行: 同一プランナー×同一予約に役割違いの行が複数ある場合、プランナー>サポプラ>ファシ>リーダー>その他 の優先で1行を主行にする（成果の二重計上防止）
+  CASE WHEN d.trial_lesson_reservation_id IS NULL THEN 1 ELSE
+    ROW_NUMBER() OVER (PARTITION BY d.planner_id, d.trial_lesson_reservation_id
+      ORDER BY CASE d.role_name WHEN 'プランナー' THEN 1 WHEN 'サポートプランナー' THEN 2 WHEN 'ファシリテーター' THEN 3 WHEN 'リーダー' THEN 4 ELSE 5 END, d.position_no) END AS participant_row_rank,
   -- 日時
   d.starts_at, d.ends_at, DATE(d.starts_at) AS lesson_date, FORMAT_DATE('%Y-%m', DATE(d.starts_at)) AS lesson_month,
   d.lesson_start_time, d.is_shift_priority, d.is_shift_priority_detail,
@@ -142,21 +148,20 @@ SELECT
   -- 担当チーム（プランナーの担当GL/CV担当）
   d.charge_gl_user_id, d.charge_gl_user_name, d.charge_cv_user_id, d.charge_cv_user_name,
   -- 報酬（業務委託レートカード 2026-07-16版 業務規定 / 成約インセンティブはBQ算出値）
-  d.conversion_incentive AS incentive_yen_gross,
+  d.conversion_incentive AS incentive_yen_bq,  -- BQ算出の成約インセンティブ（ご入会かつ支払対象のみ値が入る）
   CASE WHEN d.conversion_status = 'ご入会' AND d.incentive_conversion_flg = 1 THEN d.conversion_incentive ELSE 0 END AS incentive_yen_payable,
-  CASE
-    WHEN d.role_category IN ('SE') OR d.role_subcategory IN ('その他_generalist(社員)','その他_社員等(メタなし/未設定)') THEN 0  -- 社員: シフト単価なし（給与）
-    WHEN d.attendance_status = 5 THEN 1500  -- 最低保証
-    WHEN d.attendance_status <> 2 THEN 0    -- 未実施
-    WHEN d.role_status = 'リーダー' THEN 10000
-    WHEN d.role_status = 'ファシリテーター' THEN 1500
-    WHEN d.role_status = 'サポートプランナー' THEN 1500
-    WHEN d.role_status = 'プランナー' AND d.role_category = 'EP' THEN 4000
-    WHEN d.role_status = 'プランナー' AND d.role_category = 'CP' THEN 2500
-    WHEN d.role_status = 'プランナー' AND d.role_subcategory = 'その他_CMM(拠点)' THEN 0 -- 拠点CMMは社員扱い（要確認）
-    WHEN d.role_status = 'プランナー' THEN 2500 -- その他業務委託は暫定CP単価
-    ELSE 0 END AS shift_unit_yen,
   CASE WHEN d.role_category = 'SE' OR d.role_subcategory IN ('その他_generalist(社員)','その他_社員等(メタなし/未設定)','その他_CMM(拠点)') THEN TRUE ELSE FALSE END AS is_employee_no_shift_fee,
+  CASE
+    WHEN d.role_category = 'SE' OR d.role_subcategory IN ('その他_generalist(社員)','その他_社員等(メタなし/未設定)','その他_CMM(拠点)') THEN 0  -- 社員（SE/generalist/CMM/メタなし社員）: 給与制、シフト単価なし
+    WHEN IFNULL(d.attendance_status, 0) = 5 THEN 1500  -- 最低保証（開催なし）
+    WHEN IFNULL(d.attendance_status, 0) <> 2 THEN 0    -- 未実施（登録中/欠席/ご自愛/フィジビリ）
+    WHEN d.role_name = 'リーダー' THEN 10000
+    WHEN d.role_name = 'ファシリテーター' THEN 1500
+    WHEN d.role_name = 'サポートプランナー' THEN 1500
+    WHEN d.role_name = 'プランナー' AND d.role_category = 'EP' THEN 4000
+    WHEN d.role_name = 'プランナー' AND d.role_category = 'CP' THEN 2500
+    WHEN d.role_name = 'プランナー' THEN 2500 -- その他の業務委託（legacy/other）は暫定CP単価
+    ELSE 0 END AS shift_unit_yen,
   -- 収益
   e.entranceamount_without_tax, e.membership_plan_amount, e.membership_plan_discount_amount, e.entrance_plan_discount_amount,
   cv.sales_without_tax AS conversion_sales_without_tax, cv.is_subsidy, cv.subsidy_type, cv.item_name AS conversion_item_name,
