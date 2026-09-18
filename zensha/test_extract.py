@@ -3,15 +3,23 @@
 """
 zensha/test_extract.py — latest.json と extract.py の自己検査
 
-  python3 zensha/test_extract.py [--json zensha/data/latest.json]
+  python3 zensha/test_extract.py                 … 層A のみ（毎朝のゲート）
+  python3 zensha/test_extract.py --regression    … 層A + 層B（原本回帰）
 
-検査内容
-  (a) CONTRACT.md の不変条件 1〜8
-  (b) 原本 REV_ALL の期初計画（plan）12ヶ月 × fin/mgmt × 6キー との厳密一致
-  (c) 実績確定月までの act が原本と ±0.5% 以内
-      （それを超えるセルは「シート側で実績が改訂された既知の差」リストにあれば WARN 扱い）
-  (d) STEP の p が原本と一致（シートに当該値が残っていない項目は WARN 扱い）
+**層A（毎朝のゲート。年度・月をまたいで安定）**
+  (a) CONTRACT.md の不変条件 1〜8（当日の latest.json に対して）
+  (b) 期初計画 plan が extract.py の ORIG_PLAN（= 原本 REV_ALL）と一致
+      ※ その年度の基準値が未登録なら「スキップ」扱い（FY27 以降でも落ちない）
   (e) パーサ単体テスト（数値表記の正規化 / Markdown ブロック分割 / 日付・年月）
+  (f) latest.json の構造・型、契約の任意フィールド
+  (g) 月替わり・年度替わりの回帰（合成ケース）
+
+**層B（原本回帰。`--regression` のときだけ）**
+  当日の raw ではなく **凍結フィクスチャ `testdata/raw-2026-09-18/*.md.gz`** から latest.json を
+  生成し直し、2026-09-08 取得の原本 HTML と突き合わせる。
+  (c) 実績確定月までの act が原本と ±0.5% 以内（逸脱セルは raw の該当セルと一致を assert）
+  (d) STEP の p が原本と一致（引き直された項目は raw の該当セルと一致を assert）
+  → 当月の目標が引き直されても、実績が確定しても、毎朝のゲートは赤にならない。
 
 全て PASS なら exit 0、1件でも FAIL なら非0終了。
 """
@@ -24,6 +32,7 @@ import io
 import json
 import os
 import re
+import shutil
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -96,6 +105,26 @@ class Runner(object):
 # ---------------------------------------------------------------------------
 # 原本 HTML から REV_ALL / STEP を取り出す
 # ---------------------------------------------------------------------------
+
+FIXTURE_DIR = os.path.join(HERE, "testdata", "raw-2026-09-18")
+FIXTURE_BASIS = "2026-09-18"
+
+
+def materialize_fixture(dest):
+    """凍結フィクスチャ（*.md.gz）を dest に展開して raw ディレクトリを作る。"""
+    import gzip
+    if not os.path.isdir(dest):
+        os.makedirs(dest)
+    for name in ("keiei", "marke", "kyoten"):
+        src = os.path.join(FIXTURE_DIR, name + ".md.gz")
+        if not os.path.exists(src):
+            return None
+        with gzip.open(src, "rt", encoding="utf-8") as fi:
+            data = fi.read()
+        with open(os.path.join(dest, name + ".md"), "w", encoding="utf-8") as fo:
+            fo.write(data)
+    return dest
+
 
 def load_raw_facts(raw_dir):
     """raw から検証用の生セルを取り出す（test 側でも見出しベースで読む）。"""
@@ -203,9 +232,14 @@ def test_invariants(r, doc):
 
     # 8
     today = _dt.datetime.now(JST).date().isoformat()
-    r.check(doc["basis_date"] == today,
-            "不変条件8: basis_date が JST の今日と一致",
-            "basis_date=%s / JST今日=%s" % (doc["basis_date"], today))
+    if doc.get("stale_allowed"):
+        r.ok("不変条件8: basis_date=%s（--allow-stale で生成された latest.json のため"
+             "「JST の今日と一致」は検査しない。毎朝の本番実行では extract.py が非0終了で守る）"
+             % doc["basis_date"])
+    else:
+        r.check(doc["basis_date"] == today,
+                "不変条件8: basis_date が JST の今日と一致",
+                "basis_date=%s / JST今日=%s" % (doc["basis_date"], today))
 
     # 契約のその他の整合（日付計算）
     b = _dt.date.fromisoformat(doc["basis_date"])
@@ -219,6 +253,29 @@ def test_invariants(r, doc):
 # ---------------------------------------------------------------------------
 # (b) plan 厳密一致
 # ---------------------------------------------------------------------------
+
+def test_plan_vs_base(r, doc):
+    """層A: latest.json の plan が extract.py の基準値（= 原本 REV_ALL）と一致すること。
+    その年度の基準値が未登録なら「スキップ」として PASS（FY27 以降でもゲートを赤くしない）。"""
+    fy = doc["fy"]["label"]
+    base = E.ORIG_PLAN.get(fy)
+    if base is None:
+        r.ok("(b) 期初計画の基準値が %s は未登録のため比較をスキップ"
+             "（extract.py も不変条件3 を警告に降格する）" % fy)
+        r.check(any("基準値" in x and "スキップ" in x for x in doc["extract_log"]),
+                "(b) スキップした旨が extract_log にある")
+        return
+    bad = []
+    for acct in ("fin", "mgmt"):
+        for key in SERVICE_KEYS:
+            got = doc["revenue"][acct][key]["plan"]
+            want = base[acct][key]
+            for i in range(12):
+                if got[i] != want[i]:
+                    bad.append("%s.%s.plan[%d]: got=%d base=%d" % (acct, key, i, got[i], want[i]))
+    r.check(not bad, "(b) 期初計画 plan が %s の基準値（原本 REV_ALL）と 12ヶ月 × fin/mgmt × 6キーで一致" % fy,
+            "\n        ".join(bad[:10]))
+
 
 def test_embedded_plan(r, orig):
     """extract.py に埋め込んだ ORIG_PLAN が原本 HTML と一致すること（定数のドリフト防止）。"""
@@ -234,9 +291,10 @@ def test_embedded_plan(r, orig):
 def test_contract_extras(r, doc):
     """契約 v1.3 で追加された出力（grs 年度末 / sources / extract_log）の検査。"""
     for acct in ("fin", "mgmt"):
-        r.check(doc["revenue"][acct]["grs"]["act"][11] == 19000000,
-                "追加: revenue.%s.grs.act[11] == 19,000,000（直前月Ａヨミへのフォールバック）" % acct,
-                "got=%s" % doc["revenue"][acct]["grs"]["act"][11])
+        v = doc["revenue"][acct]["grs"]["act"][11]
+        r.check(isinstance(v, (int, float)) and not isinstance(v, bool) and v >= 0,
+                "追加: revenue.%s.grs.act[11] が 0 以上の数値（年度末のフォールバックが効いている）" % acct,
+                "got=%r" % v)
     srcs = doc["sources"]
     r.check(len(srcs) == 3, "追加: sources が 3 件", "len=%d" % len(srcs))
     r.check(srcs[0].get("label") == "全社（単月確認用・通期着地見通し）",
@@ -250,19 +308,20 @@ def test_contract_extras(r, doc):
             "追加: sources[1].name が target_month 由来（%s）" % want,
             "got=%r" % srcs[1].get("name"))
     log = "\n".join(doc["extract_log"])
-    r.check(any("mgmt.grs=¥208,485,280" in x for x in doc["extract_log"]),
-            "追加(B1): extract_log に mgmt.grs の通期Σact 突合（¥208,485,280 と一致）がある")
+    r.check(any(("通期Σact 突合" in x) or ("Σact の検算をスキップ" in x)
+                for x in doc["extract_log"]),
+            "追加(B1): extract_log に通期Σact の突合結果（またはスキップ理由）がある")
     sites = doc["lks"]["kyoten"]["sites"]
     r.check(all(s.get("as_of_month") for s in sites),
             "追加(B4): sites[].as_of_month がある（拠点別CPA を読んだ表の目標月）",
             repr(sites))
-    for needle, label in (("ワイド表突合", "ワイド表との実績差異"),
-                          ("通期Σact 突合", "通期Σact の突合"),
-                          ("grs 年度末検算", "grs 年度末の検算"),
-                          ("グロスタ補正の当月検算", "グロスタ補正の当月検算"),
-                          ("単月確認用 yomiA と revenue 当月 act", "単月確認用 yomiA と act の差"),
-                          ("拠点実績の突合", "Σ日次 と KPIサマリ実績の突合")):
-        r.check(needle in log, "追加: extract_log に %s が記録されている" % label)
+    for needles, label in ((("ワイド表突合",), "ワイド表との実績差異"),
+                           (("grs 年度末検算",), "grs 年度末の検算"),
+                           (("グロスタ補正の当月検算",), "グロスタ補正の当月検算"),
+                           (("単月確認用 yomiA と revenue 当月 act",), "単月確認用 yomiA と act の差"),
+                           (("拠点実績の突合",), "Σ日次 と KPIサマリ実績の突合")):
+        r.check(any(n in log for n in needles),
+                "追加: extract_log に %s が記録されている" % label)
 
 
 def _run_extract(raw_dir, extra_args=None):
@@ -286,13 +345,28 @@ def _run_extract(raw_dir, extra_args=None):
     return rc, doc, err.getvalue()
 
 
-def test_regression_cases(r, raw_dir):
-    """月替わり・年度替わりで毎朝の実行が止まらないことの実証（合成ケース）。"""
+def test_regression_cases(r, _raw_dir=None):
+    """月替わり・年度替わりで毎朝の実行が止まらないことの実証（凍結フィクスチャに対する合成ケース）。"""
+    import tempfile
+    tmpdir = tempfile.mkdtemp(prefix="zensha-regr-")
+    if materialize_fixture(tmpdir) is None:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+        r.ng("(g) 凍結フィクスチャ %s が見つかりません" % FIXTURE_DIR)
+        return
+    raw_dir = tmpdir
+    base_args = ["--today", FIXTURE_BASIS, "--allow-stale"]
+    try:
+        _regression_body(r, raw_dir, base_args)
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def _regression_body(r, raw_dir, base_args):
     # A1: 実績確定月を 1 つ進める（実績確定月が当月になり fin.grs の実績 ¥0 が実績確定月に入る）
     saved = E.extract_actual_until
     E.extract_actual_until = lambda blocks, months, ctx: 6
     try:
-        rc, doc, err = _run_extract(raw_dir)
+        rc, doc, err = _run_extract(raw_dir, base_args)
     finally:
         E.extract_actual_until = saved
     r.check(rc == 0, "(A1) actual_until_index=6（実績 ¥0 の月が実績確定月に入る）でも exit 0",
@@ -307,7 +381,7 @@ def test_regression_cases(r, raw_dir):
     # A3: 未登録年度（ORIG_PLAN に基準値が無い）で不変条件3 が警告に降格する
     base = E.ORIG_PLAN.pop("FY26")
     try:
-        rc, doc, err = _run_extract(raw_dir)
+        rc, doc, err = _run_extract(raw_dir, base_args)
     finally:
         E.ORIG_PLAN["FY26"] = base
     r.check(rc == 0, "(A3) 期初計画の基準値が未登録の年度でも exit 0（不変条件3 は警告に降格）",
@@ -610,12 +684,144 @@ def dump_summary(doc):
           % (doc["lks"]["targets"]["online"], doc["lks"]["targets"]["kyoten"]))
 
 
+def test_structure(r, doc):
+    """latest.json の構造・型（当日の値に依存しない）。"""
+    for k, typ in (("contract_version", str), ("generated_at", str), ("basis_date", str),
+                   ("data_through", str), ("target_month", str), ("days_in_month", int),
+                   ("elapsed_days", int), ("remaining_days", int), ("fy", dict),
+                   ("actual_until_index", int), ("revenue", dict),
+                   ("revenue_corrections", list), ("month_summary", dict),
+                   ("lks", dict), ("sources", list), ("extract_log", list)):
+        r.check(isinstance(doc.get(k), typ) and not isinstance(doc.get(k), bool),
+                "(f) latest.json の %s が %s" % (k, typ.__name__),
+                "got=%r" % type(doc.get(k)).__name__)
+    r.check(doc["contract_version"] == E.CONTRACT_VERSION,
+            "(f) contract_version が extract.py の定数と一致（%s）" % E.CONTRACT_VERSION,
+            "got=%r" % doc.get("contract_version"))
+    for k in ("dump_truncated", "stale_allowed"):
+        r.check(isinstance(doc.get(k), bool), "(f) %s が真偽値" % k, "got=%r" % doc.get(k))
+    r.check(isinstance(doc.get("dump_truncated_files"), list),
+            "(f) dump_truncated_files が配列")
+    for lane in ("online", "kyoten"):
+        ln = doc["lks"][lane]
+        for k in ("yomi", "act"):
+            r.check(isinstance(ln.get(k), (int, float)) and not isinstance(ln.get(k), bool),
+                    "(f) lks.%s.%s が数値" % (lane, k), "got=%r" % ln.get(k))
+        cost = ln.get("cost") or {}
+        for k in ("plan", "act", "yomi"):
+            v = cost.get(k)
+            r.check(v is None or (isinstance(v, (int, float)) and not isinstance(v, bool)),
+                    "(f) lks.%s.cost.%s が数値または null" % (lane, k), "got=%r" % v)
+    sites = doc["lks"]["kyoten"]["sites"]
+    r.check(isinstance(sites, list) and len(sites) >= 1, "(f) lks.kyoten.sites が非空の配列")
+    for st in sites:
+        r.check(all(k in st for k in ("name", "cpa_prev", "cpa_target")),
+                "(f) sites[%s] に name/cpa_prev/cpa_target がある" % st.get("name"), repr(st))
+    for src in doc["sources"]:
+        r.check(isinstance(src.get("name"), str) and src["name"].strip() != "",
+                "(f) sources[].name が非空文字列", repr(src))
+        r.check(isinstance(src.get("url"), str) and src["url"].startswith("https://"),
+                "(f) sources[].url が https", repr(src.get("url")))
+
+
+def test_meta_warnings(r):
+    """meta が3本そろっていれば「meta.json がありません」警告が出ないこと（合成 meta）。"""
+    import tempfile
+    tmp = tempfile.mkdtemp(prefix="zensha-meta-")
+    try:
+        if materialize_fixture(tmp) is None:
+            r.ng("(g) 凍結フィクスチャが無いため meta 警告テストを実行できない", FIXTURE_DIR)
+            return
+        metas = {
+            "keiei": {"title": "FY26_経営モニタリング", "id": "KEIEI",
+                      "url": "https://docs.google.com/spreadsheets/d/KEIEI/edit",
+                      "ingested_at": FIXTURE_BASIS + "T07:00:00+09:00",
+                      "label": "全社（単月確認用・通期着地見通し）"},
+            "marke": {"title": "26年9月_マーケジスイ進捗管理表", "id": "MARKE",
+                      "url": "https://docs.google.com/spreadsheets/d/MARKE/edit",
+                      "ingested_at": FIXTURE_BASIS + "T07:00:00+09:00"},
+            "kyoten": {"title": "FY26_拠点モニタリング", "id": "KYOTEN",
+                       "url": "https://docs.google.com/spreadsheets/d/KYOTEN/edit",
+                       "ingested_at": FIXTURE_BASIS + "T07:00:00+09:00"},
+        }
+        for name, m in metas.items():
+            with open(os.path.join(tmp, name + ".meta.json"), "w", encoding="utf-8") as fh:
+                json.dump(m, fh, ensure_ascii=False)
+        rc, doc, err = _run_extract(tmp, ["--today", FIXTURE_BASIS, "--allow-stale"])
+        r.check(rc == 0, "(g) meta 3本そろった raw で extract が exit 0", "rc=%s" % rc)
+        if not doc:
+            return
+        bad = [x for x in doc["extract_log"] if "meta.json がありません" in x]
+        r.check(not bad, "(g) meta が3本そろっていれば「meta.json がありません」警告が出ない",
+                "\n        ".join(bad))
+        r.check(all(s["url"].endswith("/edit") and ("KEIEI" in s["url"] or "MARKE" in s["url"]
+                                                    or "KYOTEN" in s["url"])
+                    for s in doc["sources"]),
+                "(g) sources の url が meta 由来の ID になる",
+                repr([s["url"] for s in doc["sources"]]))
+        r.check(not doc["sources"][1].get("stale_id"),
+                "(g) 当月分の meta があれば stale_id は立たない", repr(doc["sources"][1]))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def run_regression(r, orig):
+    """層B: 凍結フィクスチャから latest.json を作り直して原本と突き合わせる。"""
+    import tempfile
+    tmp = tempfile.mkdtemp(prefix="zensha-fixture-")
+    try:
+        if materialize_fixture(tmp) is None:
+            r.ng("(層B) 凍結フィクスチャ %s が見つかりません" % FIXTURE_DIR)
+            return
+        rc, doc, err = _run_extract(tmp, ["--today", FIXTURE_BASIS, "--allow-stale"])
+        if rc != 0 or not doc:
+            r.ng("(層B) 凍結フィクスチャからの extract が失敗", "rc=%s stderr=%s" % (rc, err[:400]))
+            return
+        r.ok("(層B) 凍結フィクスチャ %s から latest.json を再生成（basis=%s）"
+             % (os.path.basename(FIXTURE_DIR), FIXTURE_BASIS))
+        facts = load_raw_facts(tmp)
+        print("")
+        print("---- (層B) 凍結断面の実測値 ----")
+        r.check(doc["target_month"] == "2026-09" and doc["actual_until_index"] == 5,
+                "(層B) 凍結断面は target_month=2026-09 / actual_until_index=5",
+                "got=%s / %s" % (doc["target_month"], doc["actual_until_index"]))
+        for acct in ("fin", "mgmt"):
+            r.check(doc["revenue"][acct]["grs"]["act"][11] == 19000000,
+                    "(層B) revenue.%s.grs.act[11] == 19,000,000（直前月Ａヨミへのフォールバック）" % acct,
+                    "got=%s" % doc["revenue"][acct]["grs"]["act"][11])
+        r.check(doc["revenue"]["fin"]["grs"]["act"][5] == 23900300
+                and doc["revenue"]["mgmt"]["grs"]["act"][5] == 18046000,
+                "(層B) グロスタ列ズレ補正後の当月 act（fin 23,900,300 / mgmt 18,046,000）")
+        r.check(any("mgmt.grs=¥208,485,280" in x for x in doc["extract_log"]),
+                "(層B) extract_log に mgmt.grs の通期Σact 突合（¥208,485,280 と一致）がある")
+        r.check(doc["lks"]["targets"]["online"] == 868
+                and doc["lks"]["targets"]["kyoten"] == 148,
+                "(層B) 凍結断面の月目標（オンライン 868 / 拠点 148）")
+        r.check(len(doc["lks"]["online"]["daily"]["v"]) == 17
+                and len(doc["lks"]["kyoten"]["daily"]["v"]) == 17,
+                "(層B) 日次は 9/1〜9/17 の 17 要素")
+        print("")
+        print("---- (b') 凍結フィクスチャの plan が原本 REV_ALL と厳密一致 ----")
+        test_embedded_plan(r, orig)
+        test_plan_exact(r, doc, orig)
+        print("")
+        print("---- (c) 実績確定月 act の原本一致（±0.5%） ----")
+        test_act_tolerance(r, doc, orig, facts)
+        print("")
+        print("---- (d) STEP の p ----")
+        test_step_p(r, doc, facts)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="latest.json と extract.py の自己検査")
     ap.add_argument("--json", default=os.path.join(HERE, "data", "latest.json"))
     ap.add_argument("--original", default=os.path.join(HERE, "reference",
                                                        "original-2026-09-08.html"))
     ap.add_argument("--raw-dir", default=os.path.join(HERE, "raw"))
+    ap.add_argument("--regression", action="store_true",
+                    help="層B（原本回帰）も実行する。凍結フィクスチャ testdata/raw-2026-09-18 を使う。")
     args = ap.parse_args(argv)
 
     if not os.path.exists(args.json):
@@ -625,30 +831,35 @@ def main(argv=None):
     with open(args.json, encoding="utf-8") as fh:
         doc = json.load(fh)
     orig = load_original_rev(args.original)
-    facts = load_raw_facts(args.raw_dir)
 
     r = Runner()
+    print("################ 層A: 毎朝のゲート ################")
     print("==== (a) CONTRACT の不変条件 ====")
     test_invariants(r, doc)
     print("")
-    print("==== (b) 期初計画 plan の原本一致 ====")
-    test_embedded_plan(r, orig)
-    test_plan_exact(r, doc, orig)
+    print("==== (b) 期初計画 plan（extract.py の基準値と一致） ====")
+    test_plan_vs_base(r, doc)
     print("")
-    print("==== 契約 v1.4 の追加出力 ====")
+    print("==== (f) latest.json の構造・型／契約の任意フィールド ====")
+    test_structure(r, doc)
     test_contract_extras(r, doc)
-    print("")
-    print("==== (c) 実績確定月 act の原本一致（±0.5%） ====")
-    test_act_tolerance(r, doc, orig, facts)
-    print("")
-    print("==== (d) STEP の p ====")
-    test_step_p(r, doc, facts)
     print("")
     print("==== (e) パーサ単体テスト ====")
     test_parser(r)
     print("")
-    print("==== 月替わり・年度替わりの回帰（合成ケース） ====")
-    test_regression_cases(r, args.raw_dir)
+    print("==== (g) 月替わり・年度替わりの回帰（合成ケース） ====")
+    test_regression_cases(r)
+    test_meta_warnings(r)
+
+    if args.regression:
+        print("")
+        print("################ 層B: 原本回帰（凍結フィクスチャ） ################")
+        run_regression(r, orig)
+    else:
+        print("")
+        print("SKIP  原本回帰（(c) 実績の ±0.5% 比較 / (d) STEP の p）はスキップしました。"
+              "実行するには --regression を付けてください"
+              "（当日の raw ではなく凍結フィクスチャ testdata/raw-2026-09-18 を使います）。")
 
     dump_summary(doc)
     print("")

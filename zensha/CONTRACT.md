@@ -1,4 +1,4 @@
-# 全社着地モニター — データ契約 v1（zensha/data/latest.json）
+# 全社着地モニター — データ契約 v1.5（zensha/data/latest.json）
 
 対象: `zensha/reference/original-2026-09-08.html`（元ダッシュボード。JS内の REV_ALL / DAILY / STEP / LANE / CAUSE と、HTML内の固定文言）を
 「毎朝、3つのGoogleスプレッドシートから機械的に再生成できる形」に分離するための契約。
@@ -24,7 +24,7 @@ Google Drive MCP `read_file_content` が返す fileContent（Markdown表。タ�
 ## 出力（zensha/data/latest.json）
 ```jsonc
 {
-  "contract_version": "1",
+  "contract_version": "1.5",
   "generated_at": "2026-09-18T09:35:00+09:00",   // 生成時刻(JST)
   "basis_date":   "2026-09-18",                   // データ取得日(JST今日)
   "data_through": "2026-09-17",                   // 実績が入っている最終日(= basis_date の前日)
@@ -32,6 +32,9 @@ Google Drive MCP `read_file_content` が返す fileContent（Markdown表。タ�
   "days_in_month": 30, "elapsed_days": 17, "remaining_days": 13,   // elapsed = data_through の日, remaining = days_in_month - elapsed
   "fy": { "label": "FY26", "months": ["2026-04","2026-05",…,"2027-03"] },
   "actual_until_index": 5,     // 実績確定月の数。keiei「実績確定月→ 2026/8」→ 4,5,6,7,8 の5ヶ月 → 5
+  "dump_truncated": true,            // 任意。raw のいずれかが途中で切れている（MCP のサイズ上限等）。true なら必要な表が欠ける恐れ
+  "dump_truncated_files": ["keiei","marke","kyoten"],  // 任意。切断を検知した raw の名前
+  "stale_allowed": false,            // 任意。--allow-stale 付きで生成した（＝不変条件8 等を警告に降格した）なら true
   "revenue": {
     "fin":  { "total": {"plan":[12], "act":[12]}, "lks": {...}, "mny": {...}, "pro": {...}, "hjn": {...}, "grs": {...} },
     "mgmt": { 同上 }
@@ -107,8 +110,8 @@ Google Drive MCP `read_file_content` が返す fileContent（Markdown表。タ�
 - `updated_at`: manual.json を人が更新した日。
 
 ## 改訂履歴
+- v1.5 (2026-09-18): 見出し・`contract_version`・改訂履歴の版表記を「v1.5 / "1.5"」に統一（履歴は新しい順）、`dump_truncated` / `dump_truncated_files` / `stale_allowed` を任意フィールドとして追加。`lks.*.step_note` と `lks.*.daily.note` を任意フィールドとして定義（段階テーブル下の注記・日次グラフの系列説明）、`sources[].label` は「元データ：」を含めない純ラベルであることを明記、latest 由来の文字列は画面側で HTML エスケープ・URL は http(s) のみ、`lks.targets.online` / `lks.targets.kyoten` は正の数（build.py も検査）。
 - v1.4 (2026-09-18): 不変条件4 を「0 以上（¥0 は正当な実績。負値と全サービス0のみ非0終了）」に緩和、不変条件3 の基準値を fy.label でキーし未登録年度はスキップ（警告）、sites[].as_of_month と sources[].stale_id を任意フィールドとして追加。
-- v1.5 (2026-09-18): `lks.*.step_note` と `lks.*.daily.note` を任意フィールドとして定義（段階テーブル下の注記・日次グラフの系列説明）、`sources[].label` は「元データ：」を含めない純ラベルであることを明記、latest 由来の文字列は画面側で HTML エスケープ・URL は http(s) のみ、`lks.targets.online` / `lks.targets.kyoten` は正の数（build.py も検査）。
 - v1.3 (2026-09-18): 不変条件3を extract.py 内で検査、不変条件4を「raw との一致＋ワイド表との差異ログ」に変更、グロスタ補正の month_summary 突合、marke ソース名は target_month から組み立て（食い違いは警告）、lks.online.step の p は 成約=keiei(868) / 申込・予約・参加・参加率・CPA=marke / 成約率=成約p÷参加p（導出、extract_log と画面注記に明記）。
 - v1.2 (2026-09-18): sources[].label 任意、cost の各値 null 可、month_summary は検算用 を明記。
 - v1.1 (2026-09-18): daily.v の null 許容、Aヨミ欠損月のフォールバック順（直前月Aヨミ）、targets の出所（keiei を正）、実績の出所（売上マトリクスを正）、cost.act 例値修正、month_summary は無補正 を明記。

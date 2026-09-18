@@ -99,6 +99,9 @@ function renderPage(html) {
  * (a) ビルド → 描画 → 原本の主要数値
  * ---------------------------------------------------------------- */
 var fixture = process.argv[2] || path.join(HERE, "testdata", "fixture-original-2026-09-08.json");
+var manualFixture = path.join(HERE, "testdata", "manual-fixture.json");
+var prodManual = path.join(HERE, "data", "manual.json");
+var prodData = path.join(HERE, "data", "latest.json");
 var outFile = path.join(os.tmpdir(), "zensha-test-" + process.pid + ".html");
 var built = null, rendered = null, buildErr = null;
 
@@ -106,7 +109,7 @@ try {
   cp.execFileSync("python3", [
     path.join(HERE, "build.py"),
     "--data", fixture,
-    "--manual", path.join(HERE, "data", "manual.json"),
+    "--manual", manualFixture,
     "-o", outFile
   ], { stdio: "pipe" });
   built = fs.readFileSync(outFile, "utf8");
@@ -248,8 +251,8 @@ describe("描画 — manual.json 由来", function () {
 
 describe("manual.json の差し替えだけで判断事項・注記が変わる", function () {
   if (!built) { ok(false, "ビルドできていない"); return; }
-  var m = JSON.parse(fs.readFileSync(path.join(HERE, "data", "manual.json"), "utf8"));
-  m.decisions = [{ due: "明日まで", urgent: true, title: "ダミー判断", body: "本文ダミー", owner: "ダミー役員" }];
+  var m = JSON.parse(fs.readFileSync(manualFixture, "utf8"));
+  m.decisions = [{ due: "2026-09-30", urgent: true, title: "ダミー判断", body: "本文ダミー", owner: "ダミー役員" }];
   m.notes = [{ text: "ダミー注記", tag: "テスト" }];
   m.updated_at = "2099-01-01";
   var mf = path.join(os.tmpdir(), "zensha-manual-" + process.pid + ".json");
@@ -427,7 +430,8 @@ describe("ギャップの主因", function () {
   eq(cKp[0].kind, "① 最大要因", "拠点①は最大要因");
   eq(cKp[1].v, "1.64倍", "拠点②はCPA1.64倍");
   eq(cKp[2].kind, "③ 問題ではない所", "拠点③は問題ではない所");
-  ok(cKp[1].p.indexOf("広告費は22%しか消化しておらず") >= 0, "広告費の消化率22%", cKp[1].p);
+  ok(cKp[1].p.indexOf("広告費の消化は22%で、日付の進み23%") >= 0,
+    "広告費は日付の進みと比べて説明する", cKp[1].p);
   eq(L.causeSummary(kpStep, cKp), "月計画148 → Aヨミ97（差 ▲51件 ＝ ①＋③）", "M1: 一致するときは ＝");
 
   // 達成側に振れたとき言い回しが破綻しない
@@ -475,11 +479,12 @@ describe("トピックス生成のルール", function () {
   var t2b = L.topic02(kpLane, onLane, kpStep, onStep);
   ok(t2b.h.indexOf("オンラインだけが落ちている") >= 0, "02 逆なら「オンラインだけ」", t2b.h);
 
-  var t3 = L.topic03(kpStep, { plan: 26500000, act: 5800000 });
-  eq(t3.h, "拠点の広告予算は余っているが、単価が1.64倍", "03 見出し");
+  var DR7 = 7 / 30 * 100;   // 原本と同じ 経過7日 / 30日
+  var t3 = L.topic03(kpStep, { plan: 26500000, act: 5800000 }, DR7);
+  eq(t3.h, "拠点の広告費は日割どおりに消化しているが、単価が1.64倍", "03 見出し");
   var cheap = kpStep.map(function (r) { return r.n === "CPA" ? { n: "CPA", p: 32154, y: 30000, a: 30000, unit: "¥", lowerBetter: true } : r; });
-  ok(L.topic03(cheap, { plan: 26500000, act: 5800000 }).h.indexOf("計画内") >= 0, "03 単価が計画内なら言い回しが変わる");
-  eq(L.topic03(kpStep, null), null, "03 広告費が無ければカードを出さない");
+  ok(L.topic03(cheap, { plan: 26500000, act: 5800000 }, DR7).h.indexOf("計画内") >= 0, "03 単価が計画内なら言い回しが変わる");
+  eq(L.topic03(kpStep, null, DR7), null, "03 広告費が無ければカードを出さない");
 
   var lks = L.laneModel({ target: 1016, yomi: 984, act: 209, pace: 896, elapsed: 7, days: 30, remaining: 23 });
   var t4 = L.topic04(lks, onLane, kpLane, onStep, kpStep);
@@ -530,7 +535,7 @@ describe("現場で対応中（拠点CPA文）", function () {
 function buildWith(mutate, mutateManual) {
   var fx = JSON.parse(fs.readFileSync(fixture, "utf8"));
   if (mutate) mutate(fx);
-  var m = JSON.parse(fs.readFileSync(path.join(HERE, "data", "manual.json"), "utf8"));
+  var m = JSON.parse(fs.readFileSync(manualFixture, "utf8"));
   if (mutateManual) mutateManual(m);
   var id = "zensha-case-" + process.pid + "-" + (buildWith._n = (buildWith._n || 0) + 1);
   var df = path.join(os.tmpdir(), id + ".json");
@@ -752,15 +757,21 @@ describe("M4 — 言い回しの境界", function () {
     { n: "成約率", p: 37.1, y: 37.1, a: 37.1, unit: "%" },
     { n: "CPA", p: 32154, y: 32154, a: 32154, unit: "¥", lowerBetter: true }
   ];
-  var kpLane = L.laneModel({ target: 148, yomi: 148, act: 25, daily: [4], elapsed: 7, days: 30, remaining: 23 });
-  var c = L.buildCauses("kyoten", kpStep, kpLane, { plan: 26500000, act: 22525000 }); // 85%
+  // 経過26日 / 30日（進み86.7%）で 85% 消化 → 日割どおり
+  var kpLate = L.laneModel({ target: 148, yomi: 148, act: 128, daily: [4, 4, 4, 4, 4, 4, 4], elapsed: 26, days: 30, remaining: 4 });
+  var kpLane = L.laneModel({ target: 148, yomi: 148, act: 25, daily: [4, 4, 4, 4, 4, 4, 4], elapsed: 7, days: 30, remaining: 23 });
+  var c = L.buildCauses("kyoten", kpStep, kpLate, { plan: 26500000, act: 22525000 }); // 85%
   eq(c[0].h, "申込は計画どおり", "M4: 申込が計画ちょうどなら「計画どおり」");
-  ok(c[1].p.indexOf("余っている") < 0, "M4: 85% 消化で「余っている」と言わない", c[1].p);
-  ok(c[1].p.indexOf("85%まで消化") >= 0, "M4: 消化率を出す", c[1].p);
+  ok(c[1].p.indexOf("余っている") < 0, "M4: 月末85%消化で「余っている」と言わない", c[1].p);
+  ok(c[1].p.indexOf("ほぼ同じ") >= 0, "M4: 日割どおりと言う", c[1].p);
   eq(c[1].v, "1.00倍", "M4: 倍率は小数2桁");
   ok(/計画の1\.00倍/.test(c[1].p), "M4: 本文の倍率も小数2桁", c[1].p);
-  var loose = L.buildCauses("kyoten", kpStep, kpLane, { plan: 26500000, act: 20000000 }); // 75%
-  ok(loose[1].p.indexOf("余っている") >= 0, "M4: 80%未満なら「余っている」", loose[1].p);
+  // 経過7日 / 30日（進み23.3%）で 22% 消化 → 日割どおり、40% 消化 → 先行
+  var onpace = L.buildCauses("kyoten", kpStep, kpLane, { plan: 26500000, act: 5800000 });   // 21.9%
+  ok(onpace[1].p.indexOf("ほぼ同じ") >= 0, "M4: 月初22%は「日割どおり」", onpace[1].p);
+  var behind = L.buildCauses("kyoten", kpStep, kpLate, { plan: 26500000, act: 5800000 });   // 21.9% vs 86.7%
+  ok(behind[1].p.indexOf("遅れている（予算が残っている）") >= 0,
+    "M4: 月末に22%なら「遅れている」", behind[1].p);
   // recentPace: 末尾7日を取ってから null を除外
   near(L.recentPace([99, 99, 1, 2, null, null, null, null, 3]), 2, 1e-9,
     "M4: 末尾7日を取ってから null を除外（先頭の 99 は使わない）");
@@ -891,6 +902,223 @@ describe("F4 — targets は正の数", function () {
   ok(/正の数である必要があります/.test(c0.stderr), "日本語エラー", c0.stderr.slice(0, 160));
   var cm = buildWith(function (fx) { fx.lks.targets.kyoten = -5; });
   ok(cm.status !== 0, "負なら非0終了", "status=" + cm.status);
+});
+
+
+/* ---------------------------------------------------------------- *
+ * 追加: 期限 / 月初のペース / as_of_month / 消化率 / 補正表示 / 実データスモーク
+ * ---------------------------------------------------------------- */
+describe("Critical — 判断事項の期限は実日付", function () {
+  eq(L.dueState("2026-09-10", "2026-09-18"), "overdue", "過ぎていれば overdue");
+  eq(L.dueState("2026-09-18", "2026-09-18"), "open", "当日はまだ open");
+  eq(L.dueState("2026-09-30", "2026-09-18"), "open", "先ならば open");
+  eq(L.dueState(null, "2026-09-18"), "none", "due が無ければ none");
+  eq(L.dueLabel("2026-09-10"), "9/10まで", "ラベルは M/D まで");
+  eq(L.dueLabel(null, "今月中"), "今月中", "due が無ければ due_label");
+  eq(L.overdueDecisions([{ due: "2026-09-10" }, { due: "2026-09-30" }, { due: null }], "2026-09-18").length,
+    1, "期限切れだけ拾う");
+
+  // manual フィクスチャは実日付で書かれている（トークンで毎月繰り上がらない）
+  var mf = JSON.parse(fs.readFileSync(manualFixture, "utf8"));
+  mf.decisions.forEach(function (d, i) {
+    ok(d.due === null || /^\d{4}-\d{2}-\d{2}$/.test(d.due),
+      "decisions[" + i + "].due は実日付か null", JSON.stringify(d.due));
+    ok(!/\{\{/.test(String(d.due)), "decisions[" + i + "].due にトークンを使わない");
+  });
+
+  // 期限切れ: 画面に「期限超過」、stderr に警告、ただし exit 0
+  var over = buildWith(function (fx) { fx.basis_date = "2026-09-20"; fx.data_through = "2026-09-19"; fx.elapsed_days = 19; fx.remaining_days = 11;
+    ["online", "kyoten"].forEach(function (k) {
+      var d = fx.lks[k].daily;
+      while (d.v.length < 19) { d.v.push(1); d.dates.push("9/" + d.v.length); d.dow.push("月"); }
+    });
+  });
+  eq(over.status, 0, "期限切れでも exit 0", over.stderr.slice(0, 200));
+  ok(over.text.indexOf("9/10まで<br><b>期限超過</b>") >= 0, "画面に「期限超過」");
+  ok(/警告: 判断事項の期限が \d+日超過/.test(over.stderr), "stderr に警告", over.stderr.slice(0, 200));
+  ok(over.text.indexOf("今月中") >= 0, "due が null のものは due_label を出す");
+
+  // 期限が生きていれば従来どおり（期限超過を出さない）
+  var alive = buildWith(function (fx) { fx.basis_date = "2026-09-08"; }, function (m) {
+    m.decisions[0].due = "2026-09-30"; m.decisions[1].due = "2026-09-30";
+  });
+  ok(alive.text.indexOf("期限超過") < 0, "生きている期限には付けない");
+  ok(alive.text.indexOf("9/30まで") >= 0, "M/D まで で出る");
+  ok(!/警告: 判断事項の期限/.test(alive.stderr), "stderr にも出さない");
+
+  // due も due_label も無ければ非0終了
+  var bad = buildWith(null, function (m) { m.decisions[0].due = null; delete m.decisions[0].due_label; });
+  ok(bad.status !== 0, "due / due_label 両方無しは非0", "status=" + bad.status);
+  var badFmt = buildWith(null, function (m) { m.decisions[0].due = "9/10まで"; });
+  ok(badFmt.status !== 0, "日付形式でない due は非0", "status=" + badFmt.status);
+});
+
+describe("Important 1 — 月初はペース系を出さない", function () {
+  eq(L.paceReliable(0, 30), false, "elapsed=0 は不足");
+  eq(L.paceReliable(1, 30), false, "elapsed=1 は不足");
+  eq(L.paceReliable(2, 30), false, "elapsed=2 は不足");
+  eq(L.paceReliable(3, 30), true, "30日月は3日から");
+  eq(L.paceReliable(3, 31), false, "31日月は 10% = 3.1日 なので3日はまだ不足");
+  eq(L.paceReliable(4, 31), true, "31日月は4日から");
+
+  [0, 1, 2].forEach(function (n) {
+    var lane = L.laneModel({
+      target: 868, yomi: 887, act: n === 0 ? 0 : 5,
+      daily: n === 0 ? [] : [5], elapsed: n, days: 30, remaining: 30 - n
+    });
+    eq(lane.paceReliable, false, "elapsed=" + n + ": paceReliable=false");
+    eq(lane.pace, null, "elapsed=" + n + ": pace は null");
+    eq(lane.paceRate, null, "elapsed=" + n + ": paceRate は null");
+    near(lane.worst, lane.yomiRate, 1e-9, "elapsed=" + n + ": worst は Aヨミのみ");
+    eq(lane.verdict.main, "達成見込み", "elapsed=" + n + ": 真っ赤にならない");
+    eq(lane.recent, null, "elapsed=" + n + ": 直近実績も出さない");
+    eq(lane.needRatio, null, "elapsed=" + n + ": 倍率も出さない");
+  });
+
+  // 10/1（elapsed=0）と 10/2（elapsed=1）の合成データで画面を見る
+  [0, 1].forEach(function (n) {
+    var c = buildWith(function (fx) {
+      fx.basis_date = "2026-10-0" + (n + 1);
+      fx.data_through = n === 0 ? "2026-09-30" : "2026-10-01";
+      fx.target_month = "2026-10"; fx.days_in_month = 31;
+      fx.elapsed_days = n; fx.remaining_days = 31 - n;
+      fx.actual_until_index = 6;
+      ["online", "kyoten"].forEach(function (k) {
+        fx.lks[k].daily = n === 0
+          ? { dates: [], dow: [], v: [] }
+          : { dates: ["10/1"], dow: ["木"], v: [3] };
+        fx.lks[k].act = n === 0 ? 0 : 3;
+      });
+    });
+    eq(c.status, 0, "elapsed=" + n + ": ビルドできる", c.stderr.slice(0, 200));
+    var lanes = (c.byId["lanes-lks"] || {}).innerHTML || "";
+    var online = lanes.split('<div class="lane ')[1] || "";   // 1枚目＝オンライン
+    // Aヨミ 887/868 = 102.2% なので、ペースを 0% 扱いにしなければ「達成見込み」のはず
+    ok(online.indexOf("達成見込み") >= 0,
+      "elapsed=" + n + ": Aヨミだけで判定され「達成見込み」になる", online.slice(0, 200));
+    ok(online.indexOf("未達リスク大") < 0,
+      "elapsed=" + n + ": ペース0%で「未達リスク大」に落ちない");
+    ok(lanes.indexOf('fc-rate muted num">―') >= 0,
+      "elapsed=" + n + ": ペース列は ― になる");
+    ok(lanes.indexOf('fc-num num muted">―') >= 0,
+      "elapsed=" + n + ": ペース件数も ― になる");
+    ok(!/実績ペース外挿<\/div><div class="fc-body"><div class="fc-num num [gwb]">0</.test(lanes),
+      "elapsed=" + n + ": ペース 0件 と書かない");
+    ok(c.text.indexOf("／ データ不足") >= 0, "elapsed=" + n + ": 「―／データ不足」を出す");
+    ok(c.text.indexOf("実績ペースでの判定は出していません") >= 0,
+      "elapsed=" + n + ": レーンとトピックス04で理由を説明");
+    ok(c.text.indexOf("月初のため、実績ペースでの判定は出していません") >= 0,
+      "elapsed=" + n + ": トピックス04 がスキップされる");
+    ok(c.text.indexOf("日次ペースの振れによるもの") < 0,
+      "elapsed=" + n + ": 自己矛盾する続き文が出ない");
+  });
+});
+
+describe("Important 2 — sites の as_of_month", function () {
+  var sites9 = [
+    { name: "梅田", cpa_prev: 42730, cpa_target: 32000, as_of_month: "2026-09" },
+    { name: "横浜", cpa_prev: 44613, cpa_target: 31000, as_of_month: "2026-09" }
+  ];
+  var same = L.siteCpaSentence(sites9, "2026-09");
+  ok(same.indexOf("8月¥42,730→9月目標¥32,000") >= 0, "同じ月なら従来どおり", same);
+  ok(same.indexOf("時点の表") < 0, "同じ月なら断り書きは出さない");
+  var stale = L.siteCpaSentence(sites9, "2026-10");
+  ok(stale.indexOf("8月¥42,730→9月目標¥32,000") >= 0,
+    "10月に回しても 8月→9月 のまま（9月→10月目標 と嘘をつかない）", stale);
+  ok(stale.indexOf("（9月時点の表）") >= 0, "「9月時点の表」と断る", stale);
+  var noAsOf = L.siteCpaSentence([{ name: "梅田", cpa_prev: 1, cpa_target: 2 }], "2026-10");
+  ok(noAsOf.indexOf("9月¥1→10月目標¥2") >= 0, "as_of_month が無ければ target_month で従来どおり", noAsOf);
+});
+
+describe("Important 3 — 広告費は日付の進みと比べる", function () {
+  eq(L.spendStance(51, 56.7).state, "onpace", "±10pt 以内は日割どおり");
+  eq(L.spendStance(22, 23.3).state, "onpace", "月初 22% / 進み 23.3% も日割どおり");
+  eq(L.spendStance(40, 56.7).state, "behind", "16.7pt 遅れは behind");
+  eq(L.spendStance(79, 60).state, "ahead", "19pt 先行は ahead");
+  eq(L.spendStance(79, 93).state, "behind", "月末2日前の79%は「遅れている」（旧: 余っている）");
+  eq(L.spendStance(51, 10).state, "ahead", "月初3日で51%は「先行」（旧: 余っている）");
+  eq(L.spendStance(null, 50).state, "unknown", "消化額が無ければ unknown");
+  near(L.spendStance(51, 56.7).diff, -5.7, 1e-9, "差分pt");
+
+  var kpStep = [{ n: "CPA", p: 32154, y: 49971, a: 49971, unit: "¥", lowerBetter: true }];
+  var late = L.topic03(kpStep, { plan: 26500000, act: 20935000 }, 93);   // 79% vs 93%
+  ok(late.h.indexOf("日割より遅れており") >= 0, "月末79%は「遅れている」", late.h);
+  var early = L.topic03(kpStep, { plan: 26500000, act: 13515000 }, 10);  // 51% vs 10%
+  ok(early.h.indexOf("日割より先行して") >= 0, "月初51%は「先行」", early.h);
+  ok(early.p.indexOf("日付の進みは 10.0%") >= 0, "本文に日付の進みを出す", early.p);
+
+  // トークン
+  var ctx = L.tokenCtx({
+    latest: { elapsed_days: 17, days_in_month: 30, lks: { kyoten: { cost: { plan: 26500000, act: 13629656 } } } },
+    onLane: {}, kpLane: {}, lksLane: {}, onStep: [], kpStep: []
+  });
+  eq(ctx.day_ratio, "56.7%", "{{day_ratio}}");
+  eq(ctx["kyoten.spend_rate_vs_day"], "▲5.2pt", "{{kyoten.spend_rate_vs_day}}");
+  eq(ctx["kyoten.spend_stance"], "日割どおり", "{{kyoten.spend_stance}}");
+});
+
+describe("Important 4 — 補正を画面に出す", function () {
+  if (!rendered) { ok(false, "描画できていない"); return; }
+  // フィクスチャは補正2件を持っている
+  has("この画面で適用した補正", "補正の小見出し");
+  has("1円差は原本のまま残している", "revenue_corrections の本文");
+
+  var none = buildWith(function (fx) { fx.revenue_corrections = []; delete fx.dump_truncated; });
+  eq(((none.byId["corrections"] || {}).innerHTML || ""), "", "0件なら見出しごと出さない");
+
+  var trunc = buildWith(function (fx) {
+    fx.dump_truncated = true;
+    fx.dump_truncated_files = ["keiei.md", "kyoten.md"];
+  });
+  ok(trunc.text.indexOf("元データの取得が途中で打ち切られています") >= 0, "dump_truncated を注記に出す");
+  ok(trunc.text.indexOf("keiei.md・kyoten.md") >= 0, "打ち切られたファイル名も出す");
+  ok(trunc.text.indexOf('class="stale">要確認') >= 0, "要確認バッジを付ける");
+
+  var xss = buildWith(function (fx) { fx.revenue_corrections = ['<img src=x onerror="a()">']; });
+  ok(xss.text.indexOf("<img") < 0, "補正文もエスケープする");
+  ok(xss.text.indexOf("&lt;img") >= 0, "エスケープ済みで出る");
+});
+
+describe("Minor — manual フィクスチャと本番 manual のスキーマ", function () {
+  var prod = JSON.parse(fs.readFileSync(prodManual, "utf8"));
+  ["updated_at", "decisions", "field_notes", "notes", "provisional"].forEach(function (k) {
+    ok(prod[k] !== undefined && prod[k] !== null, "本番 manual に " + k + " がある");
+  });
+  ok(Array.isArray(prod.decisions) && prod.decisions.length > 0, "decisions がある");
+  prod.decisions.forEach(function (d, i) {
+    ok(d.due === null || /^\d{4}-\d{2}-\d{2}$/.test(String(d.due)),
+      "本番 decisions[" + i + "].due は実日付か null", JSON.stringify(d.due));
+    ok(!!(d.title && d.owner), "本番 decisions[" + i + "] に title/owner がある");
+  });
+  ok(prod.provisional && prod.provisional.as_of && prod.provisional.as_of.data_through,
+    "provisional.as_of がある");
+  // 本文にベタ書きの金額・件数が残っていないか（数値はトークンで入れる）
+  var bodies = prod.decisions.map(function (d) { return String(d.body || ""); }).join("\n")
+    + "\n" + (prod.field_notes && prod.field_notes.lines || []).map(function (x) { return x.text; }).join("\n");
+  ok(!/¥[\d,]{4,}/.test(bodies), "decisions / field_notes に生の金額が残っていない", bodies.slice(0, 200));
+});
+
+describe("Minor — 実 latest.json でのスモーク", function () {
+  if (!fs.existsSync(prodData)) { ok(true, "latest.json がまだ無いのでスキップ"); return; }
+  var of = path.join(os.tmpdir(), "zensha-smoke-" + process.pid + ".html");
+  var r = cp.spawnSync("python3",
+    [path.join(HERE, "build.py"), "--data", prodData, "--manual", prodManual, "-o", of],
+    { encoding: "utf8" });
+  eq(r.status, 0, "実データでビルドできる", String(r.stderr || "").slice(0, 300));
+  var warns = [];
+  var ow = console.warn; console.warn = function (m) { warns.push(String(m)); };
+  var out;
+  try { out = renderPage(fs.readFileSync(of, "utf8")); } finally { console.warn = ow; }
+  var html = Object.keys(out.byId).map(function (k) { return out.byId[k].innerHTML; }).join("\n");
+  ok(html.indexOf("[未取得]") < 0, "実データに未解決トークンが無い");
+  eq(warns.length, 0, "console.warn が出ない", warns.join(" / "));
+  ok(!/>-\d/.test(html), "負値のペースが出ない");
+  ok(html.indexOf("<img") < 0, "生の <img> が無い");
+  ok(html.indexOf("NaN") < 0, "NaN が出ない");
+  ok(html.indexOf("undefined") < 0, "undefined が出ない");
+  // 判定バッジがどれか1つは出ている（真っ白ではない）
+  ok(/class="badge"/.test(html), "レーン/見出しの判定バッジが描画されている");
+  try { fs.unlinkSync(of); } catch (e) { /* noop */ }
 });
 
 /* ---------------------------------------------------------------- */

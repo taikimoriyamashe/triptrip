@@ -532,6 +532,7 @@ td.gsep{border-left:1px solid var(--line2)}
     <div class="card notes">
       <h3>作る前に確定させたいこと</h3>
       <ol id="notes"></ol>
+      <div id="corrections"></div>
       <div class="sec-note" id="manual-updated" style="margin-top:11px"></div>
       <div class="src" id="src"></div>
     </div>
@@ -586,9 +587,11 @@ td.gsep{border-left:1px solid var(--line2)}
                             daily:(KP.daily||{}).v, elapsed:ELAPSED, days:DAYS, remaining:REMAIN});
   onLane.throughLabel = THROUGH; kpLane.throughLabel = THROUGH;
 
+  var PACE_OK = Z.paceReliable(ELAPSED, DAYS);
   var lksLane = Z.laneModel({target:(TG.online||0)+(TG.kyoten||0),
                              yomi:(ON.yomi||0)+(KP.yomi||0), act:(ON.act||0)+(KP.act||0),
-                             pace:(onLane.pace||0)+(kpLane.pace||0),
+                             pace: PACE_OK ? ((onLane.pace||0)+(kpLane.pace||0)) : null,
+                             paceOk: PACE_OK,
                              elapsed:ELAPSED, days:DAYS, remaining:REMAIN});
 
   var esc = Z.esc;
@@ -837,6 +840,10 @@ td.gsep{border-left:1px solid var(--line2)}
     // 「2つの予測」の説明文。トピックス04・主因③と同じ Z.convStance() に載せて、
     // 同じページ内で違う判断が出ないようにする。
     var cv = Z.stepBy(lane.step, "成約率");
+    if(lane.lane.paceRate === null){
+      return "経過" + ELAPSED + "日のため、実績ペースでの判定は出していません（経過"
+        + Z.PACE_MIN_DAYS + "日かつ月日数の" + Math.round(Z.PACE_MIN_RATIO * 100) + "%を超えてから表示）。";
+    }
     var st = Z.convStance(cv);                       // same / below / above / unknown
     var vy = verdict(lane.lane.yomiRate).main, vp = verdict(lane.lane.paceRate).main;
     var hit = (vy === "達成見込み");
@@ -887,11 +894,16 @@ td.gsep{border-left:1px solid var(--line2)}
       +     '<div class="fc-rate ' + tone(c.yomiRate) + ' num">' + pct(c.yomiRate)
       +       '<span class="gapv"> ／ ' + Z.signedN(c.yomiGap) + '件</span></div>'
       +   '</div></div>'
-      +   '<div class="fc-col"><div class="fc-name ' + tone(c.paceRate) + '"><i></i>実績ペース外挿</div><div class="fc-body">'
-      +     '<div class="fc-num num ' + tone(c.paceRate) + '">' + n0(c.pace) + '<small>件</small></div>'
-      +     '<div class="fc-rate ' + tone(c.paceRate) + ' num">' + pct(c.paceRate)
-      +       '<span class="gapv"> ／ ' + Z.signedN(c.paceGap) + '件</span></div>'
-      +   '</div></div>'
+      +   (c.paceRate === null
+          ? '<div class="fc-col"><div class="fc-name muted"><i></i>実績ペース外挿</div><div class="fc-body">'
+            + '<div class="fc-num num muted">―</div>'
+            + '<div class="fc-rate muted num">―<span class="gapv"> ／ データ不足</span></div>'
+            + '</div></div>'
+          : '<div class="fc-col"><div class="fc-name ' + tone(c.paceRate) + '"><i></i>実績ペース外挿</div><div class="fc-body">'
+            + '<div class="fc-num num ' + tone(c.paceRate) + '">' + n0(c.pace) + '<small>件</small></div>'
+            + '<div class="fc-rate ' + tone(c.paceRate) + ' num">' + pct(c.paceRate)
+            + '<span class="gapv"> ／ ' + Z.signedN(c.paceGap) + '件</span></div>'
+            + '</div></div>')
       + '</div>'
       + '<div class="lane-foot">'
       +   '<div class="lf"><h4>日付の進みに対して</h4>'
@@ -904,13 +916,15 @@ td.gsep{border-left:1px solid var(--line2)}
       +     '<div class="statbig num ' + (done ? "g" : c.tone) + '">' + needTxt
       +       '<small>件/日' + (done ? "（月目標は達成済み）" : "") + '</small></div>'
       +     '<div class="statsub num">計画ペース <b>' + c.planPace.toFixed(1) + '</b> ／ 直近実績 <b>'
-      +       (c.recent === null ? "―" : c.recent.toFixed(1)) + '</b></div>'
+      +       (c.recent === null ? (c.paceReliable ? "―" : "―（データ不足）") : c.recent.toFixed(1)) + '</b></div>'
       +     (done ? '<div class="statsub">残りは上積み分。</div>'
              : '<div class="statsub">' + (c.needRatio !== null
               ? '必要ペースは直近の <b class="num">' + c.needRatio.toFixed(2) + '倍</b>'
               : (c.need === null
                 ? "残日数が無いため必要ペースは計算していません。"
-                : "直近の日次実績が無いため倍率は出していません。")) + '</div>') + '</div>'
+                : (!c.paceReliable
+                  ? "経過日数が少ないため、直近ペースとの比較は出していません。"
+                  : "直近の日次実績が無いため倍率は出していません。"))) + '</div>') + '</div>'
       + '</div></div>';
   }
 
@@ -1000,7 +1014,8 @@ td.gsep{border-left:1px solid var(--line2)}
     var list = Z.buildTopics({
       revenue: REV_ALL.fin, services: SERVICES, target_month: L.target_month,
       on: onLane, kp: kpLane, lks: lksLane,
-      onStep: ON.step || [], kpStep: KP.step || [], kpCost: KP.cost
+      onStep: ON.step || [], kpStep: KP.step || [], kpCost: KP.cost,
+      dayRatio: DAYS ? (ELAPSED / DAYS * 100) : null
     });
     setHTML("topics", list.map(function(t){
       return '<div class="tp"><span class="tp-n mono">' + t.n + '</span>'
@@ -1017,8 +1032,21 @@ td.gsep{border-left:1px solid var(--line2)}
 
   function renderManual(){
     setHTML("decisions", (M.decisions||[]).map(function(d){
+      // due は実日付。basis_date を過ぎていれば「期限超過」と分かる見た目にする。
+      var st = Z.dueState(d.due, L.basis_date);
+      var whenCls, whenTxt;
+      if(st === "overdue"){
+        whenCls = "when";                         // 赤（--bad-soft / --bad）
+        whenTxt = esc(Z.dueLabel(d.due)) + '<br><b>期限超過</b>';
+      }else if(st === "none"){
+        whenCls = "when later";
+        whenTxt = esc(fill(d.due_label || "期限未設定"));
+      }else{
+        whenCls = "when" + (d.urgent ? "" : " later");
+        whenTxt = esc(Z.dueLabel(d.due));
+      }
       return '<div class="card dec-item">'
-        + '<span class="when' + (d.urgent ? "" : " later") + '">' + fill(d.due) + '</span>'
+        + '<span class="' + whenCls + '">' + whenTxt + '</span>'
         + '<div><h3>' + fill(d.title) + '</h3><p>' + fill(d.body) + '</p></div>'
         + '<span class="dec-own">' + fill(d.owner) + '</span></div>';
     }).join(""));
@@ -1046,6 +1074,8 @@ td.gsep{border-left:1px solid var(--line2)}
       return '<li>' + fill(x.text) + (x.tag ? ' <span class="pending">' + esc(x.tag) + '</span>' : '') + '</li>';
     }).join(""));
 
+    renderCorrections();
+
     // 手入力の鮮度。basis_date から7日以上離れていたら警告の見た目にする。
     var warn = Z.manualStaleWarning(M.updated_at, L.basis_date, 7);
     var upd = el("manual-updated");
@@ -1055,6 +1085,29 @@ td.gsep{border-left:1px solid var(--line2)}
     }
 
     renderProvisional();
+  }
+
+  /* ---- この画面で適用した補正（latest.revenue_corrections を機械出力） ---- */
+  function renderCorrections(){
+    var node = el("corrections"); if(!node) return;
+    var rows = (L.revenue_corrections || []).filter(function(x){ return !!x; });
+    var flags = [];
+    if(L.dump_truncated){
+      var files = (L.dump_truncated_files || []).map(function(f){
+        return typeof f === "string" ? f : (f && f.name) || "";
+      }).filter(Boolean);
+      flags.push("元データの取得が途中で打ち切られています"
+        + (files.length ? "（" + files.join("・") + "）" : "（dump_truncated）")
+        + "。表の後ろのほうが欠けている可能性があります。");
+    }
+    if(!rows.length && !flags.length){ node.innerHTML = ""; return; }
+    node.innerHTML =
+      '<h3 style="margin-top:14px">この画面で適用した補正</h3>'
+      + '<ol>' + flags.map(function(x){
+          return '<li><span class="stale">要確認</span> ' + esc(x) + '</li>';
+        }).join("")
+        + rows.map(function(x){ return '<li>' + esc(x) + '</li>'; }).join("")
+      + '</ol>';
   }
 
   /* ---- 仮KPI（SHEmoney / PRO）: manual の as_of で凍結して描画する ---- */

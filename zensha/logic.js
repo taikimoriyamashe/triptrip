@@ -142,6 +142,19 @@ var ZENSHA_LOGIC = (function () {
   /** 計画ペース = target / days */
   function planPace(target, days) { return days ? target / days : 0; }
 
+  /**
+   * 実績ペース外挿を信用してよいか。
+   * 月初は 1日ぶんの実績を月日数倍するので、判定に使うと真っ赤になったり乱高下する。
+   * 3日未満、または月日数の10%未満のあいだは「データ不足」として扱う。
+   */
+  var PACE_MIN_DAYS = 3, PACE_MIN_RATIO = 0.10;
+  function paceReliable(elapsed, days) {
+    if (!isNum(elapsed) || !isNum(days) || days <= 0) return false;
+    if (elapsed < PACE_MIN_DAYS) return false;
+    if (elapsed < days * PACE_MIN_RATIO) return false;
+    return true;
+  }
+
   /** 日次配列の合計・平均（null は除外）。 */
   function dailyStats(v) {
     var s = 0, n = 0;
@@ -167,15 +180,19 @@ var ZENSHA_LOGIC = (function () {
    */
   function laneModel(o) {
     var target = o.target, days = o.days, elapsed = o.elapsed, remaining = o.remaining;
-    var pace = isNum(o.pace) ? o.pace : paceExtrap(o.act, elapsed, days);
+    // 月初はペース外挿を信用しない（呼び出し側が paceOk を明示することもできる）
+    var ok = (o.paceOk === undefined) ? paceReliable(elapsed, days) : !!o.paceOk;
+    var pace = ok ? (isNum(o.pace) ? o.pace : paceExtrap(o.act, elapsed, days)) : null;
     var ry = target > 0 ? o.yomi / target * 100 : 0;
-    var rp = (target > 0 && pace !== null) ? pace / target * 100 : 0;
-    var worst = Math.min(ry, rp);
+    var rp = (target > 0 && pace !== null) ? pace / target * 100 : null;
+    // ペースが出せないあいだは Aヨミだけで判定する（0% 扱いにして真っ赤にしない）
+    var worst = (rp === null) ? ry : Math.min(ry, rp);
     var ptd = planToDate(target, elapsed, days);
     var need = neededPace(target, o.act, remaining);
-    var rec = isNum(o.recent) ? o.recent : recentPace(o.daily);
+    var rec = ok ? (isNum(o.recent) ? o.recent : recentPace(o.daily)) : null;
     return {
       target: target, yomi: o.yomi, act: o.act, pace: pace,
+      paceReliable: ok, paceMinDays: PACE_MIN_DAYS,
       yomiRate: ry, paceRate: rp, worst: worst,
       yomiGap: o.yomi - target,
       paceGap: pace === null ? null : pace - target,
@@ -247,6 +264,19 @@ var ZENSHA_LOGIC = (function () {
     if (!cost || !isNum(cost.plan) || cost.plan === 0 || !isNum(cost.act)) return null;
     return cost.act / cost.plan * 100;
   }
+  /**
+   * 広告費の消化が日割に対して先行/遅行しているか。
+   * 固定の 80% ではなく「経過日数比（elapsed/days）」と比べる（±10pt を目安）。
+   */
+  var SPEND_EPS = 10;
+  function spendStance(spendRate, dayRatio) {
+    if (!isNum(spendRate) || !isNum(dayRatio)) return { state: "unknown", diff: null, label: "消化額は未取得" };
+    var d = spendRate - dayRatio;
+    if (d < -SPEND_EPS) return { state: "behind", diff: d, label: "日割に対して遅れている" };
+    if (d > SPEND_EPS) return { state: "ahead", diff: d, label: "日割に対して先行している" };
+    return { state: "onpace", diff: d, label: "日割どおり" };
+  }
+
   /** 申込CPAの計画比（Aヨミ ÷ 計画）。片方でも欠ければ null。 */
   function cpaRatio(cpa) {
     if (!cpa || !isNum(cpa.p) || cpa.p === 0 || !isNum(cpa.y)) return null;
@@ -354,13 +384,21 @@ var ZENSHA_LOGIC = (function () {
       var cr = cpaRatio(cpa);                 // null 可
       var spendRate = spendRateOf(cost);      // null 可（cost.act が無い月）
       var worseCpa = cr !== null && cr > 1;
+      var dayRatio = isNum(lane && lane.dateRate) ? lane.dateRate : null;
+      var sp = spendStance(spendRate, dayRatio);
       var p1;
       if (spendRate === null) {
         p1 = "広告費の消化額は未取得。";
-      } else if (spendRate < 80) {
-        p1 = "広告費は" + pct0(spendRate) + "しか消化しておらず予算は余っている。";
+      } else if (sp.state === "behind") {
+        p1 = "広告費の消化は" + pct0(spendRate) + "で、日付の進み" + pct0(dayRatio)
+          + "に対して" + Math.abs(Math.round(sp.diff)) + "pt 遅れている（予算が残っている）。";
+      } else if (sp.state === "ahead") {
+        p1 = "広告費の消化は" + pct0(spendRate) + "で、日付の進み" + pct0(dayRatio)
+          + "より" + Math.round(sp.diff) + "pt 先行している。";
+      } else if (sp.state === "onpace") {
+        p1 = "広告費の消化は" + pct0(spendRate) + "で、日付の進み" + pct0(dayRatio) + "とほぼ同じ。";
       } else {
-        p1 = "広告費は" + pct0(spendRate) + "まで消化しており予算の余りは少ない。";
+        p1 = "広告費は" + pct0(spendRate) + "消化。";
       }
       var p2;
       if (cr === null) p2 = "申込CPAが未取得のため、単価の判断はできない。";
@@ -569,41 +607,54 @@ var ZENSHA_LOGIC = (function () {
     };
   }
 
-  function topic03(kpStep, cost) {
+  function topic03(kpStep, cost, dayRatio) {
     var cpa = stepBy(kpStep, "CPA");
     if (!cpa || !cost || !isNum(cost.plan)) return null;
     var cr = cpaRatio(cpa);                 // null 可
     var spendRate = spendRateOf(cost);      // null 可（消化額が未取得の月）
-    var loose = spendRate !== null && spendRate < 80;
-    var tight = spendRate !== null && spendRate >= 80;
+    var sp = spendStance(spendRate, dayRatio);
+    var budgetTxt = sp.state === "behind" ? "日割より遅れており予算が残っている"
+      : (sp.state === "ahead" ? "日割より先行して消化している"
+        : (sp.state === "onpace" ? "日割どおりに消化している" : "消化額が未取得"));
 
     var h;
     if (cr === null) {
-      h = "拠点の広告予算は" + (spendRate === null ? "消化額が未取得" : (loose ? "まだ余っている" : "ほぼ消化"));
+      h = "拠点の広告費は" + budgetTxt;
     } else if (cr > 1) {
-      h = "拠点の広告予算は" + (loose ? "余っているが" : (tight ? "ほぼ使い切りで" : "消化額が未取得だが"))
-        + "、単価が" + cr.toFixed(2) + "倍";
+      h = "拠点の広告費は" + budgetTxt + "が、単価が" + cr.toFixed(2) + "倍";
     } else {
-      h = "拠点の広告単価は計画内（" + cr.toFixed(2) + "倍）、"
-        + (loose ? "予算はまだ余っている" : (tight ? "予算はほぼ消化" : "消化額は未取得"));
+      h = "拠点の広告単価は計画内（" + cr.toFixed(2) + "倍）、広告費は" + budgetTxt;
     }
 
     var spendTxt = spendRate === null
       ? "{M}月広告費は計画" + milM(cost.plan) + "。<b>消化額は未取得</b>。"
       : "{M}月広告費は計画" + milM(cost.plan) + "に対し消化 <b class=\"num\">" + milM(cost.act)
-      + "（" + pct0(spendRate) + "）</b>。";
+      + "（" + pct0(spendRate) + "）</b>"
+      + (isNum(dayRatio) ? "。日付の進みは " + pct(dayRatio) + "（差 "
+        + (sp.diff >= 0 ? "+" : "▲") + Math.abs(sp.diff).toFixed(1) + "pt）" : "") + "。";
     var cpaTxt = cr === null
       ? "申込CPAは未取得。"
       : "申込CPAは計画" + yen(cpa.p) + "に対し <b class=\"num\">" + yen(cpa.y) + "</b>。";
     var tail;
     if (cr === null) tail = "<b>単価が出るまで増額の可否は判断できない。</b>";
     else if (cr > 1) tail = "出せば申込は増えるが、そのぶん成約CACが悪化する。<b>増額の可否が今週の判断事項。</b>";
-    else tail = "単価は計画内のため、<b>消化を早めれば申込を積み増せる。</b>";
+    else if (sp.state === "behind") tail = "単価は計画内のため、<b>消化を早めれば申込を積み増せる。</b>";
+    else tail = "単価は計画内。<b>このペースで消化を続けてよい。</b>";
 
     return { h: h, p: spendTxt + cpaTxt + tail };
   }
 
   function topic04(lane, onLane, kpLane, onStep, kpStep) {
+    // 月初は実績ペースが当てにならないので、2つの予測の比較そのものを出さない
+    if (!lane.paceReliable || lane.pace === null || lane.paceRate === null) {
+      return {
+        h: "SHElikes は月初のため、実績ペースでの判定は出していません",
+        p: "Aヨミ <b class=\"num\">" + n0(lane.yomi) + "件（" + pct(lane.yomiRate) + "）</b>。"
+          + "実績ペースの外挿は、経過日数が少ないうちは1日の増減で大きく振れるため、"
+          + "経過 " + PACE_MIN_DAYS + "日（かつ月日数の"
+          + Math.round(PACE_MIN_RATIO * 100) + "%）を超えてから表示します。"
+      };
+    }
     var vy = verdictLabel(lane.yomiRate), vp = verdictLabel(lane.paceRate);
     var split = Math.abs(lane.forecastGap || 0) / (lane.target || 1) >= 0.03;
     var judge = (vy === vp)
@@ -646,7 +697,7 @@ var ZENSHA_LOGIC = (function () {
     var list = [
       topic01(ctx.revenue, ctx.services),
       topic02(ctx.on, ctx.kp, ctx.onStep, ctx.kpStep),
-      topic03(ctx.kpStep, ctx.kpCost),
+      topic03(ctx.kpStep, ctx.kpCost, ctx.dayRatio),
       topic04(ctx.lks, ctx.on, ctx.kp, ctx.onStep, ctx.kpStep)
     ].filter(Boolean);
     return list.map(function (t, i) {
@@ -665,7 +716,11 @@ var ZENSHA_LOGIC = (function () {
   function siteCpaSentence(sites, targetMonth) {
     var rows = (sites || []).filter(function (s) { return isNum(s.cpa_prev) && isNum(s.cpa_target); });
     if (!rows.length) return "";
-    var pm = prevMonthNo(targetMonth), tm = monthNo(targetMonth);
+    // 月ラベルは sites[].as_of_month（シートが何月の表か）から作る。
+    // target_month と違うなら「（N月時点の表）」を付け、翌月に回したときに嘘をつかないようにする。
+    var asOf = rows[0].as_of_month || targetMonth;
+    var pm = prevMonthNo(asOf), tm = monthNo(asOf);
+    var stale = rows.some(function (s) { return (s.as_of_month || targetMonth) !== targetMonth; });
     // 拠点名は latest.json 由来なのでエスケープする（この戻り値は innerHTML に入る）
     var names = rows.map(function (s) { return esc(s.name); }).join("・");
     var detail = rows.map(function (s, i) {
@@ -674,7 +729,8 @@ var ZENSHA_LOGIC = (function () {
       var to = (i === 0 ? tm + "月目標" : "") + yen(s.cpa_target);
       return head + from + "→" + to;
     }).join("、");
-    return names + "はCPA改善が進行中（" + detail + "）。";
+    return names + "はCPA改善が進行中（" + detail + "）"
+      + (stale ? "<span class=\"muted\">（" + tm + "月時点の表）</span>" : "") + "。";
   }
 
   /* ================================================================
@@ -711,6 +767,8 @@ var ZENSHA_LOGIC = (function () {
       "elapsed_days": isNum(L.elapsed_days) ? String(L.elapsed_days) : null,
       "remaining_days": isNum(L.remaining_days) ? String(L.remaining_days) : null,
       "days_in_month": isNum(L.days_in_month) ? String(L.days_in_month) : null,
+      "day_ratio": (isNum(L.elapsed_days) && isNum(L.days_in_month) && L.days_in_month > 0)
+        ? pct(L.elapsed_days / L.days_in_month * 100) : null,
 
       "online.target": joinUnit(on.target, n0, "件"),
       "online.yomi": joinUnit(on.yomi, n0, "件"),
@@ -749,6 +807,16 @@ var ZENSHA_LOGIC = (function () {
       "kyoten.cost.plan_M": kpCost && isNum(kpCost.plan) ? milM(kpCost.plan) : null,
       "kyoten.cost.act_M": kpCost && isNum(kpCost.act) ? milM(kpCost.act) : null,
       "kyoten.spend_rate": kpSpend === null ? null : pct0(kpSpend),
+      "kyoten.spend_rate_vs_day": (function () {
+        var dr = isNum(L.elapsed_days) && isNum(L.days_in_month) && L.days_in_month > 0
+          ? L.elapsed_days / L.days_in_month * 100 : null;
+        var st = spendStance(kpSpend, dr);
+        return st.diff === null ? null
+          : ((st.diff >= 0 ? "+" : "▲") + Math.abs(st.diff).toFixed(1) + "pt");
+      })(),
+      "kyoten.spend_stance": spendStance(kpSpend,
+        isNum(L.elapsed_days) && isNum(L.days_in_month) && L.days_in_month > 0
+          ? L.elapsed_days / L.days_in_month * 100 : null).label,
 
       "lks.total_target": joinUnit(lks.target, n0, "件"),
       "lks.total_yomi": joinUnit(lks.yomi, n0, "件"),
@@ -780,6 +848,29 @@ var ZENSHA_LOGIC = (function () {
     });
   }
 
+  /**
+   * 判断事項の期限。due は実日付（"2026-09-10"）。
+   *   none    … due が無い（due_label をそのまま出す）
+   *   overdue … basis_date を過ぎている
+   *   open    … まだ生きている
+   */
+  function dueState(due, basisDate) {
+    if (!due) return "none";
+    if (!basisDate) return "open";
+    return daysDiff(basisDate, due) > 0 ? "overdue" : "open";
+  }
+  /** "2026-09-10" → "9/10まで" */
+  function dueLabel(due, fallback) {
+    if (!due) return fallback || "";
+    return md(due) + "まで";
+  }
+  /** 期限切れの判断事項（build.py の警告と画面表示で共用）。 */
+  function overdueDecisions(decisions, basisDate) {
+    return (decisions || []).filter(function (d) {
+      return dueState(d.due, basisDate) === "overdue";
+    });
+  }
+
   /** manual.updated_at が basis_date から N日以上離れていたら警告文を返す。 */
   function manualStaleWarning(updatedAt, basisDate, limitDays) {
     var lim = limitDays === undefined ? 7 : limitDays;
@@ -801,6 +892,9 @@ var ZENSHA_LOGIC = (function () {
   return {
     esc: esc, safeUrl: safeUrl, MISSING: MISSING,
     spendRateOf: spendRateOf, cpaRatio: cpaRatio, convStance: convStance, CONV_EPS: CONV_EPS,
+    spendStance: spendStance, SPEND_EPS: SPEND_EPS,
+    paceReliable: paceReliable, PACE_MIN_DAYS: PACE_MIN_DAYS, PACE_MIN_RATIO: PACE_MIN_RATIO,
+    dueState: dueState, dueLabel: dueLabel, overdueDecisions: overdueDecisions,
     tokenCtx: tokenCtx, fillTokens: fillTokens, manualStaleWarning: manualStaleWarning,
     isNum: isNum, n0: n0, yen: yen, mil: mil, milR: milR, oku: oku,
     pct: pct, pct0: pct0, milM: milM, signed: signed, signedN: signedN,

@@ -31,7 +31,7 @@ import unicodedata
 
 JST = _dt.timezone(_dt.timedelta(hours=9))
 
-CONTRACT_VERSION = "1"
+CONTRACT_VERSION = "1.5"
 
 SOURCES = [
     {
@@ -226,6 +226,22 @@ class Block(object):
             if all(t in vals for t in targets):
                 return r
         return None
+
+
+def detect_truncation(content):
+    """
+    MCP のダンプがサイズ上限等で途中で切れていないかを判定する。
+    返り値: None（問題なし）または理由の文字列。
+    """
+    if not content:
+        return "内容が空"
+    lines = content.split("\n")
+    last = lines[-1]
+    if last.lstrip().startswith("|") and not last.rstrip().endswith("|"):
+        return "最終行が表の行の途中で終わっている（閉じの '|' が無い）"
+    if not content.endswith("\n"):
+        return "末尾に改行が無い（ダンプが途中で打ち切られた疑い）"
+    return None
 
 
 def load_blocks(path):
@@ -1694,15 +1710,24 @@ def main(argv=None):
     ctx = Ctx()
     blocks = {}
     meta = {}
+    truncated = []
     for src in SOURCES:
         path = os.path.join(args.raw_dir, src["raw"] + ".md")
         if not os.path.exists(path):
             print("エラー: %s がありません。zensha/ingest.py で raw を用意してください。" % path,
                   file=sys.stderr)
             return 2
+        with open(path, encoding="utf-8") as fh:
+            content = fh.read()
         blocks[src["raw"]] = load_blocks(path)
         ctx.note("読み込み: raw/%s（%d ブロック）"
                  % (os.path.basename(path), len(blocks[src["raw"]])))
+        reason = detect_truncation(content)
+        if reason:
+            truncated.append(src["raw"])
+            ctx.note("警告: raw/%s.md はダンプが途中で切れています（%s）。"
+                     "表が増えると必要な表が切断点の外に出て、突然取得できなくなる恐れがあります。"
+                     % (src["raw"], reason))
         meta[src["raw"]] = load_meta(args.raw_dir, src["raw"], ctx)
 
     keiei, marke, kyoten = blocks["keiei"], blocks["marke"], blocks["kyoten"]
@@ -1869,6 +1894,9 @@ def main(argv=None):
         "remaining_days": remaining,
         "fy": {"label": fy_label, "months": months},
         "actual_until_index": actual_until,
+        "dump_truncated": bool(truncated),
+        "dump_truncated_files": list(truncated),
+        "stale_allowed": bool(args.allow_stale),
         "revenue": revenue,
         "revenue_corrections": ctx.corrections,
         "month_summary": month_summary,

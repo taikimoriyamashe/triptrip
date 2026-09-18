@@ -1,6 +1,6 @@
 {
-  "contract_version": "1",
-  "generated_at": "2026-09-18T10:37:32+09:00",
+  "contract_version": "1.5",
+  "generated_at": "2026-09-18T10:56:53+09:00",
   "basis_date": "2026-09-18",
   "data_through": "2026-09-17",
   "target_month": "2026-09",
@@ -25,6 +25,13 @@
     ]
   },
   "actual_until_index": 5,
+  "dump_truncated": true,
+  "dump_truncated_files": [
+    "keiei",
+    "marke",
+    "kyoten"
+  ],
+  "stale_allowed": false,
   "revenue": {
     "fin": {
       "total": {
@@ -755,10 +762,13 @@
   ],
   "extract_log": [
     "読み込み: raw/keiei.md（94 ブロック）",
+    "警告: raw/keiei.md はダンプが途中で切れています（末尾に改行が無い（ダンプが途中で打ち切られた疑い））。表が増えると必要な表が切断点の外に出て、突然取得できなくなる恐れがあります。",
     "警告: raw/keiei.meta.json がありません。sources は extract.py の既定値で埋めます（ingest.py 経由で取り込むと meta が作られます）。",
     "読み込み: raw/marke.md（63 ブロック）",
+    "警告: raw/marke.md はダンプが途中で切れています（最終行が表の行の途中で終わっている（閉じの '|' が無い））。表が増えると必要な表が切断点の外に出て、突然取得できなくなる恐れがあります。",
     "警告: raw/marke.meta.json がありません。sources は extract.py の既定値で埋めます（ingest.py 経由で取り込むと meta が作られます）。",
     "読み込み: raw/kyoten.md（87 ブロック）",
+    "警告: raw/kyoten.md はダンプが途中で切れています（最終行が表の行の途中で終わっている（閉じの '|' が無い））。表が増えると必要な表が切断点の外に出て、突然取得できなくなる恐れがあります。",
     "警告: raw/kyoten.meta.json がありません。sources は extract.py の既定値で埋めます（ingest.py 経由で取り込むと meta が作られます）。",
     "target_month=2026-09 ← marke の日次表の日付行（30 個の日付）で判定。",
     "鮮度チェック: keiei の 計算日_as_of=2026-09-18 は basis_date と一致。",

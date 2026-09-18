@@ -19,6 +19,7 @@ python3 標準ライブラリのみを使用する。
 import argparse
 import json
 import os
+import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -163,6 +164,29 @@ def manual_stale_days(updated_at, basis_date):
     return (a - b).days
 
 
+def overdue_decisions(manual: dict, basis_date):
+    """期限（実日付）が basis_date を過ぎている判断事項。due が無いものは対象外。"""
+    import datetime
+    try:
+        b = datetime.date.fromisoformat(str(basis_date))
+    except (TypeError, ValueError):
+        return []
+    out = []
+    for d in manual.get("decisions") or []:
+        due = d.get("due")
+        if not due:
+            continue
+        try:
+            dd = datetime.date.fromisoformat(str(due))
+        except (TypeError, ValueError):
+            print("警告: manual.json の decisions[].due が日付形式ではありません: %r"
+                  % (due,), file=sys.stderr)
+            continue
+        if dd < b:
+            out.append((due, d.get("title", ""), (b - dd).days))
+    return out
+
+
 def check_manual(m: dict, path: str) -> None:
     for k in ("decisions", "notes", "updated_at"):
         if m.get(k) in (None, ""):
@@ -171,6 +195,15 @@ def check_manual(m: dict, path: str) -> None:
         die("manual.json の decisions は配列である必要があります（%s）" % path)
     if not isinstance(m["notes"], list):
         die("manual.json の notes は配列である必要があります（%s）" % path)
+    for i, d in enumerate(m["decisions"]):
+        if not isinstance(d, dict):
+            die("manual.json の decisions[%d] がオブジェクトではありません（%s）" % (i, path))
+        if d.get("due") is None and not d.get("due_label"):
+            die("manual.json の decisions[%d] は due（YYYY-MM-DD）か due_label のどちらかが必要です（%s）"
+                % (i, path))
+        if d.get("due") is not None and not re.match(r"^\d{4}-\d{2}-\d{2}$", str(d["due"])):
+            die("manual.json の decisions[%d].due は YYYY-MM-DD で書いてください（今は %r・%s）"
+                % (i, d["due"], path))
 
 
 def main(argv=None) -> int:
@@ -215,6 +248,11 @@ def main(argv=None) -> int:
         os.makedirs(out_dir, exist_ok=True)
     with open(args.out, "w", encoding="utf-8") as f:
         f.write(html)
+
+    # 期限切れの判断事項（非0終了はしない。画面にも「期限超過」と出る）
+    for due, title, days in overdue_decisions(manual, latest.get("basis_date")):
+        print("警告: 判断事項の期限が %d日超過しています（%s / %s）。manual.json の decisions を見直してください。"
+              % (days, due, title), file=sys.stderr)
 
     # 手入力の鮮度（非0終了はしない。画面にも同じ警告が出る）
     stale = manual_stale_days(manual.get("updated_at"), latest.get("basis_date"))
