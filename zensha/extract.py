@@ -54,8 +54,10 @@ SOURCES = [
     },
 ]
 
-# 原本 zensha/reference/original-2026-09-08.html の REV_ALL[*][*].plan（不変条件3）
+# 原本 zensha/reference/original-2026-09-08.html の REV_ALL[*][*].plan（不変条件3）。
+# 年度ラベル（fy.label）でキーする。未登録の年度では不変条件3 をスキップして警告に降格する。
 ORIG_PLAN = {
+ "FY26": {
     "fin": {
         "total": [382595924, 385250273, 387443907, 393910701, 399368961, 414385176,
                   418067536, 436844273, 455390590, 469095523, 490456164, 500026193],
@@ -84,6 +86,7 @@ ORIG_PLAN = {
         "grs": [20900000, 22000000, 23100000, 23200000, 24300000, 25400000,
                 27500000, 29600000, 30700000, 33000000, 35100000, 36200000],
     },
+ },
 }
 
 # 売上マトリクスのサービス行ラベル → 契約キー
@@ -473,6 +476,10 @@ def align_series(raw_vals, actual_vals, actual_until, months, acct, key, ctx):
                 % (acct, key, best, best, _fmt_yen(raw_vals[0]), _prev_month(months[0]),
                    scores[0], best, scores[best], n_ref, months[-1]))
         return shifted, best
+    if best > 0 and scores[best] > scores[0]:
+        ctx.note("Ａヨミ表 %s.%s: シフト%d を検討したが一致 %d/%d（シフト0 は %d/%d）で "
+                 "マージン %d 未達のため列ズレ補正を見送った。"
+                 % (acct, key, best, scores[best], n_ref, scores[0], n_ref, margin))
     return list(raw_vals), 0
 
 
@@ -544,9 +551,9 @@ def extract_revenue(keiei_blocks, months, actual_until, ctx):
             act = []
             for i in range(12):
                 if i < actual_until:
+                    # 実績確定月では「直前月のヨミ」は使わない（CONTRACT v1.4）
                     chain = [("実績", s["actual"][i]),
                              ("Ａヨミ", s["yomi"][i]),
-                             ("直前月Ａヨミ", s["yomi"][i - 1] if i > 0 else None),
                              ("期初計画", s["plan"][i])]
                 else:
                     chain = [("Ａヨミ", s["yomi"][i]),
@@ -745,6 +752,89 @@ def crosscheck_grs_target_month(revenue, month_summary, months, target_month, ac
         else:
             ctx.note("グロスタ補正の当月検算 %s: grs.act[%s]=%s は単月確認用の当月Ａヨミと一致。"
                      % (acct, target_month, _fmt_yen(got)))
+
+
+_FY_LANDING_COLS = {"着地見込み": "landing", "期初計画": "plan"}
+
+
+def extract_fy_landing(keiei_blocks, target_month, ctx):
+    """
+    keiei 単月確認用ブロックの「通期＿全社」列群（期初計画 / 着地見込み）を読む。
+    返り値: {acct: {key: {"plan": n, "landing": n}}}（見つからなければ None）
+    """
+    for b in keiei_blocks:
+        if not b.find_cell("今月→"):
+            continue
+        if not b.has("財務会計売上", "管理会計売上", "_LKS", "着地見込み"):
+            continue
+        hdr = b.find_row_by_labels(["期初計画", "実績", "着地見込み"])
+        if hdr is None:
+            continue
+        # 「[merged] 通期＿全社」の列群を見つける
+        group = set()
+        for r in range(0, hdr):
+            for c, cv in enumerate(b.rows[r]):
+                t = text(cv)
+                if "merged" in t and "通期" in t:
+                    group.add(c)
+            if group:
+                break
+        if not group:
+            continue
+        cols = {}
+        for c in sorted(group):
+            lab = _FY_LANDING_COLS.get(norm(b.cell(hdr, c)))
+            if lab and lab not in cols:
+                cols[lab] = c
+        if "landing" not in cols:
+            continue
+        res, acct = {}, None
+        limit = min(cols.values())
+        for r in range(hdr + 1, len(b.rows)):
+            vals = [norm(cv) for cv in b.rows[r][:limit]]
+            for n in vals:
+                if n in ACCOUNT_LABELS:
+                    acct = ACCOUNT_LABELS[n]
+            key = None
+            for n in vals:
+                if n in SERVICE_LABELS:
+                    key = SERVICE_LABELS[n]
+                    break
+            if not (acct and key) or key in res.get(acct, {}):
+                continue
+            res.setdefault(acct, {})[key] = dict(
+                (lab, num(b.cell(r, c))) for lab, c in cols.items())
+        if "fin" in res and "mgmt" in res:
+            ctx.note("通期着地見込み: keiei block %d の「[merged] 通期＿全社 → 着地見込み」列から取得"
+                     "（Σact の検算用）。" % b.index)
+            return res
+    ctx.note("通期着地見込み: keiei に「通期＿全社 / 着地見込み」列が見つからず、Σact の検算をスキップ。")
+    return None
+
+
+def crosscheck_fy_landing(revenue, landing, months, ctx):
+    """通期着地見込み（シート）と latest.json の Σact を突合して extract_log に残す。"""
+    if not landing:
+        return
+    same, diff = [], []
+    for acct in ("fin", "mgmt"):
+        for key in SERVICE_KEYS:
+            want = (landing.get(acct, {}).get(key) or {}).get("landing")
+            if want is None:
+                continue
+            got = sum(revenue[acct][key]["act"])
+            if abs(int(want) - got) <= 1:
+                same.append("%s.%s=%s" % (acct, key, _fmt_yen(got)))
+            else:
+                diff.append("%s.%s: シート着地見込み=%s / Σact=%s（差 %s）"
+                            % (acct, key, _fmt_yen(want), _fmt_yen(got), _fmt_yen(got - want)))
+    if same:
+        ctx.note("通期Σact 突合: シートの「通期＿全社 着地見込み」と一致 %d 系列 → %s"
+                 % (len(same), " ／ ".join(same)))
+    if diff:
+        ctx.note("通期Σact 突合: シートの「通期＿全社 着地見込み」と差がある %d 系列（既知の実績改訂・"
+                 "スナップショット差で説明できる範囲。ハード失敗にはしない） → %s"
+                 % (len(diff), " ／ ".join(diff)))
 
 
 def crosscheck_month_summary(revenue, month_summary, months, target_month, ctx):
@@ -1212,6 +1302,16 @@ def extract_sites(kyoten_blocks, target_month, ctx):
         ctx.fail("kyoten の「CPA / N月目標 / N月実績」拠点別表が見つかりません。")
         return None
     bi, tmon, pmon, sites = hit
+    # 目標列の月（tmon）に年を補う。基本は当月と同じ年、年跨ぎだけ前年/翌年に寄せる。
+    ty, tm = int(target_month[:4]), int(target_month[5:7])
+    ay = ty
+    if tmon > tm + 6:
+        ay = ty - 1          # 例: 当月 1 月に「12月目標」の表を読んだ
+    elif tmon < tm - 6:
+        ay = ty + 1          # 例: 当月 12 月に「1月目標」の表を読んだ
+    as_of = "%04d-%02d" % (ay, tmon)
+    for site in sites:
+        site["as_of_month"] = as_of
     if matched:
         ctx.note("拠点別CPA: kyoten block %d の「CPA / %d月目標 / %d月実績」表から取得。" % (bi, tmon, pmon))
         if pmon != pm:
@@ -1377,20 +1477,30 @@ def check_invariants(doc, today, allow_stale, detail, ctx):
                 errs.append("不変条件2: revenue.%s.total.act[%d] (%d) が 5 サービスの和 (%d) と 1 円を超えて乖離"
                             % (acct, i, tot, ssum))
 
-    # 不変条件3: 期初計画は原本 REV_ALL と全12ヶ月厳密一致
-    n3 = 0
-    for acct in ("fin", "mgmt"):
-        for key in SERVICE_KEYS:
-            want = ORIG_PLAN[acct][key]
-            got = doc["revenue"][acct][key]["plan"]
-            for i in range(12):
-                if got[i] != want[i]:
-                    n3 += 1
-                    if n3 <= 10:
-                        errs.append("不変条件3: revenue.%s.%s.plan[%d]=%d が原本 REV_ALL の %d と不一致"
-                                    % (acct, key, i, got[i], want[i]))
-    if n3 > 10:
-        errs.append("不変条件3: 期初計画の原本不一致が合計 %d 件" % n3)
+    # 不変条件3: 期初計画は原本 REV_ALL と全12ヶ月厳密一致（基準値は年度ラベルで持つ）
+    fy_label = doc["fy"]["label"]
+    base = ORIG_PLAN.get(fy_label)
+    if base is None:
+        msg = ("不変条件3: 年度 %s の期初計画の基準値が extract.py の ORIG_PLAN に未登録のため検査をスキップ"
+               "（原本 REV_ALL は %s のもの。年度が変わったら基準値を登録し直すこと）。"
+               % (fy_label, "/".join(sorted(ORIG_PLAN)) or "なし"))
+        print("警告: " + msg, file=sys.stderr)
+        if ctx is not None:
+            ctx.note("警告: " + msg)
+    else:
+        n3 = 0
+        for acct in ("fin", "mgmt"):
+            for key in SERVICE_KEYS:
+                want = base[acct][key]
+                got = doc["revenue"][acct][key]["plan"]
+                for i in range(12):
+                    if got[i] != want[i]:
+                        n3 += 1
+                        if n3 <= 10:
+                            errs.append("不変条件3: revenue.%s.%s.plan[%d]=%d が原本 REV_ALL(%s) の %d と不一致"
+                                        % (acct, key, i, got[i], fy_label, want[i]))
+        if n3 > 10:
+            errs.append("不変条件3: 期初計画の原本不一致が合計 %d 件" % n3)
 
     aui = doc["actual_until_index"]
     if not isinstance(aui, int) or not (1 <= aui <= 12):
@@ -1406,9 +1516,12 @@ def check_invariants(doc, today, allow_stale, detail, ctx):
                 got = doc["revenue"][acct][key]["act"]
                 raw = cells.get((acct, key)) or [None] * 12
                 for i in range(aui):
-                    if got[i] <= 0:
-                        errs.append("不変条件4: revenue.%s.%s.act[%d]=%d が正の数値ではありません（%s）"
+                    if got[i] < 0:
+                        errs.append("不変条件4: revenue.%s.%s.act[%d]=%d が負の数値です（%s）"
                                     % (acct, key, i, got[i], months[i]))
+                    elif got[i] == 0 and ctx is not None:
+                        ctx.note("不変条件4 参考: %s.%s.act[%s] は ¥0（実績表のセルが 0）。"
+                                 "売上が立たなかった月として扱う。" % (acct, key, months[i]))
                     if key == "total":
                         # total は 5 サービスの和（契約）。シートの合計行とは差が出得るのでログのみ。
                         if raw[i] is not None and abs(raw[i] - got[i]) > 1 and ctx is not None:
@@ -1422,6 +1535,11 @@ def check_invariants(doc, today, allow_stale, detail, ctx):
                     elif abs(raw[i] - got[i]) > 1:
                         errs.append("不変条件4: revenue.%s.%s.act[%d]=%d が売上マトリクス実績表のセル %d と不一致"
                                     % (acct, key, i, got[i], int(round(raw[i]))))
+        for acct in ("fin", "mgmt"):
+            for i in range(aui):
+                if all(doc["revenue"][acct][k]["act"][i] == 0 for k in COMPONENT_KEYS):
+                    errs.append("不変条件4: revenue.%s の %s は 5 サービスの実績が全て 0 です"
+                                "（実績表の読み取りに失敗している可能性）。" % (acct, months[i]))
 
     for lane in ("online", "kyoten"):
         v = doc["lks"][lane]["daily"]["v"]
@@ -1494,7 +1612,8 @@ def build_sources(meta, target_month, ctx):
     for src in SOURCES:
         m = meta.get(src["raw"]) or {}
         name = m.get("title") or src["name"]
-        sid = m.get("id") or src["id"]
+        sid = m.get("id")
+        stale_id = False
         if src.get("name_from_month"):
             built = marke_name_for(target_month, src["name_from_month"])
             if m.get("title"):
@@ -1503,20 +1622,36 @@ def build_sources(meta, target_month, ctx):
                     ctx.note("警告: raw/%s.meta.json の title『%s』から年月を読み取れません。"
                              "sources の name は target_month から組み立てた『%s』を使います。"
                              % (src["raw"], m["title"], built))
+                    stale_id = True
                 else:
                     ty, tm = 2000 + int(mm.group(1)), int(mm.group(2))
                     if "%04d-%02d" % (ty, tm) != target_month:
                         ctx.note("警告: raw/%s.meta.json の title『%s』の年月が target_month %s と違います。"
-                                 "取り込んだファイルが当月分か確認してください（sources の name は『%s』）。"
+                                 "取り込んだファイルが当月分か確認してください（sources の name は『%s』、"
+                                 "リンク先 ID も前月分の可能性があります）。"
                                  % (src["raw"], m["title"], target_month, built))
+                        stale_id = True
             name = built
             ctx.note("sources: marke の name は target_month(%s) から組み立て →『%s』"
                      % (target_month, name))
+            if not sid:
+                stale_id = True
+                ctx.note("警告: marke は月ごとにファイル（＝スプレッドシート ID）が変わりますが、"
+                         "raw/marke.meta.json が無く ID を確認できません。sources[marke].url は "
+                         "extract.py の既定値（%s 時点の ID %s）のままなので、"
+                         "『%s』というラベルで前月分のシートを開くリンクになっている可能性があります。"
+                         "ingest.py 経由で取り込むと meta から当月の ID が入ります。"
+                         % (src["name"], src["id"], name))
+        sid = sid or src["id"]
         entry = {"name": name}
         label = m.get("label") or src.get("label")
+        if stale_id:
+            label = (label or name) + "（リンク先は前月分の可能性）"
         if label:
             entry["label"] = label
         entry["url"] = m.get("url") or ("https://docs.google.com/spreadsheets/d/%s/edit" % sid)
+        if stale_id:
+            entry["stale_id"] = True
         out.append(entry)
     return out
 
