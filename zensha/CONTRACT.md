@@ -79,8 +79,8 @@ Google Drive MCP `read_file_content` が返す fileContent（Markdown表。タ�
 ## 不変条件（extract.py が検査し、NGなら非0終了）
 1. revenue の各系列は長さ12、全要素が数値（NaN/null禁止）。
 2. fin/mgmt とも `total.act[i] == Σ services act[i]`（丸め誤差1円以内）。
-3. 期初計画（plan）は原本と一致: 例 fin.total.plan[0]==382595924、fin.lks.plan[0]==339439531、mgmt.total.plan[0]==385856895、fin.grs.plan[0]==20900000（原本 REV_ALL と全12ヶ月一致を要求）。
-4. 実績確定月までの act は原本と一致（fin.lks.act[0..4] == [336107464,345997228,341145176,356545162,360685637] は「シートの実績が更新され得る」ため厳密一致ではなく ±0.5% 以内を許容。ただし plan は厳密一致）。
+3. 期初計画（plan）は原本と一致（extract.py 内に原本 REV_ALL の plan を保持し、不一致なら非0終了）: 例 fin.total.plan[0]==382595924、fin.lks.plan[0]==339439531、mgmt.total.plan[0]==385856895、fin.grs.plan[0]==20900000（原本 REV_ALL と全12ヶ月一致を要求）。
+4. 実績確定月までの act は正の数値で、売上マトリクスの実績表の該当セルと一致（extract.py が raw に対して検査）。原本(2026-09-08)との ±0.5% 比較は test_extract.py の回帰 WARN とし、逸脱セルは「raw の該当セルと一致」を assert する。実績確定月→ ワイド表と食い違う月は extract_log に列挙する。
 5. `actual_until_index` は 1..12、`target_month` は fy.months に含まれる。
 6. lks.online.daily.v の長さ == elapsed_days（data_through まで）。kyoten も同じ。要素は数値または null（欠損日）。null は extract_log に記録。
 7. step の p/y/a は全て数値。key 行がちょうど1つ。
@@ -94,5 +94,6 @@ Google Drive MCP `read_file_content` が返す fileContent（Markdown表。タ�
 - `updated_at`: manual.json を人が更新した日。
 
 ## 改訂履歴
+- v1.3 (2026-09-18): 不変条件3を extract.py 内で検査、不変条件4を「raw との一致＋ワイド表との差異ログ」に変更、グロスタ補正の month_summary 突合、marke ソース名は target_month から組み立て（食い違いは警告）、lks.online.step の p は 成約=keiei(868) / 申込・予約・参加・参加率・CPA=marke / 成約率=成約p÷参加p（導出、extract_log と画面注記に明記）。
 - v1.2 (2026-09-18): sources[].label 任意、cost の各値 null 可、month_summary は検算用 を明記。
 - v1.1 (2026-09-18): daily.v の null 許容、Aヨミ欠損月のフォールバック順（直前月Aヨミ）、targets の出所（keiei を正）、実績の出所（売上マトリクスを正）、cost.act 例値修正、month_summary は無補正 を明記。
