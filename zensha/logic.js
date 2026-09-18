@@ -754,8 +754,11 @@ var ZENSHA_LOGIC = (function () {
     var onConv = stepBy(o.onStep, "成約率"), kpConv = stepBy(o.kpStep, "成約率");
     var kpCost = ((L.lks || {}).kyoten || {}).cost;
     var onCost = ((L.lks || {}).online || {}).cost;
-    var onDaily = dailyStats((((L.lks || {}).online || {}).daily || {}).v);
-    var kpDaily = dailyStats((((L.lks || {}).kyoten || {}).daily || {}).v);
+    var onDailyV = (((L.lks || {}).online || {}).daily || {}).v;
+    var kpDailyV = (((L.lks || {}).kyoten || {}).daily || {}).v;
+    var onDaily = dailyStats(onDailyV), kpDaily = dailyStats(kpDailyV);
+    // 月初（配列が空）は「0件」。配列そのものが無いときだけ [未取得] にする。
+    function dailySumTok(v, st) { return Array.isArray(v) ? (n0(st.sum) + "件") : null; }
     var kpSpend = spendRateOf(kpCost), onSpend = spendRateOf(onCost);
     var kpCr = cpaRatio(kpCPA), onCr = cpaRatio(onCPA);
 
@@ -777,7 +780,7 @@ var ZENSHA_LOGIC = (function () {
       "online.yomi_diff": isNum(on.yomiGap) ? (signedN(on.yomiGap) + "件") : null,
       "online.yomi_rate": isNum(on.yomiRate) ? pct(on.yomiRate) : null,
       "online.pace_rate": isNum(on.paceRate) ? pct(on.paceRate) : null,
-      "online.daily_sum": onDaily.n ? (n0(onDaily.sum) + "件") : null,
+      "online.daily_sum": dailySumTok(onDailyV, onDaily),
       "online.cpa_plan": onCPA ? joinUnit(onCPA.p, yen, "") : null,
       "online.cpa_act": onCPA ? joinUnit(onCPA.a, yen, "") : null,
       "online.cpa_yomi": onCPA ? joinUnit(onCPA.y, yen, "") : null,
@@ -796,7 +799,7 @@ var ZENSHA_LOGIC = (function () {
       "kyoten.yomi_diff": isNum(kp.yomiGap) ? (signedN(kp.yomiGap) + "件") : null,
       "kyoten.yomi_rate": isNum(kp.yomiRate) ? pct(kp.yomiRate) : null,
       "kyoten.pace_rate": isNum(kp.paceRate) ? pct(kp.paceRate) : null,
-      "kyoten.daily_sum": kpDaily.n ? (n0(kpDaily.sum) + "件") : null,
+      "kyoten.daily_sum": dailySumTok(kpDailyV, kpDaily),
       "kyoten.cpa_plan": kpCPA ? joinUnit(kpCPA.p, yen, "") : null,
       "kyoten.cpa_act": kpCPA ? joinUnit(kpCPA.a, yen, "") : null,
       "kyoten.cpa_yomi": kpCPA ? joinUnit(kpCPA.y, yen, "") : null,
