@@ -103,8 +103,9 @@ var ZENSHA_LOGIC = (function () {
   /** ヘッダの日付行。 */
   function stampParts(D, today) {
     var m = monthNo(D.target_month);
+    // basis_date / data_through は latest.json 由来なので esc を通す（戻り値は innerHTML に入る）
     return {
-      basis: "データ取得 <b>" + D.basis_date + "</b>（実績は " + md(D.data_through) + " まで）",
+      basis: "データ取得 <b>" + esc(D.basis_date) + "</b>（実績は " + esc(md(D.data_through)) + " まで）",
       month: m + "月 <b>経過" + D.elapsed_days + "日 / " + D.days_in_month + "日・残" + D.remaining_days + "日</b>",
       stale: staleBadge(D.basis_date, D.data_through, today)
     };

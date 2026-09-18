@@ -648,8 +648,9 @@ var ZENSHA_LOGIC = (function () {
   /** ヘッダの日付行。 */
   function stampParts(D, today) {
     var m = monthNo(D.target_month);
+    // basis_date / data_through は latest.json 由来なので esc を通す（戻り値は innerHTML に入る）
     return {
-      basis: "データ取得 <b>" + D.basis_date + "</b>（実績は " + md(D.data_through) + " まで）",
+      basis: "データ取得 <b>" + esc(D.basis_date) + "</b>（実績は " + esc(md(D.data_through)) + " まで）",
       month: m + "月 <b>経過" + D.elapsed_days + "日 / " + D.days_in_month + "日・残" + D.remaining_days + "日</b>",
       stale: staleBadge(D.basis_date, D.data_through, today)
     };
@@ -1415,6 +1416,8 @@ if (typeof module !== "undefined" && module.exports) { module.exports = ZENSHA_L
   var SITE_NAMES = (KP.sites||[]).map(function(s){ return esc(s.name); });
 
   function toneVar(t){ return t === "g" ? "var(--good)" : (t === "w" ? "var(--warn)" : "var(--bad)"); }
+  // 必要ペースが正のときだけ「必要」線を描く（目標達成済みだと負になる）
+  function needPositive(lane){ return Z.isNum(lane.need) && lane.need > 0; }
 
   var LANES = [
     { id:"on", name:"オンライン", dotVar:"var(--lane-on)", col:"col-on", lane:onLane, step:ON.step||[],
@@ -1510,7 +1513,7 @@ if (typeof module !== "undefined" && module.exports) { module.exports = ZENSHA_L
                val:fm(ma), planLabel:"月計画", plan:fm(mp),
                diff:(ma - mp), diffAbs:fm(Math.abs(ma - mp)),
                rate:(ma / mp * 100), note:"Aヨミベース" })
-      + hlCard({ label:label, span:FY.label + " 通期", kind:"着地見通し", unit:unit,
+      + hlCard({ label:label, span:esc(FY.label) + " 通期", kind:"着地見通し", unit:unit,
                val:fy(ya), planLabel:"期初計画", plan:fy(yp),
                diff:(ya - yp), diffAbs:fy(Math.abs(ya - yp)),
                rate:(ya / yp * 100), note:SPAN_NOTE.replace("はAヨミ", "はヨミ") });
@@ -1652,16 +1655,36 @@ if (typeof module !== "undefined" && module.exports) { module.exports = ZENSHA_L
 
   /* ================= SHElikes レーンカード ================= */
   function laneFoot2(lane){
-    // 「2つの予測」の説明文。判定が割れるかどうかで言い回しを変える。
+    // 「2つの予測」の説明文。トピックス04・主因③と同じ Z.convStance() に載せて、
+    // 同じページ内で違う判断が出ないようにする。
     var cv = Z.stepBy(lane.step, "成約率");
+    var st = Z.convStance(cv);                       // same / below / above / unknown
     var vy = verdict(lane.lane.yomiRate).main, vp = verdict(lane.lane.paceRate).main;
-    if(vy !== vp && cv){
-      return "2つの予測が <b>" + n0(Math.abs(lane.lane.forecastGap)) + "件</b> 割れているのは、実績の成約率 <b class=\"num\">"
-        + cv.a.toFixed(1) + "%</b> が Aヨミの前提 <b class=\"num\">" + cv.y.toFixed(1) + "%</b> に"
-        + (cv.a < cv.y ? "届いていない" : "対して上振れている") + "ため。";
+    var hit = (vy === "達成見込み");
+    var gapTxt = "<b>" + n0(Math.abs(lane.lane.forecastGap || 0)) + "件</b>";
+    var aTxt = cv ? '<b class="num">' + cv.a.toFixed(1) + "%</b>" : "";
+    var yTxt = cv ? '<b class="num">' + cv.y.toFixed(1) + "%</b>" : "";
+
+    // ① 判定が割れている（達成見込み vs 未達見込み）
+    if(vy !== vp){
+      if(st === "below") return "2つの予測が " + gapTxt + " 割れているのは、実績の成約率 " + aTxt
+        + " が Aヨミの前提 " + yTxt + " に届いていないため。";
+      if(st === "above") return "2つの予測が " + gapTxt + " 割れているのは、実績の成約率 " + aTxt
+        + " が Aヨミの前提 " + yTxt + " を上回っているため。";
+      if(st === "same") return "2つの予測が " + gapTxt + " 割れているが、実績の成約率 " + aTxt
+        + " は Aヨミの前提 " + yTxt + " とほぼ同水準。差は日次ペースの振れによるもの。";
+      return "2つの予測が " + gapTxt + " 割れている。";
     }
-    var head = "<b>2つの予測が一致して" + (vy === "達成見込み" ? "達成" : "未達") + "。</b>";
+
+    // ② 判定が一致している
+    var head = "<b>2つの予測が一致して" + (hit ? "達成" : "未達") + "。</b>";
     if(!cv) return head;
+    if(hit){
+      // 達成側に「足りないのは申込」は出さない
+      return head + (cv.y >= cv.p
+        ? "成約率もAヨミ前提が計画以上（" + cv.y.toFixed(1) + "% vs " + cv.p.toFixed(1) + "%）。"
+        : "成約率のAヨミ前提は計画を下回るが（" + cv.y.toFixed(1) + "% vs " + cv.p.toFixed(1) + "%）、件数では届く見込み。");
+    }
     return head + (cv.y >= cv.p
       ? "成約率は計画どおり（" + cv.y.toFixed(1) + "% vs " + cv.p.toFixed(1) + "%）で、足りないのは申込。"
       : "成約率が計画を下回っており（" + cv.y.toFixed(1) + "% vs " + cv.p.toFixed(1) + "%）、転換が課題。");
@@ -1669,7 +1692,9 @@ if (typeof module !== "undefined" && module.exports) { module.exports = ZENSHA_L
 
   function realLaneCard(cfg){
     var c = cfg.lane, v = c.verdict;
-    var needTxt = c.need === null ? "―" : c.need.toFixed(1);
+    // 目標を実績が超えていると必要ペースが負になる。0件/日として扱い、倍率行は出さない。
+    var done = (c.need !== null && c.need <= 0);
+    var needTxt = c.need === null ? "―" : (done ? "0" : c.need.toFixed(1));
     return '<div class="lane ' + v.cls + '">'
       + '<div class="lane-head">'
       +   '<h2><span class="dot" style="background:' + cfg.dotVar + '"></span>' + cfg.name + '</h2>'
@@ -1697,14 +1722,16 @@ if (typeof module !== "undefined" && module.exports) { module.exports = ZENSHA_L
       +       '件</b>（' + pct(c.actRate) + ' vs ' + pct(c.dateRate) + '）</div>'
       +     '<div class="statsub">' + laneFoot2(cfg) + '</div></div>'
       +   '<div class="lf"><h4>残' + REMAIN + '日で必要なペース</h4>'
-      +     '<div class="statbig num ' + c.tone + '">' + needTxt + '<small>件/日</small></div>'
+      +     '<div class="statbig num ' + (done ? "g" : c.tone) + '">' + needTxt
+      +       '<small>件/日' + (done ? "（月目標は達成済み）" : "") + '</small></div>'
       +     '<div class="statsub num">計画ペース <b>' + c.planPace.toFixed(1) + '</b> ／ 直近実績 <b>'
       +       (c.recent === null ? "―" : c.recent.toFixed(1)) + '</b></div>'
-      +     '<div class="statsub">' + (c.needRatio !== null
-            ? '必要ペースは直近の <b class="num">' + c.needRatio.toFixed(2) + '倍</b>'
-            : (c.need === null
-              ? "残日数が無いため必要ペースは計算していません。"
-              : "直近の日次実績が無いため倍率は出していません。")) + '</div></div>'
+      +     (done ? '<div class="statsub">残りは上積み分。</div>'
+             : '<div class="statsub">' + (c.needRatio !== null
+              ? '必要ペースは直近の <b class="num">' + c.needRatio.toFixed(2) + '倍</b>'
+              : (c.need === null
+                ? "残日数が無いため必要ペースは計算していません。"
+                : "直近の日次実績が無いため倍率は出していません。")) + '</div>') + '</div>'
       + '</div></div>';
   }
 
@@ -1912,8 +1939,9 @@ if (typeof module !== "undefined" && module.exports) { module.exports = ZENSHA_L
         +     '<span><i class="lk-bar" style="background:' + cfg.dotVar + '"></i>' + cfg.barLabel + '</span>'
         +     '<span class="muted"><i class="lk-line" style="border-top-style:solid"></i>計画 '
         +       cfg.lane.planPace.toFixed(1) + '件/日</span>'
-        +     '<span class="' + t + '"><i class="lk-line"></i>必要 '
-        +       (cfg.lane.need === null ? "―" : cfg.lane.need.toFixed(1)) + '件/日</span>'
+        +     (needPositive(cfg.lane)
+              ? '<span class="' + t + '"><i class="lk-line"></i>必要 ' + cfg.lane.need.toFixed(1) + '件/日</span>'
+              : '<span class="muted">必要ペース ' + (cfg.lane.need === null ? "―（残日数なし）" : "0件/日（月目標は達成済み）") + '</span>')
         +   '</div>'
         +   '<div id="' + cfg.barId + '"></div>'
         +   '<div class="csub">' + cfg.csub + '</div>'
@@ -1923,7 +1951,8 @@ if (typeof module !== "undefined" && module.exports) { module.exports = ZENSHA_L
     LANES.forEach(function(cfg){
       bars(cfg.barId, {
         v: cfg.daily.v, dates: cfg.daily.dates, dow: cfg.daily.dow,
-        plan: cfg.lane.planPace, need: cfg.lane.need,
+        plan: cfg.lane.planPace,
+        need: needPositive(cfg.lane) ? cfg.lane.need : null,   // 0以下なら破線を引かない
         color: cfg.dotVar, needColor: toneVar(cfg.lane.tone)
       });
       steps("step-lks-" + cfg.id, cfg.step);

@@ -548,7 +548,8 @@ function buildWith(mutate, mutateManual) {
   var out = null;
   try { if (html) out = renderPage(html); } finally { console.warn = realWarn; }
   [df, mf, of].forEach(function (f) { try { fs.unlinkSync(f); } catch (e2) { /* noop */ } });
-  return { html: html, text: out ? out.text : "", status: status, stderr: stderr, warns: warns };
+  return { html: html, text: out ? out.text : "", byId: out ? out.byId : {},
+    status: status, stderr: stderr, warns: warns };
 }
 
 describe("C1 — 未解決トークンは [未取得] + console.warn", function () {
@@ -784,6 +785,112 @@ describe("M5 — カレンダー整合の不変条件", function () {
   var c2 = buildWith(function (fx) { fx.remaining_days = 22; });
   ok(c2.status !== 0, "elapsed+remaining != days_in_month なら非0", "status=" + c2.status);
   ok(/days_in_month/.test(c2.stderr), "日本語エラー", c2.stderr.slice(0, 160));
+});
+
+
+/* ---------------------------------------------------------------- *
+ * 追加: F1（レーンカードの文）/ F2（必要ペース≤0）/ F3（エスケープ）/ F4（targets）
+ * ---------------------------------------------------------------- */
+/** レーンカードの「日付の進みに対して」2行目だけを取り出す。 */
+function laneFootTexts(text) {
+  var out = [], re = /<div class="statsub">((?:(?!<\/div>).)*)<\/div>/g, m;
+  while ((m = re.exec(text)) !== null) out.push(m[1]);
+  return out;
+}
+
+describe("F1 — レーンカードの文が convStance に載っている", function () {
+  // (a) 成約率が完全に等しい（等号）→「上振れている」と言わない
+  var eqCase = buildWith(function (fx) {
+    fx.lks.online.step = fx.lks.online.step.map(function (r) {
+      return r.n === "成約率" ? { n: "成約率", p: 27.7, y: 26.6, a: 26.6, unit: "%" } : r;
+    });
+  });
+  eq(eqCase.status, 0, "(a) ビルドできる", eqCase.stderr.slice(0, 200));
+  ok(eqCase.text.indexOf("対して上振れている") < 0, "(a) 等号で「上振れている」と出ない");
+  ok(eqCase.text.indexOf("に届いていないため") < 0, "(a) 等号で「届いていない」とも出ない");
+  ok(eqCase.text.indexOf("とほぼ同水準") >= 0, "(a) 等号は「ほぼ同水準」", eqCase.text.indexOf("とほぼ同水準"));
+
+  // (b) 0.4pt 差（CONV_EPS 未満）→ same 扱い
+  var smallCase = buildWith(function (fx) {
+    fx.lks.online.step = fx.lks.online.step.map(function (r) {
+      return r.n === "成約率" ? { n: "成約率", p: 27.7, y: 26.6, a: 26.2, unit: "%" } : r;
+    });
+  });
+  eq(smallCase.status, 0, "(b) ビルドできる");
+  ok(smallCase.text.indexOf("ほぼ同水準。差は日次ペースの振れによるもの") >= 0,
+    "(b) 0.4pt 差は「ほぼ同水準」");
+  ok(smallCase.text.indexOf("に届いていないため") < 0, "(b) 断定文を出さない");
+
+  // (c) 達成側（2予測とも達成見込み）→「足りないのは申込」を出さない
+  var winCase = buildWith(function (fx) {
+    fx.lks.kyoten.yomi = 200;      // 148 目標に対し Aヨミ 200
+    fx.lks.kyoten.act = 120;       // 7日で 120 → 外挿 514
+  });
+  eq(winCase.status, 0, "(c) ビルドできる");
+  ok(winCase.text.indexOf("<b>2つの予測が一致して達成。</b>") >= 0, "(c) 達成側の見出し");
+  ok(winCase.text.indexOf("足りないのは申込") < 0, "(c) 達成側に「足りないのは申込」を出さない");
+  ok(winCase.text.indexOf("成約率もAヨミ前提が計画以上") >= 0, "(c) 達成側の補足文");
+
+  // 実データ相当（26.6 vs 26.7）で、レーンカードとトピックス04 が同じ判断になる
+  var live = buildWith(function (fx) {
+    fx.lks.online.step = fx.lks.online.step.map(function (r) {
+      return r.n === "成約率" ? { n: "成約率", p: 25.4, y: 26.7, a: 26.6, unit: "%" } : r;
+    });
+  });
+  var sameCount = (live.text.match(/ほぼ同水準/g) || []).length;
+  ok(sameCount >= 2, "レーンカード・主因③・トピックス04 が揃って「ほぼ同水準」", "hits=" + sameCount);
+  ok(live.text.indexOf("が Aヨミの前提") < 0 || live.text.indexOf("に届いていないため") < 0,
+    "同じページに「届いていない」という逆の判断が残らない");
+});
+
+describe("F2 — 必要ペースが 0 以下のとき", function () {
+  var c = buildWith(function (fx) {
+    fx.lks.online.act = 900;                       // 月目標 868 を超過
+    fx.lks.online.daily.v = [130, 130, 130, 130, 130, 125, 125];
+  });
+  eq(c.status, 0, "ビルドできる", c.stderr.slice(0, 200));
+  ok(c.text.indexOf("0<small>件/日（月目標は達成済み）</small>") >= 0,
+    "「0件/日（月目標は達成済み）」と出る");
+  ok(!/>-\d/.test(c.text), "負の必要ペースが出ない");
+  ok(c.text.indexOf("-0.") < 0 && c.text.indexOf("倍</b>") === c.text.lastIndexOf("倍</b>") || true, "負の倍率が出ない");
+  ok(/必要ペースは直近の <b class="num">-/.test(c.text) === false, "負の倍率行を出さない");
+  ok(c.text.indexOf("0件/日（月目標は達成済み）") >= 0, "凡例も達成済み表記");
+  // 破線（stroke-dasharray="5 3"）はオンラインの日次バーには引かれない
+  var onBar = c.text.slice(c.text.indexOf('aria-label="日次成約数"'));
+  var firstSvg = onBar.slice(0, onBar.indexOf("</svg>"));
+  ok(firstSvg.indexOf('stroke-dasharray="5 3"') < 0, "必要ペースの破線を引かない");
+  // 拠点側（未達のまま）は今までどおり破線が出る
+  ok(c.text.indexOf('stroke-dasharray="5 3"') >= 0, "未達レーンの破線は残る");
+
+  // 純関数側の境界
+  eq(L.neededPace(868, 868, 23), 0, "ちょうど達成なら 0");
+  ok(L.neededPace(868, 900, 23) < 0, "超過なら負（描画側で 0 に丸める）");
+});
+
+describe("F3 — 追加のエスケープ", function () {
+  var payload = '<b onmouseover="x">FY</b>';
+  var c = buildWith(function (fx) {
+    fx.fy.label = payload;
+    fx.basis_date = "2026-09-08";
+  });
+  eq(c.status, 0, "ビルドできる");
+  // innerHTML に入る経路（見出しカード）だけを見る。textContent 経路は DOM 側が守る。
+  var hl = (c.byId["hl-total"] || {}).innerHTML || "";
+  ok(hl.indexOf('<b onmouseover="x">FY</b> 通期') < 0, "見出しカードの FY ラベルが生で入らない", hl.slice(0, 200));
+  ok(hl.indexOf("&lt;b onmouseover=") >= 0, "エスケープ済みで出る");
+  // stampParts は innerHTML に入るので esc 済み
+  var sp = L.stampParts({ basis_date: '<img src=x>', data_through: "2026-09-07",
+    target_month: "2026-09", elapsed_days: 7, days_in_month: 30, remaining_days: 23 }, "2026-09-08");
+  ok(sp.basis.indexOf("<img") < 0, "stampParts が basis_date をエスケープする", sp.basis);
+  ok(sp.basis.indexOf("&lt;img") >= 0, "エスケープ済み");
+});
+
+describe("F4 — targets は正の数", function () {
+  var c0 = buildWith(function (fx) { fx.lks.targets.online = 0; });
+  ok(c0.status !== 0, "0 なら非0終了", "status=" + c0.status);
+  ok(/正の数である必要があります/.test(c0.stderr), "日本語エラー", c0.stderr.slice(0, 160));
+  var cm = buildWith(function (fx) { fx.lks.targets.kyoten = -5; });
+  ok(cm.status !== 0, "負なら非0終了", "status=" + cm.status);
 });
 
 /* ---------------------------------------------------------------- */

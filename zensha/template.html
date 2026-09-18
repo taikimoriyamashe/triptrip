@@ -595,6 +595,8 @@ td.gsep{border-left:1px solid var(--line2)}
   var SITE_NAMES = (KP.sites||[]).map(function(s){ return esc(s.name); });
 
   function toneVar(t){ return t === "g" ? "var(--good)" : (t === "w" ? "var(--warn)" : "var(--bad)"); }
+  // 必要ペースが正のときだけ「必要」線を描く（目標達成済みだと負になる）
+  function needPositive(lane){ return Z.isNum(lane.need) && lane.need > 0; }
 
   var LANES = [
     { id:"on", name:"オンライン", dotVar:"var(--lane-on)", col:"col-on", lane:onLane, step:ON.step||[],
@@ -690,7 +692,7 @@ td.gsep{border-left:1px solid var(--line2)}
                val:fm(ma), planLabel:"月計画", plan:fm(mp),
                diff:(ma - mp), diffAbs:fm(Math.abs(ma - mp)),
                rate:(ma / mp * 100), note:"Aヨミベース" })
-      + hlCard({ label:label, span:FY.label + " 通期", kind:"着地見通し", unit:unit,
+      + hlCard({ label:label, span:esc(FY.label) + " 通期", kind:"着地見通し", unit:unit,
                val:fy(ya), planLabel:"期初計画", plan:fy(yp),
                diff:(ya - yp), diffAbs:fy(Math.abs(ya - yp)),
                rate:(ya / yp * 100), note:SPAN_NOTE.replace("はAヨミ", "はヨミ") });
@@ -899,16 +901,16 @@ td.gsep{border-left:1px solid var(--line2)}
       +       '件</b>（' + pct(c.actRate) + ' vs ' + pct(c.dateRate) + '）</div>'
       +     '<div class="statsub">' + laneFoot2(cfg) + '</div></div>'
       +   '<div class="lf"><h4>残' + REMAIN + '日で必要なペース</h4>'
-      +     '<div class="statbig num ' + c.tone + '">' + needTxt + '<small>件/日</small></div>'
+      +     '<div class="statbig num ' + (done ? "g" : c.tone) + '">' + needTxt
+      +       '<small>件/日' + (done ? "（月目標は達成済み）" : "") + '</small></div>'
       +     '<div class="statsub num">計画ペース <b>' + c.planPace.toFixed(1) + '</b> ／ 直近実績 <b>'
       +       (c.recent === null ? "―" : c.recent.toFixed(1)) + '</b></div>'
-      +     '<div class="statsub">' + (done
-            ? "月目標は達成済み。残りは上積み分。"
-            : (c.needRatio !== null
+      +     (done ? '<div class="statsub">残りは上積み分。</div>'
+             : '<div class="statsub">' + (c.needRatio !== null
               ? '必要ペースは直近の <b class="num">' + c.needRatio.toFixed(2) + '倍</b>'
               : (c.need === null
                 ? "残日数が無いため必要ペースは計算していません。"
-                : "直近の日次実績が無いため倍率は出していません。"))) + '</div></div>'
+                : "直近の日次実績が無いため倍率は出していません。")) + '</div>') + '</div>'
       + '</div></div>';
   }
 
@@ -1116,8 +1118,9 @@ td.gsep{border-left:1px solid var(--line2)}
         +     '<span><i class="lk-bar" style="background:' + cfg.dotVar + '"></i>' + cfg.barLabel + '</span>'
         +     '<span class="muted"><i class="lk-line" style="border-top-style:solid"></i>計画 '
         +       cfg.lane.planPace.toFixed(1) + '件/日</span>'
-        +     '<span class="' + t + '"><i class="lk-line"></i>必要 '
-        +       (cfg.lane.need === null ? "―" : cfg.lane.need.toFixed(1)) + '件/日</span>'
+        +     (needPositive(cfg.lane)
+              ? '<span class="' + t + '"><i class="lk-line"></i>必要 ' + cfg.lane.need.toFixed(1) + '件/日</span>'
+              : '<span class="muted">必要ペース ' + (cfg.lane.need === null ? "―（残日数なし）" : "0件/日（月目標は達成済み）") + '</span>')
         +   '</div>'
         +   '<div id="' + cfg.barId + '"></div>'
         +   '<div class="csub">' + cfg.csub + '</div>'
@@ -1127,7 +1130,8 @@ td.gsep{border-left:1px solid var(--line2)}
     LANES.forEach(function(cfg){
       bars(cfg.barId, {
         v: cfg.daily.v, dates: cfg.daily.dates, dow: cfg.daily.dow,
-        plan: cfg.lane.planPace, need: cfg.lane.need,
+        plan: cfg.lane.planPace,
+        need: needPositive(cfg.lane) ? cfg.lane.need : null,   // 0以下なら破線を引かない
         color: cfg.dotVar, needColor: toneVar(cfg.lane.tone)
       });
       steps("step-lks-" + cfg.id, cfg.step);

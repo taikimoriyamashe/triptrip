@@ -60,27 +60,40 @@ Google Drive MCP `read_file_content` が返す fileContent（Markdown表。タ�
         {"n":"成約率","p":27.7,"y":26.7,"a":26.6,"unit":"%"},
         {"n":"CPA","p":23022,"y":22379,"a":22400,"unit":"¥","lowerBetter":true}
       ],
-      "cost": { "plan": 175244808, "act": 100284050, "yomi": 175154000 }   // 各値 null 可（シートに無い場合）
+      "cost": { "plan": 175244808, "act": 100284050, "yomi": 175154000 },  // 各値 null 可（シートに無い場合）
+      "step_note": "オンラインの月計画(p)は出所が混在: …",  // 任意。段階テーブルの下に出す注記（p/y/a の出所や導出の断り書き）
+      "daily.note": "系列は「成約数（決済日起点）」"        // 任意（daily の中に "note" として持つ）。日次グラフ下の系列説明
     },
     "kyoten": {
       "yomi": 112, "act": 49,
       "daily": { "dates": [...], "dow": [...], "v": [...] },   // 日次集計（梅田・福岡・横浜）の最終成約の合算
       "step": [ 申込, 参加, 成約(key), 参加率(sep), 成約率, CPA ],  // 元JS STEP.lksKp と同じ並び（予約なし）
       "cost": { "plan": 26500000, "act": 13629656, "yomi": 26484640 },
-      "sites": [ {"name":"梅田","cpa_prev":42730,"cpa_target":32000}, {"name":"福岡",…}, {"name":"横浜",…} ],  // kyoten ブロック3「CPA 9月目標/8月実績」
-      "excluded_sites": ["名古屋"]
+      "sites": [ {"name":"梅田","cpa_prev":42730,"cpa_target":32000,"as_of_month":"2026-09"}, {"name":"福岡",…}, {"name":"横浜",…} ],  // kyoten ブロック3「CPA 9月目標/8月実績」。as_of_month（任意）= 読んだ表の目標月。当月の表が無く他月で代用したときは target_month と異なる（画面注記用）
+      "excluded_sites": ["名古屋"],
+      "step_note": null,   // 任意（online と同じ。無ければ注記を出さない）
+      "daily": { "…": "…", "note": "系列は 日次集計_（梅田・福岡・横浜）の最終成約" }   // note は任意
     }
   },
-  "sources": [ {"name":"FY26_経営モニタリング","label":"全社（単月確認用・通期着地見通し）","url":"https://docs.google.com/spreadsheets/d/1oIz45k-…/edit"}, {…}, {…} ],  // label は任意（画面のリンク文言。無ければ「元データ：{name}」）
+  "sources": [ {"name":"FY26_経営モニタリング","label":"全社（単月確認用・通期着地見通し）","url":"https://docs.google.com/spreadsheets/d/1oIz45k-…/edit"}, {…}, {…} ],  // label は任意（画面のリンク文言。無ければ「元データ：{name}」）。
+  // marke は月ごとにファイルが変わるため name は target_month から組み立てる。ID を raw/marke.meta.json から確認できないときは stale_id:true（任意）を立て、label に「（リンク先は前月分の可能性）」を付ける
   "extract_log": [ "どの表をどう特定したか、フォールバックしたか（人が読む用）" ]
 }
 ```
 
+### 任意フィールド（画面の注記に使う。無ければテンプレート側の既定文）
+- `lks.online.step_note` / `lks.kyoten.step_note` … 文字列 or null。段階テーブルの直下に出す注記。
+  計画値(p)の出所が混在する／導出値である等の断り書きを入れる。HTML タグは書かない（画面側でエスケープする）。
+- `lks.online.daily.note` / `lks.kyoten.daily.note` … 文字列 or null。日次グラフ下の系列説明。
+  無い場合、画面は「系列は「成約数（決済日起点）」」／「系列は 日次集計_（拠点名…）の最終成約」を既定で出す。
+- `sources[].label` … 文字列 or 省略。リンク文言に使う（画面側で「元データ：」を前置するので、label に含めない）。
+- これらは全て latest.json 由来の外部入力として扱い、画面側で HTML エスケープする。URL は http(s) のみ許可。
+
 ## 不変条件（extract.py が検査し、NGなら非0終了）
 1. revenue の各系列は長さ12、全要素が数値（NaN/null禁止）。
 2. fin/mgmt とも `total.act[i] == Σ services act[i]`（丸め誤差1円以内）。
-3. 期初計画（plan）は原本と一致（extract.py 内に原本 REV_ALL の plan を保持し、不一致なら非0終了）: 例 fin.total.plan[0]==382595924、fin.lks.plan[0]==339439531、mgmt.total.plan[0]==385856895、fin.grs.plan[0]==20900000（原本 REV_ALL と全12ヶ月一致を要求）。
-4. 実績確定月までの act は正の数値で、売上マトリクスの実績表の該当セルと一致（extract.py が raw に対して検査）。原本(2026-09-08)との ±0.5% 比較は test_extract.py の回帰 WARN とし、逸脱セルは「raw の該当セルと一致」を assert する。実績確定月→ ワイド表と食い違う月は extract_log に列挙する。
+3. 期初計画（plan）は原本と一致（extract.py 内に原本 REV_ALL の plan を **fy.label でキーして**保持し、不一致なら非0終了。未登録の年度＝基準値が無い年度では検査をスキップし extract_log に警告を残す＝**非0終了しない**）: 例 fin.total.plan[0]==382595924、fin.lks.plan[0]==339439531、mgmt.total.plan[0]==385856895、fin.grs.plan[0]==20900000（原本 REV_ALL と全12ヶ月一致を要求）。
+4. 実績確定月までの act は **0 以上**の数値で、売上マトリクスの実績表の該当セルと一致（extract.py が raw に対して検査）。`¥0` はその月に売上が立たなかった正当な実績なので**非0終了にせず extract_log に記録**する（例: 財務会計 _グロスタ 2026-09 は ¥0）。負の値、または**5サービス全てが 0** の月だけ非0終了とする。原本(2026-09-08)との ±0.5% 比較は test_extract.py の回帰とし、逸脱セルは「raw の該当セルと一致」を assert する。実績確定月→ ワイド表と食い違う月は extract_log に列挙する。
 5. `actual_until_index` は 1..12、`target_month` は fy.months に含まれる。
 6. lks.online.daily.v の長さ == elapsed_days（data_through まで）。kyoten も同じ。要素は数値または null（欠損日）。null は extract_log に記録。
 7. step の p/y/a は全て数値。key 行がちょうど1つ。
@@ -94,6 +107,8 @@ Google Drive MCP `read_file_content` が返す fileContent（Markdown表。タ�
 - `updated_at`: manual.json を人が更新した日。
 
 ## 改訂履歴
+- v1.4 (2026-09-18): 不変条件4 を「0 以上（¥0 は正当な実績。負値と全サービス0のみ非0終了）」に緩和、不変条件3 の基準値を fy.label でキーし未登録年度はスキップ（警告）、sites[].as_of_month と sources[].stale_id を任意フィールドとして追加。
+- v1.5 (2026-09-18): `lks.*.step_note` と `lks.*.daily.note` を任意フィールドとして定義（段階テーブル下の注記・日次グラフの系列説明）、`sources[].label` は「元データ：」を含めない純ラベルであることを明記、latest 由来の文字列は画面側で HTML エスケープ・URL は http(s) のみ、`lks.targets.online` / `lks.targets.kyoten` は正の数（build.py も検査）。
 - v1.3 (2026-09-18): 不変条件3を extract.py 内で検査、不変条件4を「raw との一致＋ワイド表との差異ログ」に変更、グロスタ補正の month_summary 突合、marke ソース名は target_month から組み立て（食い違いは警告）、lks.online.step の p は 成約=keiei(868) / 申込・予約・参加・参加率・CPA=marke / 成約率=成約p÷参加p（導出、extract_log と画面注記に明記）。
 - v1.2 (2026-09-18): sources[].label 任意、cost の各値 null 可、month_summary は検算用 を明記。
 - v1.1 (2026-09-18): daily.v の null 許容、Aヨミ欠損月のフォールバック順（直前月Aヨミ）、targets の出所（keiei を正）、実績の出所（売上マトリクスを正）、cost.act 例値修正、month_summary は無補正 を明記。

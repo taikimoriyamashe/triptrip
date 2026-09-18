@@ -119,6 +119,9 @@ def check_latest(d: dict, path: str) -> None:
     for k in ("online", "kyoten"):
         if not isinstance(targets.get(k), (int, float)) or isinstance(targets.get(k), bool):
             die("latest.json の lks.targets.%s が数値ではありません（%s）" % (k, path))
+        if targets[k] <= 0:
+            die("latest.json の lks.targets.%s は正の数である必要があります（今は %s・%s）"
+                % (k, targets[k], path))
         lane = lks.get(k) or {}
         for f in REQUIRED_LANE:
             if lane.get(f) is None:
