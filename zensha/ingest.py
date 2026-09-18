@@ -18,11 +18,28 @@ fileContent の中身をそのまま raw/<name>.md に書き出す。
 from __future__ import annotations
 
 import argparse
+import datetime as _dt
 import json
 import os
 import sys
 
+JST = _dt.timezone(_dt.timedelta(hours=9))
+
 NAMES = ("keiei", "marke", "kyoten")
+
+# MCP の結果に title / id が無い場合の既定値（CONTRACT.md の記載）
+DEFAULTS = {
+    "keiei": {"title": "FY26_経営モニタリング",
+              "id": "1oIz45k-Qkr8AY3v4zBQAiYHDxvg21nvVPSP5xX5q9pE",
+              "label": "全社（単月確認用・通期着地見通し）"},
+    "marke": {"title": "26年9月_マーケジスイ進捗管理表",
+              "id": "1a6Aud7H-31gs64lDv2Iyww6DnS98wJcuoOssx6nGhJs"},
+    "kyoten": {"title": "FY26_拠点モニタリング",
+               "id": "11pv1YWcxOvJwJjhsNFZa9zGoy0GCn3bauNtSymMppcg"},
+}
+
+TITLE_KEYS = ("title", "name", "fileName", "filename")
+ID_KEYS = ("id", "fileId", "file_id", "documentId")
 
 # fileContent が入り得るキー（上から順に探す）
 CONTENT_KEYS = ("fileContent", "file_content", "content", "text", "body", "markdown")
@@ -49,6 +66,27 @@ def _find_content(obj, depth=0):
     return None
 
 
+def _find_key(obj, keys, depth=0):
+    """辞書/リストを再帰的に辿って、指定キーの文字列値を返す。"""
+    if depth > 6:
+        return None
+    if isinstance(obj, dict):
+        for k in keys:
+            v = obj.get(k)
+            if isinstance(v, str) and v.strip():
+                return v.strip()
+        for v in obj.values():
+            got = _find_key(v, keys, depth + 1)
+            if got is not None:
+                return got
+    elif isinstance(obj, list):
+        for v in obj:
+            got = _find_key(v, keys, depth + 1)
+            if got is not None:
+                return got
+    return None
+
+
 def _iter_json_candidates(raw):
     """本文中の '{' で始まる部分文字列を先頭から順に JSON として試す。"""
     dec = json.JSONDecoder()
@@ -67,13 +105,14 @@ def _iter_json_candidates(raw):
 
 
 def extract_file_content(raw, allow_plain=False):
+    """(fileContent, title, id) を返す。title / id は見つからなければ None。"""
     for obj in _iter_json_candidates(raw):
         got = _find_content(obj)
         if got is not None:
-            return got
+            return got, _find_key(obj, TITLE_KEYS), _find_key(obj, ID_KEYS)
     if allow_plain:
-        return raw
-    return None
+        return raw, None, None
+    return None, None, None
 
 
 def main(argv=None):
@@ -85,6 +124,10 @@ def main(argv=None):
     ap.add_argument("--raw-dir", default=os.path.join(here, "raw"))
     ap.add_argument("--allow-plain", action="store_true",
                     help="JSON が見つからないときにファイル全体を Markdown とみなす")
+    ap.add_argument("--title", default=None,
+                    help="スプレッドシート名。省略時は MCP 結果から検出、それも無ければ既定値。")
+    ap.add_argument("--id", dest="file_id", default=None,
+                    help="スプレッドシート ID。省略時は MCP 結果から検出、それも無ければ既定値。")
     args = ap.parse_args(argv)
 
     if not os.path.exists(args.result_path):
@@ -93,7 +136,7 @@ def main(argv=None):
     with open(args.result_path, encoding="utf-8") as fh:
         raw = fh.read()
 
-    content = extract_file_content(raw, args.allow_plain)
+    content, found_title, found_id = extract_file_content(raw, args.allow_plain)
     if content is None:
         print("エラー: %s から fileContent を取り出せませんでした"
               "（JSON が見つかりません。全体を Markdown として扱うなら --allow-plain）。"
@@ -110,7 +153,28 @@ def main(argv=None):
     with open(out, "w", encoding="utf-8") as fh:
         fh.write(content)
     nblocks = sum(1 for c in content.split("\n\n") if c.strip())
+
+    d = DEFAULTS[args.name]
+    title = args.title or found_title or d["title"]
+    file_id = args.file_id or found_id or d["id"]
+    meta = {
+        "title": title,
+        "id": file_id,
+        "url": "https://docs.google.com/spreadsheets/d/%s/edit" % file_id,
+        "ingested_at": _dt.datetime.now(JST).replace(microsecond=0).isoformat(),
+        "source_file": os.path.basename(args.result_path),
+    }
+    if d.get("label"):
+        meta["label"] = d["label"]
+    meta_path = os.path.join(args.raw_dir, args.name + ".meta.json")
+    with open(meta_path, "w", encoding="utf-8") as fh:
+        json.dump(meta, fh, ensure_ascii=False, indent=2)
+        fh.write("\n")
+
     print("書き出しました: %s（%d 文字 / 約 %d ブロック）" % (out, len(content), nblocks))
+    print("メタ情報: %s（title=%s / id=%s%s）"
+          % (meta_path, title, file_id,
+             "" if (args.title or found_title) else " ※title は既定値"))
     return 0
 
 

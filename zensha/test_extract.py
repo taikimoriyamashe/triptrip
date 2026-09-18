@@ -36,10 +36,8 @@ SERVICE_KEYS = ["total", "lks", "mny", "pro", "hjn", "grs"]
 COMPONENT_KEYS = ["lks", "mny", "pro", "hjn", "grs"]
 
 # ---------------------------------------------------------------------------
-# (c) の既知差分: 2026-09-08 の原本取得後にシート側で改訂された実績セル。
-#     「パーサのバグ」ではなく「シートの値そのものが変わった」ことを人が確認済み。
-#     ここに載っているセルは ±0.5% を超えても WARN（PASS 扱い）にする。
-#     ※ 値は固定しない（今後さらに改訂されても壊れないように）。
+# (c) 2026-09-08 の原本取得後にシート側で改訂された実績セル。
+#     原本との ±0.5% 比較は回帰情報にとどめ、「raw の該当セル（売上マトリクス実績表）と一致すること」を assert する。
 KNOWN_ACT_REVISIONS = {
     ("mgmt", "mny", 2): "管理会計 SHEmoney 2026-06 実績がシートで改訂された",
     ("mgmt", "hjn", 0): "管理会計 法人 2026-04 実績がシートで改訂された（通期着地ワイド表には旧値が残っている）",
@@ -49,18 +47,19 @@ KNOWN_ACT_REVISIONS = {
 }
 
 # ---------------------------------------------------------------------------
-# (d) 原本 STEP の p。シートに当該値が残っていない項目は WARN。
+# (d) 原本 STEP の p。
 ORIG_STEP_P = {
     "online": {"申込": 7612, "予約": 7599, "参加": 3135, "成約": 868,
                "参加率": 41.3, "成約率": 27.7, "CPA": 23022},
     "kyoten": {"申込": 824, "参加": 399, "成約": 148,
                "参加率": 48.4, "成約率": 37.1, "CPA": 32154},
 }
-# 原本の値が現在のシートから消えている（＝シート側で目標が引き直された）項目
+# 原本の値が現在のシートから消えている（＝シート側で目標が引き直された）項目。
+# raw の該当セルと一致することを assert する（下の RAW_STEP_P_SOURCE を使う）。
 KNOWN_STEP_P_CHANGES = {
-    ("online", "参加"): "marke「ALLユーザ」目標の体験レッスン参加数が 3,135 → 3,420 に改訂された",
-    ("online", "参加率"): "同上（参加率目標が 41.3% → 45.0% に改訂された）",
-    ("online", "成約率"): "成約p(868) / 参加p の算出値。参加p の改訂に伴って 27.7% → 25.4% になった",
+    ("online", "参加"): "marke「ALLユーザ」目標行の 体験レッスン参加数",
+    ("online", "参加率"): "marke「ALLユーザ」目標行の 体験レッスン参加率",
+    ("online", "成約率"): "成約p ÷ 参加p の導出値（CONTRACT v1.3）",
 }
 
 
@@ -78,6 +77,9 @@ class Runner(object):
         self.failed += 1
         print("FAIL  %s%s" % (name, ("\n        " + detail) if detail else ""))
 
+    def info(self, name, detail=""):
+        print("INFO  %s%s" % (name, ("\n        " + detail) if detail else ""))
+
     def warn(self, name, detail=""):
         self.warned += 1
         print("WARN  %s%s" % (name, ("\n        " + detail) if detail else ""))
@@ -93,6 +95,26 @@ class Runner(object):
 # ---------------------------------------------------------------------------
 # 原本 HTML から REV_ALL / STEP を取り出す
 # ---------------------------------------------------------------------------
+
+def load_raw_facts(raw_dir):
+    """raw から検証用の生セルを取り出す（test 側でも見出しベースで読む）。"""
+    ctx = E.Ctx()
+    keiei = E.load_blocks(os.path.join(raw_dir, "keiei.md"))
+    marke = E.load_blocks(os.path.join(raw_dir, "marke.md"))
+    facts = {"actual_cells": {}, "online_plan": None}
+    found = E.find_revenue_block(keiei, ctx)
+    if found:
+        block, tables = found
+        t_act = E.pick_table(tables, "act")
+        if t_act:
+            facts["months"] = t_act["months"]
+            for acct in ("fin", "mgmt"):
+                for key in SERVICE_KEYS:
+                    facts["actual_cells"][(acct, key)] = list(
+                        t_act["data"].get(acct, {}).get(key) or [None] * 12)
+    facts["online_plan"] = E.extract_online_plan(marke, ctx)
+    return facts
+
 
 def load_original_rev(html_path):
     with open(html_path, encoding="utf-8") as fh:
@@ -197,6 +219,41 @@ def test_invariants(r, doc):
 # (b) plan 厳密一致
 # ---------------------------------------------------------------------------
 
+def test_embedded_plan(r, orig):
+    """extract.py に埋め込んだ ORIG_PLAN が原本 HTML と一致すること（定数のドリフト防止）。"""
+    bad = []
+    for acct in ("fin", "mgmt"):
+        for key in SERVICE_KEYS:
+            if E.ORIG_PLAN[acct][key] != orig[acct][key]["plan"]:
+                bad.append("%s.%s" % (acct, key))
+    r.check(not bad, "(b) extract.py の ORIG_PLAN（不変条件3の基準）が原本 HTML と一致",
+            "不一致: " + ", ".join(bad))
+
+
+def test_contract_extras(r, doc):
+    """契約 v1.3 で追加された出力（grs 年度末 / sources / extract_log）の検査。"""
+    for acct in ("fin", "mgmt"):
+        r.check(doc["revenue"][acct]["grs"]["act"][11] == 19000000,
+                "追加: revenue.%s.grs.act[11] == 19,000,000（直前月Ａヨミへのフォールバック）" % acct,
+                "got=%s" % doc["revenue"][acct]["grs"]["act"][11])
+    srcs = doc["sources"]
+    r.check(len(srcs) == 3, "追加: sources が 3 件", "len=%d" % len(srcs))
+    r.check(srcs[0].get("label") == "全社（単月確認用・通期着地見通し）",
+            "追加: sources[0].label がある", repr(srcs[0].get("label")))
+    y, m = int(doc["target_month"][:4]), int(doc["target_month"][5:7])
+    want = "%d年%d月_マーケジスイ進捗管理表" % (y % 100, m)
+    r.check(srcs[1].get("name") == want,
+            "追加: sources[1].name が target_month 由来（%s）" % want,
+            "got=%r" % srcs[1].get("name"))
+    log = "\n".join(doc["extract_log"])
+    for needle, label in (("ワイド表突合", "ワイド表との実績差異"),
+                          ("grs 年度末検算", "grs 年度末の検算"),
+                          ("グロスタ補正の当月検算", "グロスタ補正の当月検算"),
+                          ("単月確認用 yomiA と revenue 当月 act", "単月確認用 yomiA と act の差"),
+                          ("拠点実績の突合", "Σ日次 と KPIサマリ実績の突合")):
+        r.check(needle in log, "追加: extract_log に %s が記録されている" % label)
+
+
 def test_plan_exact(r, doc, orig):
     bad = []
     for acct in ("fin", "mgmt"):
@@ -216,13 +273,15 @@ def test_plan_exact(r, doc, orig):
 # (c) act ±0.5%
 # ---------------------------------------------------------------------------
 
-def test_act_tolerance(r, doc, orig):
+def test_act_tolerance(r, doc, orig, facts):
     aui = doc["actual_until_index"]
-    bad, warned = [], []
+    bad, info = [], []
+    raw_bad = []
     for acct in ("fin", "mgmt"):
         for key in SERVICE_KEYS:
             got = doc["revenue"][acct][key]["act"]
             want = orig[acct][key]["act"]
+            raw = facts["actual_cells"].get((acct, key)) or [None] * 12
             for i in range(min(aui, 12)):
                 o = want[i]
                 if o == 0:
@@ -233,25 +292,50 @@ def test_act_tolerance(r, doc, orig):
                 if diff <= 0.005:
                     continue
                 cell = (acct, key, i)
-                if cell in KNOWN_ACT_REVISIONS:
-                    warned.append("%s.%s.act[%d]: got=%d orig=%d (%.2f%%) — %s"
-                                  % (acct, key, i, got[i], o, diff * 100, KNOWN_ACT_REVISIONS[cell]))
-                else:
+                if cell not in KNOWN_ACT_REVISIONS:
                     bad.append("%s.%s.act[%d]: got=%d orig=%d (%.2f%%)"
                                % (acct, key, i, got[i], o, diff * 100))
+                    continue
+                # 既知の改訂セル: raw（売上マトリクス実績表）の該当セルと一致することを assert
+                if key == "total":
+                    ref = sum(int(round((facts["actual_cells"].get((acct, k)) or [None] * 12)[i]))
+                              for k in COMPONENT_KEYS
+                              if (facts["actual_cells"].get((acct, k)) or [None] * 12)[i] is not None)
+                    label = "raw 実績表の5サービス和"
+                else:
+                    ref = None if raw[i] is None else int(round(raw[i]))
+                    label = "raw 実績表のセル"
+                if ref is None or ref != got[i]:
+                    raw_bad.append("%s.%s.act[%d]: latest.json=%d / %s=%s"
+                                   % (acct, key, i, got[i], label, ref))
+                else:
+                    info.append("%s.%s.act[%d]: latest.json=%d = %s（原本 %d / %.2f%% 乖離 — %s）"
+                                % (acct, key, i, got[i], label, o, diff * 100,
+                                   KNOWN_ACT_REVISIONS[cell]))
     r.check(not bad,
-            "(c) 実績確定月（0..%d）の act が原本と ±0.5%% 以内" % (aui - 1),
+            "(c) 実績確定月（0..%d）の act が原本と ±0.5%% 以内（既知改訂セルを除く）" % (aui - 1),
             "\n        ".join(bad[:10]))
-    for w in warned:
-        r.warn("(c) 既知のシート改訂により原本と乖離", w)
+    r.check(not raw_bad,
+            "(c) 原本と乖離するセルは raw（売上マトリクス実績表）の値と一致する",
+            "\n        ".join(raw_bad[:10]))
+    for line in info:
+        r.info("(c) 既知のシート改訂（raw と一致を確認済み）", line)
 
 
 # ---------------------------------------------------------------------------
 # (d) STEP の p
 # ---------------------------------------------------------------------------
 
-def test_step_p(r, doc):
-    bad, warned = [], []
+def test_step_p(r, doc, facts):
+    bad, info, raw_bad = [], [], []
+    plan = facts.get("online_plan") or {}
+    online_step = dict((s["n"], s) for s in doc["lks"]["online"]["step"])
+    raw_expect = {
+        "参加": plan.get("attend"),
+        "参加率": plan.get("attend_rate"),
+        "成約率": ((doc["lks"]["targets"]["online"] / plan["attend"] * 100.0)
+                 if plan.get("attend") else None),
+    }
     for lane in ("online", "kyoten"):
         step = dict((s["n"], s) for s in doc["lks"][lane]["step"])
         for name, want in ORIG_STEP_P[lane].items():
@@ -259,27 +343,37 @@ def test_step_p(r, doc):
                 bad.append("lks.%s.step に『%s』行がありません" % (lane, name))
                 continue
             got = step[name]["p"]
-            same = (round(float(got), 1) == round(float(want), 1))
-            if same:
+            if round(float(got), 1) == round(float(want), 1):
                 continue
-            if (lane, name) in KNOWN_STEP_P_CHANGES:
-                warned.append("lks.%s.step[%s].p: got=%s orig=%s — %s"
-                              % (lane, name, got, want, KNOWN_STEP_P_CHANGES[(lane, name)]))
-            else:
+            if (lane, name) not in KNOWN_STEP_P_CHANGES:
                 bad.append("lks.%s.step[%s].p: got=%s orig=%s" % (lane, name, got, want))
-    r.check(not bad, "(d) STEP の p が原本と一致（シートに残っている項目）",
+                continue
+            ref = raw_expect.get(name)
+            if ref is None or round(float(ref), 2) != round(float(got), 2):
+                raw_bad.append("lks.%s.step[%s].p: latest.json=%s / raw 由来の期待値=%s（%s）"
+                               % (lane, name, got, ref, KNOWN_STEP_P_CHANGES[(lane, name)]))
+            else:
+                info.append("lks.%s.step[%s].p: latest.json=%s = %s（原本は %s）"
+                            % (lane, name, got, KNOWN_STEP_P_CHANGES[(lane, name)], want))
+    r.check(not bad, "(d) STEP の p が原本と一致（シート側で引き直された項目を除く）",
             "\n        ".join(bad[:10]))
-    for w in warned:
-        r.warn("(d) シート側で目標が引き直されたため原本と不一致", w)
-    # 原本注記どおり拠点成約 p=148 を正としているか
+    r.check(not raw_bad, "(d) 原本と違う p は raw（marke 目標行 / 導出式）の値と一致する",
+            "\n        ".join(raw_bad[:10]))
+    for line in info:
+        r.info("(d) シート側で目標が引き直された項目（raw と一致を確認済み）", line)
+
     kp = dict((s["n"], s) for s in doc["lks"]["kyoten"]["step"])
     r.check(kp["成約"]["p"] == 148 and doc["lks"]["targets"]["kyoten"] == 148,
             "(d) 拠点の月目標は 単月確認用 148 件（原本注記どおり）",
             "step成約p=%s targets.kyoten=%s" % (kp["成約"]["p"], doc["lks"]["targets"]["kyoten"]))
-    on = dict((s["n"], s) for s in doc["lks"]["online"]["step"])
-    r.check(on["成約"]["p"] == doc["lks"]["targets"]["online"] == 868,
+    r.check(online_step["成約"]["p"] == doc["lks"]["targets"]["online"] == 868,
             "(d) オンラインの月目標は 868 件",
-            "step成約p=%s targets.online=%s" % (on["成約"]["p"], doc["lks"]["targets"]["online"]))
+            "step成約p=%s targets.online=%s" % (online_step["成約"]["p"],
+                                                doc["lks"]["targets"]["online"]))
+    r.check(isinstance(doc["lks"]["online"].get("step_note"), str)
+            and doc["lks"]["online"]["step_note"].strip() != "",
+            "(d) lks.online.step_note がある（p の出所混在の画面注記）",
+            repr(doc["lks"]["online"].get("step_note")))
 
 
 # ---------------------------------------------------------------------------
@@ -425,6 +519,7 @@ def main(argv=None):
     ap.add_argument("--json", default=os.path.join(HERE, "data", "latest.json"))
     ap.add_argument("--original", default=os.path.join(HERE, "reference",
                                                        "original-2026-09-08.html"))
+    ap.add_argument("--raw-dir", default=os.path.join(HERE, "raw"))
     args = ap.parse_args(argv)
 
     if not os.path.exists(args.json):
@@ -434,19 +529,24 @@ def main(argv=None):
     with open(args.json, encoding="utf-8") as fh:
         doc = json.load(fh)
     orig = load_original_rev(args.original)
+    facts = load_raw_facts(args.raw_dir)
 
     r = Runner()
     print("==== (a) CONTRACT の不変条件 ====")
     test_invariants(r, doc)
     print("")
     print("==== (b) 期初計画 plan の原本一致 ====")
+    test_embedded_plan(r, orig)
     test_plan_exact(r, doc, orig)
     print("")
+    print("==== 契約 v1.3 の追加出力 ====")
+    test_contract_extras(r, doc)
+    print("")
     print("==== (c) 実績確定月 act の原本一致（±0.5%） ====")
-    test_act_tolerance(r, doc, orig)
+    test_act_tolerance(r, doc, orig, facts)
     print("")
     print("==== (d) STEP の p ====")
-    test_step_p(r, doc)
+    test_step_p(r, doc, facts)
     print("")
     print("==== (e) パーサ単体テスト ====")
     test_parser(r)
