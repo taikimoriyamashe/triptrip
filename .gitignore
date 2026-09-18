@@ -1,0 +1,4 @@
+__pycache__/
+*.pyc
+# 3シートの生ダンプ（毎朝更新・約3MB）。回帰用の凍結サンプルは zensha/testdata/ に置く
+zensha/raw/*.md

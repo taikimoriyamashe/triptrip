@@ -1,0 +1,93 @@
+# 全社着地モニター — データ契約 v1（zensha/data/latest.json）
+
+対象: `zensha/reference/original-2026-09-08.html`（元ダッシュボード。JS内の REV_ALL / DAILY / STEP / LANE / CAUSE と、HTML内の固定文言）を
+「毎朝、3つのGoogleスプレッドシートから機械的に再生成できる形」に分離するための契約。
+数値の意味・単位は元ダッシュボードのJSと同じ（円、件、%は 0–100 の数値、CPAは円）。
+
+## 入力（zensha/raw/*.md）
+Google Drive MCP `read_file_content` が返す fileContent（Markdown表。タブ名は含まれず、空行で区切られた表ブロックの列）。
+- `raw/keiei.md`  … スプレッドシート「FY26_経営モニタリング」 id `1oIz45k-Qkr8AY3v4zBQAiYHDxvg21nvVPSP5xX5q9pE`
+  - ブロック2: 売上マトリクス（財務会計/管理会計 × 合計,_LKS,_MNY,_プロデ,_法人,_グロスタ × 2026-04..2027-03）。
+    「期初計画」表 → 「実績」表（実績確定月まで）→ 「Ａヨミ」表 の順。Aヨミ表の _グロスタ 行は1列右にズレている（先頭 ¥7,851,000 は2026/3の値）。
+  - ブロック3: 単月確認用（今月の 期初計画/実績/Aヨミ/Bヨミ をサービス別）。
+  - ブロック4: 「実績確定月→ 2026/8」を持つ通期着地ワイド表。
+  - ブロック15: 拠点KPIの月目標（32,154 / 26,500,000 を含む）。
+- `raw/marke.md`  … 「26年9月_マーケジスイ進捗管理表」 id `1a6Aud7H-31gs64lDv2Iyww6DnS98wJcuoOssx6nGhJs`（月ごとにファイルが変わる。翌月は「26年10月_…」）
+  - ブロック1: オンライン日次表（日付行 2026/9/1…、行「成約数 | 決済日起点」が日次成約）。
+  - ブロック2: KPIサマリ（当月目標/昨日までの実績/Aヨミ/Bヨミ。全体成約数/オンライン成約数/拠点成約数/オンライン各KPI/拠点各KPI）。
+  - ブロック8: オンライン月次（期初目標 7,612 等）。
+- `raw/kyoten.md` … 「FY26_拠点モニタリング」 id `11pv1YWcxOvJwJjhsNFZa9zGoy0GCn3bauNtSymMppcg`
+  - ブロック3: 9月目標（広告費 26,500,000 / ALL申込 824 / 参加率 48.40% / 成約率 / 成約数、拠点別CPA 9月目標・8月実績）。
+  - 日次集計（梅田・福岡・横浜の最終成約の日次）はブロック番号を extract.py 側で「ヘッダ内容」から特定する（番号固定は禁止）。
+ブロック番号は目安。extract.py は必ず「表の見出し文字列」で表を特定し、番号ズレに耐えること。
+
+## 出力（zensha/data/latest.json）
+```jsonc
+{
+  "contract_version": "1",
+  "generated_at": "2026-09-18T09:35:00+09:00",   // 生成時刻(JST)
+  "basis_date":   "2026-09-18",                   // データ取得日(JST今日)
+  "data_through": "2026-09-17",                   // 実績が入っている最終日(= basis_date の前日)
+  "target_month": "2026-09",
+  "days_in_month": 30, "elapsed_days": 17, "remaining_days": 13,   // elapsed = data_through の日, remaining = days_in_month - elapsed
+  "fy": { "label": "FY26", "months": ["2026-04","2026-05",…,"2027-03"] },
+  "actual_until_index": 5,     // 実績確定月の数。keiei「実績確定月→ 2026/8」→ 4,5,6,7,8 の5ヶ月 → 5
+  "revenue": {
+    "fin":  { "total": {"plan":[12], "act":[12]}, "lks": {...}, "mny": {...}, "pro": {...}, "hjn": {...}, "grs": {...} },
+    "mgmt": { 同上 }
+  },
+  // act[i] = i < actual_until_index ? 実績 : Aヨミ。null不可（欠損は Aヨミ→実績→0 の順でフォールバックし corrections に記録）。
+  // total.plan = シートの合計行、total.act = 5サービスの act の和（財務・管理とも。管理会計の合計行はグロスタを含まないため）。
+  // 管理会計・財務会計とも Aヨミ表の _グロスタ 行は1列左に戻してから使う。
+  "revenue_corrections": [ "…適用した補正を日本語1行ずつ…" ],
+  "month_summary": {           // keiei ブロック3（単月確認用）今月分。fin/mgmt × 6キー
+    "fin":  { "total": {"plan":414385176, "act":354487394, "yomiA":406123321, "yomiB":417009520}, "lks": {...}, … },
+    "mgmt": { … }
+  },
+  "lks": {
+    "targets": { "online": 868, "kyoten": 148, "source": "単月確認用（keiei）…" },
+    "online": {
+      "yomi": 896,           // KPIサマリ オンライン成約数 全体 最終成約数 Aヨミ
+      "act":  477,           // 同 昨日までの実績
+      "daily": { "dates": ["9/1","9/2",…], "dow": ["火","水",…], "v": [29,25,…] },  // marke ブロック1「成約数 決済日起点」。data_through まで
+      "step": [               // 元JSの STEP.lksOn と同じ形。p=月計画, y=Aヨミ, a=昨日まで実績
+        {"n":"申込","p":7612,"y":7827,"a":4477},
+        {"n":"予約","p":7599,"y":7887,"a":5085},
+        {"n":"参加","p":3135,"y":3360,"a":1797},
+        {"n":"成約","p":868,"y":896,"a":477,"key":true},
+        {"n":"参加率","p":41.3,"y":42.6,"a":35.3,"unit":"%","sep":true},
+        {"n":"成約率","p":27.7,"y":26.7,"a":26.6,"unit":"%"},
+        {"n":"CPA","p":23022,"y":22379,"a":22400,"unit":"¥","lowerBetter":true}
+      ],
+      "cost": { "plan": 175244808, "act": 100284050, "yomi": 175154000 }
+    },
+    "kyoten": {
+      "yomi": 112, "act": 49,
+      "daily": { "dates": [...], "dow": [...], "v": [...] },   // 日次集計（梅田・福岡・横浜）の最終成約の合算
+      "step": [ 申込, 参加, 成約(key), 参加率(sep), 成約率, CPA ],  // 元JS STEP.lksKp と同じ並び（予約なし）
+      "cost": { "plan": 26500000, "act": 13629650, "yomi": 26484640 },
+      "sites": [ {"name":"梅田","cpa_prev":42730,"cpa_target":32000}, {"name":"福岡",…}, {"name":"横浜",…} ],  // kyoten ブロック3「CPA 9月目標/8月実績」
+      "excluded_sites": ["名古屋"]
+    }
+  },
+  "sources": [ {"name":"FY26_経営モニタリング","url":"https://docs.google.com/spreadsheets/d/1oIz45k-…/edit"}, {…}, {…} ],
+  "extract_log": [ "どの表をどう特定したか、フォールバックしたか（人が読む用）" ]
+}
+```
+
+## 不変条件（extract.py が検査し、NGなら非0終了）
+1. revenue の各系列は長さ12、全要素が数値（NaN/null禁止）。
+2. fin/mgmt とも `total.act[i] == Σ services act[i]`（丸め誤差1円以内）。
+3. 期初計画（plan）は原本と一致: 例 fin.total.plan[0]==382595924、fin.lks.plan[0]==339439531、mgmt.total.plan[0]==385856895、fin.grs.plan[0]==20900000（原本 REV_ALL と全12ヶ月一致を要求）。
+4. 実績確定月までの act は原本と一致（fin.lks.act[0..4] == [336107464,345997228,341145176,356545162,360685637] は「シートの実績が更新され得る」ため厳密一致ではなく ±0.5% 以内を許容。ただし plan は厳密一致）。
+5. `actual_until_index` は 1..12、`target_month` は fy.months に含まれる。
+6. lks.online.daily.v の長さ == elapsed_days（data_through まで）。kyoten も同じ。
+7. step の p/y/a は全て数値。key 行がちょうど1つ。
+8. basis_date が JST の今日と一致（古い raw を誤って使わない）。
+
+## 手で持つ値（zensha/data/manual.json。build.py が latest.json と合成）
+- `decisions`: 経営判断が必要な事項（期限/見出し/本文/決定者）。
+- `field_notes`: 「現場で対応中（報告のみ）」の文。
+- `provisional`: SHEmoney / PRO の成約KPI（元JSの LANE/STEP/DAILY/CAUSE の mny/pro をそのまま格納。表示は「仮」バッジ付き）。
+- `notes`: 「この画面の前提と、まだ決まっていないこと」の箇条書き（決定済み/Phase タグ付き）。
+- `updated_at`: manual.json を人が更新した日。

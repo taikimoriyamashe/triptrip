@@ -1,0 +1,1296 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found]){display:none!important}</style></head><body>
+<title>全社着地モニター</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --ground:#FAFAFB; --surface:#FFFFFF; --surface2:#F2F3F7; --sunk:#EBEDF2;
+  --ink:#14161C; --ink2:#4B5060; --ink3:#7E8496;
+  --line:#E1E3EA; --line2:#C9CEDA;
+  --accent:#2F4B8F; --accent-soft:#E8ECF7;
+  --lane-on:#2F4B8F; --lane-kp:#7A5C9E;
+  --good:#1C7A57; --good-soft:#E2F0EA; --good-bar:#7FC4A8;
+  --warn:#96690F; --warn-soft:#F7EEDA; --warn-bar:#E3BE72;
+  --bad:#AE3830; --bad-soft:#F9E5E3; --bad-bar:#DE9089;
+  --shadow:0 1px 2px rgba(20,22,28,.05), 0 4px 14px rgba(20,22,28,.045);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#0D0F13; --surface:#15181F; --surface2:#1C2028; --sunk:#232830;
+    --ink:#ECEEF3; --ink2:#A7ADBC; --ink3:#767D8F;
+    --line:#282D37; --line2:#3D4451;
+    --accent:#8EA5E2; --accent-soft:#1B2233;
+    --lane-on:#8EA5E2; --lane-kp:#B49AD8;
+    --good:#57C295; --good-soft:#16332880; --good-bar:#39866A;
+    --warn:#DBA94C; --warn-soft:#33280F80; --warn-bar:#96762A;
+    --bad:#E5827A; --bad-soft:#3C1E1B80; --bad-bar:#9A423A;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 4px 16px rgba(0,0,0,.3);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0D0F13; --surface:#15181F; --surface2:#1C2028; --sunk:#232830;
+  --ink:#ECEEF3; --ink2:#A7ADBC; --ink3:#767D8F;
+  --line:#282D37; --line2:#3D4451;
+  --accent:#8EA5E2; --accent-soft:#1B2233;
+  --lane-on:#8EA5E2; --lane-kp:#B49AD8;
+  --good:#57C295; --good-soft:#16332880; --good-bar:#39866A;
+  --warn:#DBA94C; --warn-soft:#33280F80; --warn-bar:#96762A;
+  --bad:#E5827A; --bad-soft:#3C1E1B80; --bad-bar:#9A423A;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 4px 16px rgba(0,0,0,.3);
+}
+*{box-sizing:border-box}
+body{
+  background:var(--ground); color:var(--ink);
+  font-family:"Zen Kaku Gothic New","Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;
+  font-size:14px; line-height:1.65; margin:0; -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1160px; margin:0 auto; padding:0 22px 80px}
+.mono{font-family:"IBM Plex Mono",ui-monospace,monospace}
+.num{font-variant-numeric:tabular-nums; letter-spacing:-.01em}
+h1,h2,h3,h4{text-wrap:balance; margin:0}
+.g{color:var(--good)} .w{color:var(--warn)} .b{color:var(--bad)}
+.muted{color:var(--ink3)}
+svg{display:block; width:100%; height:auto}
+
+/* ---------- header ---------- */
+.top{position:sticky; top:0; z-index:20; background:var(--ground); border-bottom:1px solid var(--line)}
+.top-in{max-width:1160px; margin:0 auto; padding:14px 22px 12px;
+  display:flex; flex-wrap:wrap; gap:10px 24px; align-items:flex-end}
+.brand{display:flex; flex-direction:column; gap:3px; margin-right:auto}
+.brand h1{font-size:19px; font-weight:700; letter-spacing:.01em}
+.stamp{font-size:11px; color:var(--ink3); letter-spacing:.04em;
+  display:flex; flex-wrap:wrap; gap:4px 10px; align-items:center}
+.stamp b{color:var(--ink2); font-weight:500}
+.stale{font-size:10px; font-weight:700; padding:1px 7px; border-radius:4px;
+  background:var(--warn-soft); color:var(--warn)}
+.ctl{display:flex; flex-direction:column; gap:5px}
+.ctl-lab{font-size:9.5px; letter-spacing:.14em; color:var(--ink3); text-transform:uppercase}
+.seg{display:flex; background:var(--sunk); border-radius:7px; padding:2px; gap:2px}
+.seg button{font:inherit; font-size:11.5px; font-weight:500; color:var(--ink2); background:none;
+  border:0; padding:5px 11px; border-radius:5px; cursor:pointer; white-space:nowrap;
+  transition:background .12s,color .12s}
+.seg button[aria-pressed="true"]{background:var(--surface); color:var(--ink); box-shadow:var(--shadow)}
+.seg button:focus-visible{outline:2px solid var(--accent); outline-offset:1px}
+
+/* ---------- headline pair ---------- */
+.pair{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin-top:22px}
+.card{background:var(--surface); border:1px solid var(--line); border-radius:12px; box-shadow:var(--shadow)}
+.hl{padding:15px 20px 18px}
+.hl.is-good{border-top:4px solid var(--good-bar)}
+.hl.is-warn{border-top:4px solid var(--warn-bar)}
+.hl.is-bad{border-top:4px solid var(--bad-bar)}
+.hl-top{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
+.hl h3{font-size:10px; letter-spacing:.13em; text-transform:uppercase; color:var(--ink3); margin-right:auto}
+.hl .big{font-size:33px; font-weight:700; letter-spacing:-.03em; line-height:1.15; margin-top:6px}
+.hl .big small{font-size:14px; font-weight:500; color:var(--ink2); margin-left:3px}
+.hl .vs{font-size:12.5px; color:var(--ink2); margin-top:4px}
+.hl .vs b{color:var(--ink); font-weight:600}
+.hl .rate{font-size:17px; font-weight:700; margin-top:8px; padding-top:9px; border-top:1px dashed var(--line)}
+.hl .rate span{font-size:12.5px; font-weight:500; color:var(--ink3); margin-left:6px}
+
+/* ---------- section ---------- */
+section{margin-top:34px}
+.sec-head{display:flex; align-items:baseline; gap:12px; margin-bottom:12px; flex-wrap:wrap}
+.sec-head h2{font-size:15px; font-weight:700; letter-spacing:.02em}
+.sec-note{font-size:11.5px; color:var(--ink3)}
+.two{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px}
+
+/* ---------- charts ---------- */
+.chart-card{padding:15px 18px 10px}
+.legend{display:flex; flex-wrap:wrap; gap:5px 16px; font-size:11px; color:var(--ink2); padding:0 0 8px}
+.legend span{display:inline-flex; align-items:center; gap:6px}
+.lk-bar{width:11px; height:9px; border-radius:2px; display:inline-block}
+.lk-line{width:16px; height:0; border-top:2px dashed currentColor; display:inline-block}
+.csub{font-size:11.5px; color:var(--ink3); margin-top:4px}
+
+/* ---------- tables ---------- */
+.tbl-scroll{overflow-x:auto}
+table{border-collapse:collapse; width:100%; min-width:430px}
+th,td{text-align:right; padding:8px 13px; border-bottom:1px solid var(--line); white-space:nowrap}
+th{font-size:9.5px; letter-spacing:.09em; color:var(--ink3); font-weight:500; text-transform:uppercase; padding-top:12px}
+td:first-child,th:first-child{text-align:left}
+tbody tr:last-child td{border-bottom:0}
+tr.key td{background:var(--surface2); font-weight:700}
+tr.sep td{border-top:2px solid var(--line2); padding-top:11px}
+tr.grp th{padding:9px 13px 3px; font-size:9px; letter-spacing:.1em; color:var(--ink3);
+  border-bottom:0; text-align:center}
+tr.grp th:first-child{border:0}
+.gsep{border-left:1px solid var(--line2) !important}
+td.gsep{border-left:1px solid var(--line2)}
+.step{min-width:400px}
+.step th,.step td{padding:7px 10px}
+.svc{display:flex; align-items:center; gap:9px}
+.dot{width:9px; height:9px; border-radius:2px; flex:none; display:inline-block}
+.svc-tag{font-size:9.5px; letter-spacing:.08em; color:var(--ink3); border:1px solid var(--line2);
+  border-radius:3px; padding:0 5px}
+
+/* ---------- topics ---------- */
+.topics{display:grid; gap:1px; background:var(--line); border:1px solid var(--line);
+  border-radius:12px; overflow:hidden}
+.tp{background:var(--surface); padding:14px 18px; display:grid;
+  grid-template-columns:auto minmax(0,1fr); gap:14px; align-items:baseline}
+.tp-n{font-size:11px; font-weight:700; color:var(--ink3); letter-spacing:.08em; padding-top:2px}
+.tp h3{font-size:13.5px; font-weight:700; margin-bottom:3px}
+.tp p{margin:0; font-size:12px; color:var(--ink2); line-height:1.65}
+.tp p b{color:var(--ink); font-weight:600}
+
+/* ---------- tabs ---------- */
+.tabs{display:flex; gap:3px; margin-top:34px; border-bottom:2px solid var(--line);
+  overflow-x:auto; padding-bottom:0}
+.tabs button{
+  font:inherit; font-size:13.5px; font-weight:600; color:var(--ink3); background:none;
+  border:0; border-bottom:3px solid transparent; margin-bottom:-2px;
+  padding:9px 15px 8px; cursor:pointer; white-space:nowrap;
+  display:inline-flex; align-items:center; gap:8px;
+}
+.tabs button:hover{color:var(--ink2)}
+.tabs button[aria-selected="true"]{color:var(--ink); border-bottom-color:var(--accent)}
+.tabs button:focus-visible{outline:2px solid var(--accent); outline-offset:-2px}
+.tabs .tdot{width:8px; height:8px; border-radius:2px; flex:none}
+.tabs .tempty{font-size:9.5px; font-weight:500; color:var(--ink3);
+  border:1px dashed var(--line2); border-radius:3px; padding:0 5px}
+[hidden]{display:none !important}
+.panel{padding-top:24px}
+
+/* ---------- provisional banner ---------- */
+.prov{display:flex; gap:12px; align-items:flex-start; padding:13px 17px; border-radius:10px;
+  background:var(--warn-soft); border:1px solid var(--warn-bar); margin-bottom:20px}
+.prov b{color:var(--warn); font-weight:700; white-space:nowrap; font-size:12.5px}
+.prov p{margin:0; font-size:12px; color:var(--ink2); line-height:1.6}
+.chip-prov{font-size:9.5px; font-weight:700; letter-spacing:.06em; padding:1px 6px; border-radius:4px;
+  background:var(--warn-soft); color:var(--warn); margin-left:7px; vertical-align:2px}
+
+/* ---------- lane cards ---------- */
+.lanes{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px}
+.lanes.one{grid-template-columns:minmax(0,1fr); max-width:560px}
+.lane{background:var(--surface); border:1px solid var(--line); border-radius:12px;
+  box-shadow:var(--shadow); overflow:hidden}
+.lane.is-good{border-top:4px solid var(--good-bar)}
+.lane.is-warn{border-top:4px solid var(--warn-bar)}
+.lane.is-bad{border-top:4px solid var(--bad-bar)}
+.lane-head{padding:15px 20px 13px; display:flex; align-items:center; gap:11px; flex-wrap:wrap}
+.lane-head h2{font-size:16px; font-weight:700; margin-right:auto; display:flex; align-items:center; gap:9px}
+.lane-head .target{font-size:12px; color:var(--ink3)}
+.badge{display:inline-flex; align-items:center; gap:7px; border-radius:999px;
+  padding:4px 13px 4px 10px; font-size:12.5px; font-weight:700; letter-spacing:.02em}
+.badge::before{content:""; width:7px; height:7px; border-radius:50%; background:currentColor}
+.is-good .badge{background:var(--good-soft); color:var(--good)}
+.is-warn .badge{background:var(--warn-soft); color:var(--warn)}
+.is-bad  .badge{background:var(--bad-soft);  color:var(--bad)}
+.badge2{font-size:11px; font-weight:600; letter-spacing:.02em; padding:3px 9px;
+  border-radius:999px; border:1px solid currentColor; white-space:nowrap}
+.is-warn .badge2{color:var(--warn)}
+.is-bad  .badge2{color:var(--bad)}
+.fc{display:grid; grid-template-columns:1fr 1fr; border-top:1px solid var(--line)}
+.fc-col{padding:0 0 15px}
+.fc-col + .fc-col{border-left:1px solid var(--line)}
+.fc-name{font-size:12.5px; font-weight:700; letter-spacing:.03em; padding:8px 20px 7px;
+  border-bottom:1px solid var(--line); background:var(--surface2);
+  display:flex; align-items:center; gap:8px}
+.fc-name i{width:18px; height:0; border-top:2.5px dashed currentColor; display:inline-block; flex:none}
+.fc-body{padding:12px 20px 0}
+.fc-num{font-size:31px; font-weight:700; letter-spacing:-.025em; line-height:1.15}
+.fc-num small{font-size:13px; font-weight:500; color:var(--ink2); margin-left:2px}
+.fc-rate{font-size:17px; font-weight:700; margin-top:2px; letter-spacing:-.01em}
+.fc-rate .gapv{color:var(--ink3); font-weight:500; font-size:12.5px}
+.lane-foot{border-top:1px solid var(--line); background:var(--surface2);
+  display:grid; grid-template-columns:minmax(0,1.3fr) minmax(0,1fr)}
+.lf{padding:12px 20px 14px}
+.lf + .lf{border-left:1px solid var(--line)}
+.lf h4{font-size:9.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--ink3); margin-bottom:5px}
+.statbig{font-size:25px; font-weight:700; letter-spacing:-.025em; line-height:1.15}
+.statbig small{font-size:12.5px; font-weight:500; color:var(--ink2); margin-left:3px}
+.statsub{font-size:11.5px; color:var(--ink2); margin-top:4px; line-height:1.6}
+.statsub b{color:var(--ink); font-weight:600}
+
+/* column identity */
+.colhead{display:flex; align-items:center; gap:9px; margin-bottom:9px; padding-bottom:7px;
+  border-bottom:2px solid currentColor; font-size:13.5px; font-weight:700; letter-spacing:.03em}
+.colhead .ch-sub{margin-left:auto; font-size:11px; font-weight:400; color:var(--ink3)}
+.col-on{color:var(--lane-on)} .col-kp{color:var(--lane-kp)}
+.colhead span.txt{color:var(--ink)}
+
+/* ---------- cause ---------- */
+.cz-grid{display:grid; gap:10px}
+.cz{padding:13px 16px 14px; display:flex; flex-direction:column; gap:5px}
+.cz-top{display:flex; align-items:flex-start; justify-content:space-between; gap:10px}
+.cz-kind{font-size:9.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink3); padding-top:3px}
+.cz-imp{display:flex; flex-direction:column; align-items:flex-end; text-align:right; flex:none}
+.cz-imp em{font-style:normal; font-size:9px; letter-spacing:.07em; color:var(--ink3); line-height:1.4}
+.cz-imp b{font-size:21px; font-weight:700; letter-spacing:-.025em; line-height:1.15}
+.cz h4{font-size:13px; font-weight:700}
+.cz p{margin:0; font-size:11.5px; color:var(--ink2); line-height:1.6}
+.cz dl{margin:4px 0 0; display:grid; grid-template-columns:max-content minmax(0,1fr);
+  gap:2px 10px; font-size:11.5px}
+.cz dt{color:var(--ink3); white-space:nowrap}
+.cz dd{margin:0; text-align:left; font-variant-numeric:tabular-nums}
+
+/* ---------- decisions ---------- */
+.dec{display:grid; gap:10px}
+.dec-item{display:grid; grid-template-columns:86px minmax(0,1fr) auto; gap:14px; align-items:start; padding:14px 18px}
+.dec-item h3{font-size:13.5px; font-weight:700; margin-bottom:3px}
+.dec-item p{margin:0; font-size:12px; color:var(--ink2); line-height:1.6}
+.when{font-size:11px; font-weight:700; padding:2px 7px; border-radius:4px; white-space:nowrap;
+  background:var(--bad-soft); color:var(--bad); text-align:center}
+.when.later{background:var(--sunk); color:var(--ink2)}
+.dec-own{font-size:11px; color:var(--ink3); text-align:right; white-space:nowrap}
+.ongoing{padding:14px 18px; font-size:12.5px; color:var(--ink2); line-height:1.9}
+.ongoing b{color:var(--ink); font-weight:500}
+
+/* ---------- empty ---------- */
+.empty{padding:44px 24px 48px; text-align:center}
+.empty h3{font-size:15px; font-weight:700; margin-bottom:6px}
+.empty p{margin:0 auto; max-width:460px; font-size:12.5px; color:var(--ink2); line-height:1.7}
+
+/* ---------- notes ---------- */
+.notes{padding:16px 18px 18px}
+.notes h3{font-size:12px; font-weight:700; margin-bottom:9px}
+.notes ol{margin:0; padding-left:19px; display:grid; gap:7px}
+.notes li{font-size:12px; color:var(--ink2); line-height:1.6}
+.notes li b{color:var(--ink); font-weight:500}
+.src{margin-top:14px; padding-top:12px; border-top:1px solid var(--line);
+  display:flex; flex-wrap:wrap; gap:6px 18px; font-size:11.5px}
+.src a{color:var(--accent); text-decoration:none; border-bottom:1px solid transparent}
+.src a:hover{border-bottom-color:currentColor}
+.src a:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+.pending{display:inline-flex; align-items:center; gap:5px; font-size:9.5px; letter-spacing:.06em;
+  color:var(--ink3); border:1px dashed var(--line2); border-radius:4px; padding:1px 6px}
+
+@media (max-width:900px){
+  .pair,.two,.lanes{grid-template-columns:1fr}
+  .dec-item{grid-template-columns:1fr; gap:6px}
+  .dec-own{text-align:left}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none !important}}
+</style>
+
+<header class="top">
+  <div class="top-in">
+    <div class="brand">
+      <h1>全社着地モニター</h1>
+      <div class="stamp mono">
+        <span>データ取得 <b>2026-09-08</b>（実績は 9/7 まで）</span>
+        <span>9月 <b>経過7日 / 30日・残23日</b></span>
+        <span class="stale">2日前のデータ</span>
+      </div>
+    </div>
+    <div class="ctl">
+      <span class="ctl-lab">売上の見方</span>
+      <div class="seg" id="acct">
+        <button data-v="fin" aria-pressed="true">財務会計</button>
+        <button data-v="mgmt" aria-pressed="false">管理会計</button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <!-- ============ 全社 ============ -->
+  <div class="pair" id="hl-total"></div>
+
+  <section>
+    <div class="sec-head">
+      <h2>全社の月次予実</h2>
+      <span class="sec-note">4〜8月は実績、9月以降はAヨミ。棒の上は「計画との差（百万円）」</span>
+    </div>
+    <div class="card chart-card">
+      <div class="legend">
+        <span><i class="lk-bar" style="background:var(--line2)"></i>期初計画</span>
+        <span><i class="lk-bar" style="background:var(--accent)"></i>実績・ヨミ（未達の月）</span>
+        <span><i class="lk-bar" style="background:var(--good)"></i>実績・ヨミ（達成の月）</span>
+        <span class="muted">薄い棒＝ヨミ（9月〜）／ 縦軸の単位：百万円</span>
+      </div>
+      <div id="chart-total"></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <h2>サービス別の予実</h2>
+      <span class="sec-note">単月＝9月、通期＝FY26／<b id="acct-note">財務会計</b></span>
+    </div>
+    <div class="card tbl-scroll">
+      <table style="min-width:760px">
+        <thead>
+          <tr class="grp">
+            <th></th><th colspan="3">9月単月</th><th colspan="3" class="gsep">FY26 通期</th>
+          </tr>
+          <tr>
+            <th>サービス</th><th>計画</th><th>着地見込み</th><th>達成率</th>
+            <th class="gsep">期初計画</th><th>着地見通し</th><th>達成率</th>
+          </tr>
+        </thead>
+        <tbody id="rollup"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <h2>今月のトピックス</h2>
+      <span class="sec-note">全社の着地に効いている順／金額は財務会計ベース（会計区分を切り替えても本文は変わりません）</span>
+    </div>
+    <div class="topics">
+      <div class="tp">
+        <span class="tp-n mono">01</span>
+        <div>
+          <h3>通期▲¥235百万の88%は、法人とグロースタジオの2つ</h3>
+          <p>法人 <b class="num">▲¥76百万</b>（達成率38.7%）、グロースタジオ <b class="num">▲¥131百万</b>（60.4%）で合計 <b class="num">▲¥207百万</b>。
+             SHElikes・SHEmoney・PROの3サービスは合計でも <b class="num">▲¥28百万</b> に収まっており、
+             <b>全社の未達は主力サービスの問題ではない。</b></p>
+        </div>
+      </div>
+      <div class="tp">
+        <span class="tp-n mono">02</span>
+        <div>
+          <h3>SHElikes の9月成約は、拠点だけが落ちている</h3>
+          <p>オンラインは月目標868に対しAヨミ <b class="num">887件（102.2%）</b> で超過見込み。一方の拠点は目標148に対し <b class="num">97件（65.5%）</b>。
+             拠点は成約率が計画どおり（37.7% vs 37.1%）で、<b>足りないのは申込</b>（計画824 → 見込み496）。</p>
+        </div>
+      </div>
+      <div class="tp">
+        <span class="tp-n mono">03</span>
+        <div>
+          <h3>拠点の広告予算は余っているが、単価が1.64倍</h3>
+          <p>9月広告費は計画¥26.5Mに対し消化 <b class="num">¥5.8M（22%）</b>。申込CPAは計画¥32,154に対し <b class="num">¥52,862</b>。
+             出せば申込は増えるが、そのぶん成約CACが悪化する。<b>増額の可否が今週の判断事項。</b></p>
+        </div>
+      </div>
+      <div class="tp">
+        <span class="tp-n mono">04</span>
+        <div>
+          <h3>SHElikes は2つの予測が割れている</h3>
+          <p>Aヨミ <b class="num">984件（96.9%）</b> に対し、実績ペースの外挿は <b class="num">896件（88.2%）</b>。
+             判定が「要テコ入れ」と「未達リスク大」に分かれる水準。
+             差の主因はオンラインの実績成約率 <b class="num">21.8%</b> が、Aヨミ前提の <b class="num">26.6%</b> に届いていないこと。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <h2>経営判断が必要な事項</h2>
+      <span class="sec-note">期限は「これを過ぎると月内の成約に間に合わない」日</span>
+    </div>
+    <div class="dec">
+      <div class="card dec-item">
+        <span class="when">9/10まで</span>
+        <div>
+          <h3>拠点の広告費を増やすか、単価を直してから増やすか</h3>
+          <p>予算は¥26.5Mに対し消化¥5.8M（22%）で余っている。ただしCPAは計画の1.64倍。
+             「増額する」「単価改善を待つ」「拠点間で配分を変える」の3択。</p>
+        </div>
+        <span class="dec-own">営業役員 ＋ 集客役員</span>
+      </div>
+      <div class="card dec-item">
+        <span class="when later">9/12まで</span>
+        <div>
+          <h3>オンラインの超過分を、拠点の不足に振り替えるか</h3>
+          <p>オンラインは+19件の超過見込み。SHElikes全体1,016件で見れば▲32件に収まるが、拠点単体は65.5%のまま残る。</p>
+        </div>
+        <span class="dec-own">戦略推進会議</span>
+      </div>
+      <div class="card dec-item">
+        <span class="when later">今月中</span>
+        <div>
+          <h3>法人・グロースタジオの通期▲¥207百万をどう織り込むか</h3>
+          <p>法人は通期38.7%、グロースタジオは60.4%。どちらも月次のブレではなく通期の構造的な未達。
+             目標修正か、下期の積み増し計画か。</p>
+        </div>
+        <span class="dec-own">戦略推進会議</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ タブ ============ -->
+  <div class="tabs" role="tablist" aria-label="サービス別">
+    <button role="tab" data-p="lks" aria-selected="true"  aria-controls="p-lks"><span class="tdot" style="background:#2F4B8F"></span>SHElikes</button>
+    <button role="tab" data-p="mny" aria-selected="false" aria-controls="p-mny"><span class="tdot" style="background:#8A6BA8"></span>SHEmoney</button>
+    <button role="tab" data-p="pro" aria-selected="false" aria-controls="p-pro"><span class="tdot" style="background:#C08A3E"></span>PROデザイナー</button>
+    <button role="tab" data-p="hjn" aria-selected="false" aria-controls="p-hjn"><span class="tdot" style="background:#5E9B8A"></span>法人<span class="tempty">未着手</span></button>
+    <button role="tab" data-p="grs" aria-selected="false" aria-controls="p-grs"><span class="tdot" style="background:#A8646B"></span>グロースタジオ<span class="tempty">未着手</span></button>
+  </div>
+
+  <!-- ---------- SHElikes ---------- -->
+  <div class="panel" id="p-lks" role="tabpanel">
+    <div class="pair" id="hl-lks"></div>
+
+    <section>
+      <div class="sec-head"><h2>月次予実</h2><span class="sec-note">4〜8月は実績、9月以降はAヨミ。棒の上は「計画との差（百万円）」。灰＝計画、色＝実績/ヨミ、緑＝達成した月</span></div>
+      <div class="card chart-card"><div id="chart-lks"></div></div>
+    </section>
+
+    <section>
+      <div class="sec-head">
+        <h2>9月の成約</h2>
+        <span class="sec-note">左＝オンライン、右＝拠点。月目標 1,016件（868 ＋ 148）／ 昨日まで実績 209件</span>
+      </div>
+      <div class="lanes">
+
+        <div class="lane is-warn">
+          <div class="lane-head">
+            <h2><span class="dot" style="background:var(--lane-on)"></span>オンライン</h2>
+            <span class="badge">未達見込み</span><span class="badge2">要テコ入れ</span>
+            <span class="target num">月目標 868件</span>
+          </div>
+          <div class="fc">
+            <div class="fc-col">
+              <div class="fc-name g"><i></i>Aヨミ（手動）</div>
+              <div class="fc-body">
+                <div class="fc-num num g">887<small>件</small></div>
+                <div class="fc-rate g num">102.2%<span class="gapv"> ／ +19件</span></div>
+              </div>
+            </div>
+            <div class="fc-col">
+              <div class="fc-name w"><i></i>実績ペース外挿</div>
+              <div class="fc-body">
+                <div class="fc-num num w">789<small>件</small></div>
+                <div class="fc-rate w num">90.9%<span class="gapv"> ／ ▲79件</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="lane-foot">
+            <div class="lf">
+              <h4>日付の進みに対して</h4>
+              <div class="statbig num b">▲19<small>件 遅れ</small></div>
+              <div class="statsub num">日割計画 <b>203件</b> ／ 実績 <b>184件</b>（21.2% vs 23.3%）</div>
+              <div class="statsub">2つの予測が <b>98件</b> 割れているのは、実績の成約率 <b class="num">21.8%</b> が Aヨミの前提 <b class="num">26.6%</b> に届いていないため。</div>
+            </div>
+            <div class="lf">
+              <h4>残23日で必要なペース</h4>
+              <div class="statbig num w">29.7<small>件/日</small></div>
+              <div class="statsub num">計画ペース <b>28.9</b> ／ 直近実績 <b>26.3</b></div>
+              <div class="statsub">必要ペースは直近の <b class="num">1.13倍</b></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="lane is-bad">
+          <div class="lane-head">
+            <h2><span class="dot" style="background:var(--lane-kp)"></span>拠点</h2>
+            <span class="badge">未達見込み</span><span class="badge2">未達リスク大</span>
+            <span class="target num">月目標 148件</span>
+          </div>
+          <div class="fc">
+            <div class="fc-col">
+              <div class="fc-name b"><i></i>Aヨミ（手動）</div>
+              <div class="fc-body">
+                <div class="fc-num num b">97<small>件</small></div>
+                <div class="fc-rate b num">65.5%<span class="gapv"> ／ ▲51件</span></div>
+              </div>
+            </div>
+            <div class="fc-col">
+              <div class="fc-name b"><i></i>実績ペース外挿</div>
+              <div class="fc-body">
+                <div class="fc-num num b">107<small>件</small></div>
+                <div class="fc-rate b num">72.3%<span class="gapv"> ／ ▲41件</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="lane-foot">
+            <div class="lf">
+              <h4>日付の進みに対して</h4>
+              <div class="statbig num b">▲10<small>件 遅れ</small></div>
+              <div class="statsub num">日割計画 <b>35件</b> ／ 実績 <b>25件</b>（16.9% vs 23.3%）</div>
+              <div class="statsub"><b>2つの予測が一致して未達。</b>成約率は計画どおり（37.7% vs 37.1%）で、足りないのは申込。</div>
+            </div>
+            <div class="lf">
+              <h4>残23日で必要なペース</h4>
+              <div class="statbig num b">5.3<small>件/日</small></div>
+              <div class="statsub num">計画ペース <b>4.9</b> ／ 直近実績 <b>3.6</b></div>
+              <div class="statsub">必要ペースは直近の <b class="num b">1.50倍</b></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head">
+        <h2>日次の成約実績</h2>
+        <span class="sec-note">9/1〜9/7。線は「月計画を日割りしたペース」と「残23日で必要なペース」</span>
+      </div>
+      <div class="two">
+        <div>
+          <div class="colhead col-on"><span class="dot" style="background:currentColor"></span><span class="txt">オンライン</span>
+            <span class="ch-sub">7日計 180件・平均 25.7件/日</span></div>
+          <div class="card chart-card">
+            <div class="legend">
+              <span><i class="lk-bar" style="background:var(--lane-on)"></i>日次成約数</span>
+              <span class="muted"><i class="lk-line" style="border-top-style:solid"></i>計画 28.9件/日</span>
+              <span class="w"><i class="lk-line"></i>必要 29.7件/日</span>
+            </div>
+            <div id="d-lks-on"></div>
+            <div class="csub">系列は「成約数（決済日起点）」</div>
+          </div>
+        </div>
+        <div>
+          <div class="colhead col-kp"><span class="dot" style="background:currentColor"></span><span class="txt">拠点</span>
+            <span class="ch-sub">7日計 22件・平均 3.1件/日</span></div>
+          <div class="card chart-card">
+            <div class="legend">
+              <span><i class="lk-bar" style="background:var(--lane-kp)"></i>日次成約数（梅田＋福岡＋横浜）</span>
+              <span class="muted"><i class="lk-line" style="border-top-style:solid"></i>計画 4.9件/日</span>
+              <span class="b"><i class="lk-line"></i>必要 5.3件/日</span>
+            </div>
+            <div id="d-lks-kp"></div>
+            <div class="csub">系列は 日次集計_（梅田・福岡・横浜）の最終成約</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head">
+        <h2>どこで減っているか</h2>
+        <span class="sec-note">左半分＝月末の着地見通し（Aヨミ基準）、右半分＝今日時点の進み具合</span>
+      </div>
+      <div class="two">
+        <div>
+          <div class="colhead col-on"><span class="dot" style="background:currentColor"></span><span class="txt">オンライン</span></div>
+          <div class="card tbl-scroll"><table class="step">
+            <thead>
+              <tr class="grp"><th></th><th colspan="4">月末の着地見通し（Aヨミ）</th><th colspan="2" class="gsep">昨日 9/7 時点</th></tr>
+              <tr><th>段階</th><th>月計画</th><th>Aヨミ</th><th>差分</th><th>達成率</th><th class="gsep">実績</th><th>日割計画差</th></tr>
+            </thead>
+            <tbody id="step-lks-on"></tbody>
+          </table></div>
+        </div>
+        <div>
+          <div class="colhead col-kp"><span class="dot" style="background:currentColor"></span><span class="txt">拠点</span></div>
+          <div class="card tbl-scroll"><table class="step">
+            <thead>
+              <tr class="grp"><th></th><th colspan="4">月末の着地見通し（Aヨミ）</th><th colspan="2" class="gsep">昨日 9/7 時点</th></tr>
+              <tr><th>段階</th><th>月計画</th><th>Aヨミ</th><th>差分</th><th>達成率</th><th class="gsep">実績</th><th>日割計画差</th></tr>
+            </thead>
+            <tbody id="step-lks-kp"></tbody>
+          </table></div>
+        </div>
+      </div>
+      <p class="sec-note" style="margin:9px 2px 0">
+        「日割計画差」＝ 昨日までの実績 −（月計画 × 7日 ÷ 30日）。参加率・成約率・CPAは日割りできないため「―」。
+      </p>
+    </section>
+
+    <section>
+      <div class="sec-head">
+        <h2>ギャップの主因</h2>
+        <span class="sec-note">数字は「月末のAヨミ着地が、月計画に対して何件動いたか」の内訳</span>
+      </div>
+      <div class="two">
+        <div>
+          <div class="colhead col-on"><span class="dot" style="background:currentColor"></span><span class="txt">オンライン</span>
+            <span class="ch-sub">月計画868 → Aヨミ887（差 +19件 ＝ ①＋②）</span></div>
+          <div class="cz-grid">
+            <div class="card cz">
+              <div class="cz-top"><span class="cz-kind">① 押し上げ</span>
+                <span class="cz-imp"><em>成約数への影響</em><b class="g num">+57件</b></span></div>
+              <h4>参加数が計画を上回っている</h4>
+              <p>申込・予約とも計画超で、参加が3,340（計画3,135）。CPAも目標より安い。</p>
+              <dl><dt>参加</dt><dd>3,135 → <b>3,340</b></dd><dt>CPA</dt><dd>¥23,022 → <b>¥22,092</b></dd></dl>
+            </div>
+            <div class="card cz">
+              <div class="cz-top"><span class="cz-kind">② 押し下げ</span>
+                <span class="cz-imp"><em>成約数への影響</em><b class="b num">▲37件</b></span></div>
+              <h4>参加 → 成約の転換率が落ちている</h4>
+              <p>参加が増えた分を、成約率の低下が食っている。集客の質か、当日の転換かの切り分けが要る。</p>
+              <dl><dt>成約率</dt><dd>27.7% → <b>26.6%</b>（<span class="b">▲1.1pt</span>）</dd></dl>
+            </div>
+            <div class="card cz">
+              <div class="cz-top"><span class="cz-kind">③ 2つの予測が割れる理由</span>
+                <span class="cz-imp"><em>Aヨミとペースの差</em><b class="w num">98件</b></span></div>
+              <h4>実績の成約率が、Aヨミの前提に届いていない</h4>
+              <p>Aヨミは26.6%を前提にしているが、9/7までの実績は21.8%。この差が「Aヨミ887」と「ペース789」の開き。①②とは別軸の数字。</p>
+              <dl><dt>実績</dt><dd>21.8%（184 / 843）</dd><dt>Aヨミ前提</dt><dd>26.6%</dd></dl>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div class="colhead col-kp"><span class="dot" style="background:currentColor"></span><span class="txt">拠点</span>
+            <span class="ch-sub">月計画148 → Aヨミ97（差 ▲51件 ＝ ①＋③）</span></div>
+          <div class="cz-grid">
+            <div class="card cz">
+              <div class="cz-top"><span class="cz-kind">① 最大要因</span>
+                <span class="cz-imp"><em>成約数への影響</em><b class="b num">▲53件</b></span></div>
+              <h4>申込が計画の6割しか集まっていない</h4>
+              <p>申込824→496、参加399→257。ここが拠点の▲51件のほぼ全部。</p>
+              <dl><dt>申込</dt><dd>824 → <b>496</b>（60%）</dd><dt>参加</dt><dd>399 → <b>257</b></dd></dl>
+            </div>
+            <div class="card cz">
+              <div class="cz-top"><span class="cz-kind">② ①が起きている原因</span>
+                <span class="cz-imp"><em>申込CPA</em><b class="b num">1.64倍</b></span></div>
+              <h4>同じ予算で申込が取れなくなっている</h4>
+              <p>広告費は22%しか消化しておらず予算は余っている。ただし単価が計画の1.6倍で、出せば出すほどCACが悪化する。</p>
+              <dl><dt>CPA</dt><dd>¥32,154 → <b>¥52,862</b></dd><dt>広告費</dt><dd>¥5.8M / ¥26.5M</dd></dl>
+            </div>
+            <div class="card cz">
+              <div class="cz-top"><span class="cz-kind">③ 問題ではない所</span>
+                <span class="cz-imp"><em>成約数への影響</em><b class="g num">+2件</b></span></div>
+              <h4>現場の転換力は計画どおり</h4>
+              <p>参加してからの成約率はむしろ計画を上回る。直すべきは入口であって、拠点の接客・クロージングではない。</p>
+              <dl><dt>成約率</dt><dd>37.1% → <b>37.7%</b></dd><dt>参加率</dt><dd>48.4% → <b>51.8%</b></dd></dl>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><h2>現場で対応中（報告のみ・判断不要）</h2></div>
+      <div class="card ongoing">
+        <b>拠点</b>：梅田・横浜はCPA改善が進行中（梅田 8月¥42,730→9月目標¥32,000、横浜 ¥44,613→¥31,000）。福岡は増額前に構造改善を先行。名古屋はクローズ／休止のため集計対象外。<br>
+        <b>オンライン</b>：CPA ¥18,421 と目標¥23,022 を下回って推移。参加率31.9%は月内の未開催予約を含むため、月末に向けて上がる。
+      </div>
+    </section>
+  </div>
+
+  <!-- ---------- SHEmoney ---------- -->
+  <div class="panel" id="p-mny" role="tabpanel" hidden>
+    <div class="prov">
+      <b>成約KPIは仮の数字</b>
+      <p>売上（上の2枚と月次予実）は経営モニタリングの実データです。<b>それより下の成約数・ファネル・日次実績・主因はすべて仮置き</b>で、
+         SHElikesと同じ並びを確認するためのものです。実データの接続先が決まり次第、差し替えます。</p>
+    </div>
+    <div class="pair" id="hl-mny"></div>
+    <section>
+      <div class="sec-head"><h2>月次予実</h2><span class="sec-note">4〜8月は実績、9月以降はAヨミ。棒の上は「計画との差（百万円）」。灰＝計画、色＝実績/ヨミ、緑＝達成した月</span></div>
+      <div class="card chart-card"><div id="chart-mny"></div></div>
+    </section>
+    <section>
+      <div class="sec-head"><h2>9月の成約<span class="chip-prov">仮</span></h2>
+        <span class="sec-note">月目標 210件 ／ 昨日まで実績 46件</span></div>
+      <div class="lanes one" id="lane-mny"></div>
+    </section>
+    <section>
+      <div class="sec-head"><h2>日次の成約実績<span class="chip-prov">仮</span></h2></div>
+      <div class="two"><div class="card chart-card">
+        <div class="legend">
+          <span><i class="lk-bar" style="background:#8A6BA8"></i>日次成約数</span>
+          <span class="muted"><i class="lk-line" style="border-top-style:solid"></i>計画 7.0件/日</span>
+          <span class="w"><i class="lk-line"></i>必要 7.1件/日</span>
+        </div>
+        <div id="d-mny"></div>
+      </div><div></div></div>
+    </section>
+    <section>
+      <div class="sec-head"><h2>どこで減っているか<span class="chip-prov">仮</span></h2></div>
+      <div class="two"><div class="card tbl-scroll"><table class="step">
+        <thead>
+          <tr class="grp"><th></th><th colspan="4">月末の着地見通し（Aヨミ）</th><th colspan="2" class="gsep">昨日 9/7 時点</th></tr>
+          <tr><th>段階</th><th>月計画</th><th>Aヨミ</th><th>差分</th><th>達成率</th><th class="gsep">実績</th><th>日割計画差</th></tr>
+        </thead>
+        <tbody id="step-mny"></tbody>
+      </table></div><div></div></div>
+    </section>
+    <section>
+      <div class="sec-head"><h2>ギャップの主因<span class="chip-prov">仮</span></h2></div>
+      <div class="two"><div class="cz-grid" id="cz-mny"></div><div></div></div>
+    </section>
+  </div>
+
+  <!-- ---------- PRO ---------- -->
+  <div class="panel" id="p-pro" role="tabpanel" hidden>
+    <div class="prov">
+      <b>成約KPIは仮の数字</b>
+      <p>売上（上の2枚と月次予実）は経営モニタリングの実データです。<b>それより下の成約数・ファネル・日次実績・主因はすべて仮置き</b>で、
+         SHElikesと同じ並びを確認するためのものです。実データの接続先が決まり次第、差し替えます。</p>
+    </div>
+    <div class="pair" id="hl-pro"></div>
+    <section>
+      <div class="sec-head"><h2>月次予実</h2><span class="sec-note">4〜8月は実績、9月以降はAヨミ。棒の上は「計画との差（百万円）」。灰＝計画、色＝実績/ヨミ、緑＝達成した月</span></div>
+      <div class="card chart-card"><div id="chart-pro"></div></div>
+    </section>
+    <section>
+      <div class="sec-head"><h2>9月の成約<span class="chip-prov">仮</span></h2>
+        <span class="sec-note">月目標 96件 ／ 昨日まで実績 22件</span></div>
+      <div class="lanes one" id="lane-pro"></div>
+    </section>
+    <section>
+      <div class="sec-head"><h2>日次の成約実績<span class="chip-prov">仮</span></h2></div>
+      <div class="two"><div class="card chart-card">
+        <div class="legend">
+          <span><i class="lk-bar" style="background:#C08A3E"></i>日次成約数</span>
+          <span class="muted"><i class="lk-line" style="border-top-style:solid"></i>計画 3.2件/日</span>
+          <span class="w"><i class="lk-line"></i>必要 3.2件/日</span>
+        </div>
+        <div id="d-pro"></div>
+      </div><div></div></div>
+    </section>
+    <section>
+      <div class="sec-head"><h2>どこで減っているか<span class="chip-prov">仮</span></h2></div>
+      <div class="two"><div class="card tbl-scroll"><table class="step">
+        <thead>
+          <tr class="grp"><th></th><th colspan="4">月末の着地見通し（Aヨミ）</th><th colspan="2" class="gsep">昨日 9/7 時点</th></tr>
+          <tr><th>段階</th><th>月計画</th><th>Aヨミ</th><th>差分</th><th>達成率</th><th class="gsep">実績</th><th>日割計画差</th></tr>
+        </thead>
+        <tbody id="step-pro"></tbody>
+      </table></div><div></div></div>
+    </section>
+    <section>
+      <div class="sec-head"><h2>ギャップの主因<span class="chip-prov">仮</span></h2></div>
+      <div class="two"><div class="cz-grid" id="cz-pro"></div><div></div></div>
+    </section>
+  </div>
+
+  <!-- ---------- 法人 ---------- -->
+  <div class="panel" id="p-hjn" role="tabpanel" hidden>
+    <div class="pair" id="hl-hjn"></div>
+    <section>
+      <div class="sec-head"><h2>月次予実</h2><span class="sec-note">4〜8月は実績、9月以降はAヨミ。棒の上は「計画との差（百万円）」。灰＝計画、色＝実績/ヨミ、緑＝達成した月</span></div>
+      <div class="card chart-card"><div id="chart-hjn"></div></div>
+    </section>
+    <section>
+      <div class="sec-head"><h2>9月の詳細</h2></div>
+      <div class="card empty">
+        <h3>まだ何も入っていません</h3>
+        <p>法人の成約KPI・ファネル・日次実績は未着手です。SHElikesと同じ並び（判定 → 着地見込み2本 → 日次実績 → どこで減っているか → 主因）が入る場所として、枠だけ用意しています。</p>
+      </div>
+    </section>
+  </div>
+
+  <!-- ---------- グロースタジオ ---------- -->
+  <div class="panel" id="p-grs" role="tabpanel" hidden>
+    <div class="pair" id="hl-grs"></div>
+    <section>
+      <div class="sec-head"><h2>月次予実</h2><span class="sec-note">4〜8月は実績、9月以降はAヨミ。棒の上は「計画との差（百万円）」。灰＝計画、色＝実績/ヨミ、緑＝達成した月</span></div>
+      <div class="card chart-card"><div id="chart-grs"></div></div>
+    </section>
+    <section>
+      <div class="sec-head"><h2>9月の詳細</h2></div>
+      <div class="card empty">
+        <h3>まだ何も入っていません</h3>
+        <p>グロースタジオの成約KPI・ファネル・日次実績は未着手です。SHElikesと同じ並び（判定 → 着地見込み2本 → 日次実績 → どこで減っているか → 主因）が入る場所として、枠だけ用意しています。</p>
+      </div>
+    </section>
+  </div>
+
+  <!-- ============ 注記 ============ -->
+  <section>
+    <div class="sec-head"><h2>この画面の前提と、まだ決まっていないこと</h2></div>
+    <div class="card notes">
+      <h3>作る前に確定させたいこと</h3>
+      <ol>
+        <li><b>データが2日前のもの</b>。取得は2026/9/8（実績9/7まで）で、今日は9/10。本番では開くたびに読み直す作りにします。</li>
+        <li><b>管理会計は2ヶ所を補正して表示しています</b>。①シートの「_グロスタ」行が1ヶ月ぶん右にズレている（先頭の¥7,851,000は2026/3の値）ため、1つ左に戻しました。実績4〜8月と完全に一致します。②管理会計の「合計」行はグロースタジオを含んでいない（合計＝LKS＋MNY＋プロデ＋法人でぴったり一致）ため、この画面では<b>合計＝5サービスの和</b>で組み直しています。元シート側の修正が要るか確認したい箇所です。</li>
+        <li><b>財務会計のグロースタジオは差分で算出</b>しています（全社 − 他4サービス）。各月で検算は合いますが、直接の行を確認したいところです。</li>
+        <li><b>SHEmoney・PROデザイナーの成約KPIは仮の数字</b>です。売上のみ実データ。法人・グロースタジオは枠だけです。</li>
+        <li><b>名古屋は「クローズ／休止＝該当なし」で確定</b>。集計にも警告表示にも含めません。拠点は梅田・福岡・横浜の3拠点のみで見ています。<span class="pending">決定済み</span></li>
+        <li><b>実績の数え方がシートで2通りある</b>。拠点の9/7まで実績は KPIサマリ25件／日次集計の合算22件。オンラインも184件／180件。判定＝KPIサマリ、日次グラフ＝日次集計で分けています。</li>
+        <li><b>拠点の月目標が3通りある</b>。単月確認用148件／拠点モニタリングの拠点別合計136件／日次集計シートの合計152件。この画面は<b>148件を正</b>としています。</li>
+        <li><b>残日数はカレンダーどおりに数えます</b>。9/8〜9/30 の <b>23日</b>。シート側の「残日数24」は使いません。<span class="pending">決定済み</span></li>
+        <li><b>平均成約単価が未取得</b>のため「成約▲32件が売上でいくらか」を換算できていません。<span class="pending">Phase 0</span></li>
+        <li><b>シフト充足・採用充足・インセンティブ</b>は元データが別系統のため未搭載。<span class="pending">Phase 1</span></li>
+      </ol>
+      <div class="src">
+        <a href="https://docs.google.com/spreadsheets/d/1oIz45k-Qkr8AY3v4zBQAiYHDxvg21nvVPSP5xX5q9pE/edit" target="_blank" rel="noopener">元データ：全社（単月確認用・通期着地見通し）</a>
+        <a href="https://docs.google.com/spreadsheets/d/1a6Aud7H-31gs64lDv2Iyww6DnS98wJcuoOssx6nGhJs/edit" target="_blank" rel="noopener">元データ：26年9月_マーケジスイ進捗管理表</a>
+        <a href="https://docs.google.com/spreadsheets/d/11pv1YWcxOvJwJjhsNFZa9zGoy0GCn3bauNtSymMppcg/edit" target="_blank" rel="noopener">元データ：FY26_拠点モニタリング</a>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ================= 実データ：売上（2026/4〜2027/3） ================= */
+  var MONTHS = ["4","5","6","7","8","9","10","11","12","1","2","3"];
+  var ACT_UNTIL = 5; // index 0..4 が実績（4〜8月）、index 5 以降はヨミ
+
+  var REV_ALL = {
+    fin:{
+      total:{
+        plan:[382595924,385250273,387443907,393910701,399368961,414385176,418067536,436844273,455390590,469095523,490456164,500026193],
+        act: [369552040,372480111,374441268,388016139,394879364,399413635,410218839,412242734,435346951,445836397,422288234,472668395]
+      },
+      lks:{
+        plan:[339439531,343200086,345630985,350133512,355646518,360720325,368367082,381267571,391253553,401381594,414518761,426447820],
+        act: [336107464,345997228,341145176,356545162,360685637,354646527,370833169,372585164,396178261,405605607,383392622,431874046]
+      },
+      mny:{
+        plan:[4378598,4506316,4526850,4528604,4609130,6710971,4871534,4644022,4870957,5024529,4988683,7017117],
+        act: [4203344,4470075,4354158,4619550,4611056,6824942,4784345,4836185,4651405,4803504,4709527,6763164]
+      },
+      pro:{
+        plan:[9979988,9860288,10394663,10728113,10078313,10703880,11878920,12682680,13366080,13739400,13398720,12405240],
+        act: [7739234,8875475,8670759,9080741,10501785,11418000,12698000,13092000,13436000,13646000,13136000,12162000]
+      },
+      hjn:{
+        plan:[7897807,5683583,3791409,5320472,4735000,10850000,5450000,8650000,15200000,15950000,22450000,17956016],
+        act: [9324998,5683583,3791409,5320472,5115286,3277866,2903325,2729385,2081285,2781285,2050085,2869185]
+      },
+      grs:{
+        plan:[20900000,22000000,23100000,23200000,24300000,25400000,27500000,29600000,30700000,33000000,35100000,36200000],
+        act: [12177000,7453750,16479766,12450214,13965600,23246300,19000000,19000000,19000000,19000000,19000000,19000000]
+      }
+    },
+    mgmt:{
+      total:{
+        plan:[385856895,399069476,397102469,414401208,436404254,449387933,460143875,475222724,465599199,490593815,503603874,515982313],
+        act: [382570844,390756373,418389794,419875819,436019739,423540015,448457045,451690244,442338486,464492859,444210369,485700522]
+      },
+      lks:{
+        plan:[342927730,357339837,356171150,370877592,390936684,393401522,408322001,418523282,399892022,426596166,432000751,444786060],
+        act: [346340638,363073449,373854706,379017071,397562781,382726382,408474754,412918193,403073335,429204623,410507818,448392986]
+      },
+      mny:{
+        plan:[4298858,4213556,4207410,4315644,4462570,7496411,4591874,4577442,4711177,5663649,4669123,7656237],
+        act: [4838928,4062421,6040899,4579196,5235232,7526467,4148266,3442666,3383866,4306951,3452466,6238351]
+      },
+      pro:{
+        plan:[9832500,9832500,9832500,10687500,11970000,12240000,14280000,13872000,15096000,9384000,9384000,9384000],
+        act: [8559280,9051920,15431200,11243280,16717440,12000000,14000000,13600000,14800000,9200000,9200000,9200000]
+      },
+      hjn:{
+        plan:[7897807,5683583,3791409,5320472,4735000,10850000,5450000,8650000,15200000,15950000,22450000,17956016],
+        act: [9314998,5683583,3852909,5386972,5115286,4355166,2834025,2729385,2081285,2781285,2050085,2869185]
+      },
+      grs:{
+        plan:[20900000,22000000,23100000,23200000,24300000,25400000,27500000,29600000,30700000,33000000,35100000,36200000],
+        act: [13517000,8885000,19210080,19649300,11389000,16932000,19000000,19000000,19000000,19000000,19000000,19000000]
+      }
+    }
+  };
+
+  var acct = "fin";
+  function REVof(key){ return REV_ALL[acct][key]; }
+
+  var SERVICES = [
+    {key:"lks", name:"SHElikes",             tag:"_LKS",    color:"#2F4B8F"},
+    {key:"mny", name:"SHEmoney",             tag:"_MNY",    color:"#8A6BA8"},
+    {key:"pro", name:"SHElikesPROデザイナー", tag:"_プロデ",  color:"#C08A3E"},
+    {key:"hjn", name:"法人",                  tag:"_法人",    color:"#5E9B8A"},
+    {key:"grs", name:"グロースタジオ",          tag:"_グロスタ", color:"#A8646B"}
+  ];
+
+  /* ================= 成約KPI ================= */
+  var DATES = ["9/1","9/2","9/3","9/4","9/5","9/6","9/7"];
+  var DOW   = ["火","水","木","金","土","日","月"];
+  var DAY_RATIO = 7 / 30;
+
+  var DAILY = {
+    lksOn:{ v:[30,26,25,28,30,17,24], plan:28.9, need:29.7, color:"var(--lane-on)", needColor:"var(--warn)" },
+    lksKp:{ v:[4,3,3,1,3,5,3],        plan:4.9,  need:5.3,  color:"var(--lane-kp)", needColor:"var(--bad)"  },
+    mny:  { v:[7,6,8,5,7,6,7],        plan:7.0,  need:7.1,  color:"#8A6BA8",        needColor:"var(--warn)" },
+    pro:  { v:[3,4,2,3,4,3,3],        plan:3.2,  need:3.2,  color:"#C08A3E",        needColor:"var(--warn)" }
+  };
+
+  var STEP = {
+    lksOn:[
+      {n:"申込",   p:7612,  y:7930,  a:2036},
+      {n:"予約",   p:7599,  y:7983,  a:2644},
+      {n:"参加",   p:3135,  y:3340,  a:843},
+      {n:"成約",   p:868,   y:887,   a:184, key:true},
+      {n:"参加率", p:41.3,  y:41.8,  a:31.9, unit:"%", sep:true},
+      {n:"成約率", p:27.7,  y:26.6,  a:21.8, unit:"%"},
+      {n:"CPA",    p:23022, y:22092, a:18421, unit:"¥", lowerBetter:true}
+    ],
+    lksKp:[
+      {n:"申込",   p:824,   y:496,   a:109},
+      {n:"参加",   p:399,   y:257,   a:51},
+      {n:"成約",   p:148,   y:97,    a:25, key:true},
+      {n:"参加率", p:48.4,  y:51.8,  a:46.8, unit:"%", sep:true},
+      {n:"成約率", p:37.1,  y:37.7,  a:49.0, unit:"%"},
+      {n:"CPA",    p:32154, y:52862, a:53176, unit:"¥", lowerBetter:true}
+    ],
+    mny:[
+      {n:"申込",   p:1400,  y:1320,  a:310},
+      {n:"予約",   p:1380,  y:1300,  a:300},
+      {n:"参加",   p:620,   y:590,   a:138},
+      {n:"成約",   p:210,   y:195,   a:46, key:true},
+      {n:"参加率", p:44.9,  y:45.4,  a:46.0, unit:"%", sep:true},
+      {n:"成約率", p:33.9,  y:33.1,  a:33.3, unit:"%"},
+      {n:"CPA",    p:12000, y:12400, a:11800, unit:"¥", lowerBetter:true}
+    ],
+    pro:[
+      {n:"申込",   p:520,   y:560,   a:128},
+      {n:"予約",   p:510,   y:550,   a:124},
+      {n:"参加",   p:240,   y:258,   a:58},
+      {n:"成約",   p:96,    y:102,   a:22, key:true},
+      {n:"参加率", p:47.1,  y:46.9,  a:46.8, unit:"%", sep:true},
+      {n:"成約率", p:40.0,  y:39.5,  a:37.9, unit:"%"},
+      {n:"CPA",    p:28000, y:26500, a:27200, unit:"¥", lowerBetter:true}
+    ]
+  };
+
+  // 仮レーン（SHEmoney / PRO）
+  var LANE = {
+    mny:{ name:"SHEmoney", target:210, yomi:195, pace:197, act:46,
+          plan:7.0, need:7.1, recent:6.6,
+          note:"参加率は計画どおりだが、参加→成約が0.8pt低下している想定。" },
+    pro:{ name:"PROデザイナー", target:96, yomi:102, pace:94, act:22,
+          plan:3.2, need:3.2, recent:3.1,
+          note:"申込が計画超で参加も増える想定。転換率はわずかに低下。" }
+  };
+
+  var CAUSE = {
+    mny:[
+      {kind:"① 押し下げ", lab:"成約数への影響", v:"▲15件", tone:"b",
+       h:"参加 → 成約の転換率が想定を下回る",
+       p:"参加は計画どおり集まる見込みだが、成約率が0.8pt低い前提。",
+       dl:[["成約率","33.9% → 33.1%"],["参加","620 → 590"]]},
+      {kind:"② 押し下げ", lab:"成約数への影響", v:"▲5件", tone:"b",
+       h:"申込が計画をわずかに下回る",
+       p:"CPAが計画比3%高く、同じ予算で取れる申込が減る前提。",
+       dl:[["申込","1,400 → 1,320"],["CPA","¥12,000 → ¥12,400"]]},
+      {kind:"③ 2つの予測が割れる理由", lab:"Aヨミとペースの差", v:"2件", tone:"w",
+       h:"実績ペースとAヨミがほぼ一致",
+       p:"日次実績が安定しているため、どちらの見方でも着地はほぼ同じ。",
+       dl:[["Aヨミ","195件"],["ペース","197件"]]}
+    ],
+    pro:[
+      {kind:"① 押し上げ", lab:"成約数への影響", v:"+10件", tone:"g",
+       h:"申込・参加が計画を上回る",
+       p:"CPAが計画より安く、同じ予算で申込が多く取れる前提。",
+       dl:[["参加","240 → 258"],["CPA","¥28,000 → ¥26,500"]]},
+      {kind:"② 押し下げ", lab:"成約数への影響", v:"▲4件", tone:"b",
+       h:"参加 → 成約の転換率がわずかに低下",
+       p:"増えた参加のぶん、転換率が0.5pt下がる前提。",
+       dl:[["成約率","40.0% → 39.5%"]]},
+      {kind:"③ 2つの予測が割れる理由", lab:"Aヨミとペースの差", v:"8件", tone:"w",
+       h:"実績ペースはAヨミにやや届かない",
+       p:"9/7までの実績成約率37.9%が、Aヨミ前提の39.5%を下回っているため。",
+       dl:[["Aヨミ","102件"],["ペース","94件"]]}
+    ]
+  };
+
+  /* ================= helpers ================= */
+  var yen  = function(n){ return "¥" + Math.round(n).toLocaleString("ja-JP"); };
+  var mil  = function(n){ return (n/1000000).toFixed(1); };
+  var milR = function(n){ return Math.round(n/1000000).toLocaleString(); };
+  var pct  = function(n){ return n.toFixed(1) + "%"; };
+  function tone(r){ return r >= 100 ? "g" : (r >= 90 ? "w" : "b"); }
+  function sum(a){ return a.reduce(function(x,y){ return x + y; }, 0); }
+  // 結論（達成／未達）を先に、深刻度をその後ろに置く
+  function verdict(r){
+    if(r >= 100) return { cls:"is-good", main:"達成見込み", sub:"" };
+    if(r >= 90)  return { cls:"is-warn", main:"未達見込み", sub:"要テコ入れ" };
+    return             { cls:"is-bad",  main:"未達見込み", sub:"未達リスク大" };
+  }
+  function badgeOf(r){ var v = verdict(r); return [v.cls, v.main]; }
+
+  /* ================= 見出し2枚（単月／通期） ================= */
+  var oku = function(n){ return (n/100000000).toFixed(2); };
+
+  function hlCard(o){
+    var v = verdict(o.rate);
+    return '<div class="card hl ' + v.cls + '">'
+      + '<div class="hl-top"><h3>' + o.label + ' ── ' + o.span + '</h3>'
+      +   '<span class="badge">' + v.main + '</span>'
+      +   (v.sub ? '<span class="badge2">' + v.sub + '</span>' : '') + '</div>'
+      + '<div class="big num">' + o.val + '<small>' + o.unit + '（' + o.kind + '）</small></div>'
+      + '<div class="vs num">' + o.planLabel + ' <b>' + o.plan + o.unit + '</b>'
+      +   ' ／ 差 <b class="' + (o.diff >= 0 ? "g" : "b") + '">'
+      +   (o.diff >= 0 ? "+" : "▲") + o.diffAbs + o.unit + '</b></div>'
+      + '<div class="rate ' + tone(o.rate) + ' num">' + pct(o.rate)
+      +   '<span>' + o.note + '</span></div></div>';
+  }
+
+  function headline(el, key, label){
+    var node = document.getElementById(el);
+    if(!node) return;
+    var d = REVof(key);
+    var mp = d.plan[5], ma = d.act[5];
+    var yp = sum(d.plan), ya = sum(d.act);
+    var isTotal = (key === "total");
+    var unit = isTotal ? "億円" : "百万円";
+    var fm = isTotal ? oku : mil;
+    var fy = isTotal ? oku : milR;
+
+    node.innerHTML =
+      hlCard({ label:label, span:"9月単月", kind:"着地見込み", unit:unit,
+               val:fm(ma), planLabel:"月計画", plan:fm(mp),
+               diff:(ma - mp), diffAbs:fm(Math.abs(ma - mp)),
+               rate:(ma / mp * 100), note:"Aヨミベース" })
+      + hlCard({ label:label, span:"FY26 通期", kind:"着地見通し", unit:unit,
+               val:fy(ya), planLabel:"期初計画", plan:fy(yp),
+               diff:(ya - yp), diffAbs:fy(Math.abs(ya - yp)),
+               rate:(ya / yp * 100), note:"4〜8月は実績、9月以降はヨミ" });
+  }
+
+  /* ================= 月次予実チャート ================= */
+  function monthChart(el, key, color){
+    var node = document.getElementById(el);
+    if(!node) return;
+    var d = REVof(key);
+    var W = 900, H = 260, L = 46, R = 12, T = 30, B = 34;
+    var iw = W - L - R, ih = H - T - B;
+    var maxV = Math.max(Math.max.apply(null, d.plan), Math.max.apply(null, d.act)) * 1.16;
+    var y = function(v){ return T + ih - (v / maxV) * ih; };
+    var slot = iw / 12, bw = Math.min(15, slot * 0.3);
+
+    var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="月次予実">';
+
+    var stepV = maxV > 200000000 ? 100000000 : (maxV > 40000000 ? 10000000 : 5000000);
+    for(var g = 0; g <= maxV; g += stepV){
+      s += '<line x1="' + L + '" y1="' + y(g).toFixed(1) + '" x2="' + (W-R) + '" y2="' + y(g).toFixed(1)
+         + '" stroke="var(--line)" stroke-width="1"/>'
+         + '<text x="' + (L-7) + '" y="' + (y(g)+3.5).toFixed(1) + '" text-anchor="end" font-size="9"'
+         + ' fill="var(--ink3)" font-family="IBM Plex Mono, monospace">' + Math.round(g/1000000) + '</text>';
+    }
+
+    for(var i = 0; i < 12; i++){
+      var cx = L + slot * i + slot / 2;
+      var isAct = i <= ACT_UNTIL - 1;
+      var diff = d.act[i] - d.plan[i];
+      var hit  = diff >= 0;
+      var topY = Math.min(y(d.plan[i]), y(d.act[i]));
+
+      // 計画
+      s += '<rect x="' + (cx - bw - 1.5).toFixed(1) + '" y="' + y(d.plan[i]).toFixed(1)
+         + '" width="' + bw.toFixed(1) + '" height="' + Math.max(1, (T+ih) - y(d.plan[i])).toFixed(1)
+         + '" rx="2" fill="var(--line2)"/>';
+      // 実績 / ヨミ
+      s += '<rect x="' + (cx + 1.5).toFixed(1) + '" y="' + y(d.act[i]).toFixed(1)
+         + '" width="' + bw.toFixed(1) + '" height="' + Math.max(1, (T+ih) - y(d.act[i])).toFixed(1)
+         + '" rx="2" fill="' + (hit ? "var(--good)" : color) + '"' + (isAct ? '' : ' opacity="0.5"') + '/>';
+      // 月ごとの達成／未達と差分
+      s += '<text x="' + cx.toFixed(1) + '" y="' + (topY - 15).toFixed(1) + '" text-anchor="middle"'
+         + ' font-size="9" font-weight="700" fill="' + (hit ? "var(--good)" : "var(--bad)") + '">'
+         + (hit ? "達成" : "未達") + '</text>'
+         + '<text x="' + cx.toFixed(1) + '" y="' + (topY - 5).toFixed(1) + '" text-anchor="middle"'
+         + ' font-size="10" font-weight="700" fill="' + (hit ? "var(--good)" : "var(--bad)") + '"'
+         + ' font-family="IBM Plex Mono, monospace">' + (hit ? "+" : "▲")
+         + Math.abs(diff / 1000000).toFixed(1) + '</text>'
+         + '<text x="' + cx.toFixed(1) + '" y="' + (T+ih+15) + '" text-anchor="middle" font-size="9.5"'
+         + ' fill="var(--ink3)" font-family="IBM Plex Mono, monospace">' + MONTHS[i] + '月</text>';
+    }
+
+    // 実績とヨミの境目
+    var bx = L + slot * ACT_UNTIL;
+    s += '<line x1="' + bx.toFixed(1) + '" y1="' + (T-24) + '" x2="' + bx.toFixed(1) + '" y2="' + (T+ih)
+       + '" stroke="var(--line2)" stroke-width="1" stroke-dasharray="3 3"/>'
+       + '<text x="' + (bx+5).toFixed(1) + '" y="' + (T-15) + '" font-size="9" fill="var(--ink3)">ここから先はヨミ</text>'
+       + '<text x="' + (bx-5).toFixed(1) + '" y="' + (T-15) + '" text-anchor="end" font-size="9" fill="var(--ink3)">実績</text>';
+
+    s += '<line x1="' + L + '" y1="' + (T+ih) + '" x2="' + (W-R) + '" y2="' + (T+ih)
+       + '" stroke="var(--line2)" stroke-width="1"/></svg>';
+    document.getElementById(el).innerHTML = s;
+  }
+
+  /* ================= 日次バー ================= */
+  function bars(el, cfg){
+    var node = document.getElementById(el);
+    if(!node) return;
+    var W = 420, H = 180, L = 30, R = 12, T = 14, B = 32;
+    var iw = W - L - R, ih = H - T - B;
+    var n = cfg.v.length;
+    var maxY = Math.max(Math.max.apply(null, cfg.v), cfg.need, cfg.plan) * 1.22;
+    var y = function(v){ return T + ih - (v / maxY) * ih; };
+    var slot = iw / n, bw = Math.min(34, slot * 0.56);
+
+    var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="日次成約数">';
+    var step = maxY > 25 ? 10 : (maxY > 12 ? 5 : 2);
+    for(var g = 0; g <= maxY; g += step){
+      s += '<line x1="' + L + '" y1="' + y(g).toFixed(1) + '" x2="' + (W-R) + '" y2="' + y(g).toFixed(1)
+         + '" stroke="var(--line)" stroke-width="1"/>'
+         + '<text x="' + (L-6) + '" y="' + (y(g)+3.5).toFixed(1) + '" text-anchor="end" font-size="9"'
+         + ' fill="var(--ink3)" font-family="IBM Plex Mono, monospace">' + g + '</text>';
+    }
+    s += '<line x1="' + L + '" y1="' + y(cfg.plan).toFixed(1) + '" x2="' + (W-R) + '" y2="' + y(cfg.plan).toFixed(1)
+       + '" stroke="var(--line2)" stroke-width="2"/>'
+       + '<line x1="' + L + '" y1="' + y(cfg.need).toFixed(1) + '" x2="' + (W-R) + '" y2="' + y(cfg.need).toFixed(1)
+       + '" stroke="' + cfg.needColor + '" stroke-width="2" stroke-dasharray="5 3"/>';
+
+    cfg.v.forEach(function(v, i){
+      var cx = L + slot * i + slot / 2;
+      var top = y(v), h = (T + ih) - top;
+      var weekend = (DOW[i] === "土" || DOW[i] === "日");
+      var inside = h >= 24;
+      s += '<rect x="' + (cx - bw/2).toFixed(1) + '" y="' + top.toFixed(1) + '" width="' + bw.toFixed(1)
+         + '" height="' + Math.max(1, h).toFixed(1) + '" rx="2.5" fill="' + cfg.color + '"'
+         + (weekend ? ' opacity="0.62"' : '') + '/>'
+         + '<text x="' + cx.toFixed(1) + '" y="' + (inside ? (top + 14) : (top - 6)).toFixed(1)
+         + '" text-anchor="middle" font-size="11.5" font-weight="700"'
+         + ' fill="' + (inside ? "var(--surface)" : "var(--ink)") + '"'
+         + ' font-family="IBM Plex Mono, monospace">' + v + '</text>'
+         + '<text x="' + cx.toFixed(1) + '" y="' + (T + ih + 14) + '" text-anchor="middle" font-size="9"'
+         + ' fill="var(--ink3)" font-family="IBM Plex Mono, monospace">' + DATES[i] + '</text>'
+         + '<text x="' + cx.toFixed(1) + '" y="' + (T + ih + 25) + '" text-anchor="middle" font-size="8.5"'
+         + ' fill="' + (weekend ? "var(--ink2)" : "var(--ink3)") + '">' + DOW[i] + '</text>';
+    });
+    s += '<line x1="' + L + '" y1="' + (T+ih) + '" x2="' + (W-R) + '" y2="' + (T+ih)
+       + '" stroke="var(--line2)" stroke-width="1"/></svg>';
+    node.innerHTML = s;
+  }
+
+  /* ================= 段階テーブル ================= */
+  function steps(el, rows){
+    var node = document.getElementById(el);
+    if(!node) return;
+    var html = "";
+    rows.forEach(function(r){
+      var isRate = !!r.unit;
+      var fmt = function(v){
+        if(r.unit === "%") return v.toFixed(1) + "%";
+        if(r.unit === "¥") return yen(v);
+        return Math.round(v).toLocaleString();
+      };
+      var ratio = r.lowerBetter ? (r.p / r.y * 100) : (r.y / r.p * 100);
+      var t = tone(ratio);
+      var d = r.y - r.p;
+      var dTone = r.lowerBetter ? (d <= 0 ? "g" : "b") : (d >= 0 ? "g" : "b");
+      var dTxt;
+      if(r.unit === "%")      dTxt = (d >= 0 ? "+" : "▲") + Math.abs(d).toFixed(1) + "pt";
+      else if(r.unit === "¥") dTxt = (d >= 0 ? "+" : "▲") + yen(Math.abs(d)).slice(1);
+      else                    dTxt = (d >= 0 ? "+" : "▲") + Math.abs(Math.round(d)).toLocaleString();
+
+      var pace;
+      if(isRate){
+        pace = '<td class="num muted">―</td>';
+      }else{
+        var gap = r.a - r.p * DAY_RATIO;
+        pace = '<td class="num ' + (gap >= 0 ? "g" : "b") + '">'
+             + (gap >= 0 ? "+" : "▲") + Math.abs(Math.round(gap)).toLocaleString() + '</td>';
+      }
+      html += '<tr class="' + (r.key ? "key " : "") + (r.sep ? "sep" : "") + '">'
+        + '<td>' + r.n + '</td>'
+        + '<td class="num muted">' + fmt(r.p) + '</td>'
+        + '<td class="num">' + fmt(r.y) + '</td>'
+        + '<td class="num ' + dTone + '">' + dTxt + '</td>'
+        + '<td class="num ' + t + '" style="font-weight:600">' + pct(ratio) + '</td>'
+        + '<td class="num muted gsep">' + fmt(r.a) + '</td>'
+        + pace + '</tr>';
+    });
+    node.innerHTML = html;
+  }
+
+  /* ================= 仮レーン ================= */
+  function laneCard(el, c){
+    var node = document.getElementById(el);
+    if(!node) return;
+    var ry = c.yomi / c.target * 100, rp = c.pace / c.target * 100;
+    var worst = Math.min(ry, rp);
+    var v = verdict(worst);
+    var planToDate = Math.round(c.target * DAY_RATIO);
+    var behind = c.act - planToDate;
+    node.innerHTML =
+      '<div class="lane ' + v.cls + '">'
+      + '<div class="lane-head"><h2>' + c.name + '</h2>'
+      + '<span class="badge">' + v.main + '</span>'
+      + (v.sub ? '<span class="badge2">' + v.sub + '</span>' : '')
+      + '<span class="target num">月目標 ' + c.target + '件</span></div>'
+      + '<div class="fc">'
+      +   '<div class="fc-col"><div class="fc-name ' + tone(ry) + '"><i></i>Aヨミ（仮）</div><div class="fc-body">'
+      +     '<div class="fc-num num ' + tone(ry) + '">' + c.yomi + '<small>件</small></div>'
+      +     '<div class="fc-rate ' + tone(ry) + ' num">' + pct(ry) + '<span class="gapv"> ／ '
+      +       (c.yomi - c.target >= 0 ? "+" : "▲") + Math.abs(c.yomi - c.target) + '件</span></div>'
+      +   '</div></div>'
+      +   '<div class="fc-col"><div class="fc-name ' + tone(rp) + '"><i></i>実績ペース外挿</div><div class="fc-body">'
+      +     '<div class="fc-num num ' + tone(rp) + '">' + c.pace + '<small>件</small></div>'
+      +     '<div class="fc-rate ' + tone(rp) + ' num">' + pct(rp) + '<span class="gapv"> ／ '
+      +       (c.pace - c.target >= 0 ? "+" : "▲") + Math.abs(c.pace - c.target) + '件</span></div>'
+      +   '</div></div>'
+      + '</div>'
+      + '<div class="lane-foot">'
+      +   '<div class="lf"><h4>日付の進みに対して</h4>'
+      +     '<div class="statbig num ' + (behind >= 0 ? "g" : "b") + '">' + (behind >= 0 ? "+" : "▲")
+      +       Math.abs(behind) + '<small>件 ' + (behind >= 0 ? "先行" : "遅れ") + '</small></div>'
+      +     '<div class="statsub num">日割計画 <b>' + planToDate + '件</b> ／ 実績 <b>' + c.act + '件</b></div>'
+      +     '<div class="statsub">' + c.note + '</div></div>'
+      +   '<div class="lf"><h4>残23日で必要なペース</h4>'
+      +     '<div class="statbig num ' + tone(worst) + '">' + c.need.toFixed(1) + '<small>件/日</small></div>'
+      +     '<div class="statsub num">計画ペース <b>' + c.plan.toFixed(1) + '</b> ／ 直近実績 <b>' + c.recent.toFixed(1) + '</b></div>'
+      +     '<div class="statsub">必要ペースは直近の <b class="num">' + (c.need / c.recent).toFixed(2) + '倍</b></div></div>'
+      + '</div></div>';
+  }
+
+  function causes(el, list){
+    var node = document.getElementById(el);
+    if(!node) return;
+    node.innerHTML = list.map(function(c){
+      return '<div class="card cz"><div class="cz-top"><span class="cz-kind">' + c.kind + '</span>'
+        + '<span class="cz-imp"><em>' + c.lab + '</em><b class="' + c.tone + ' num">' + c.v + '</b></span></div>'
+        + '<h4>' + c.h + '</h4><p>' + c.p + '</p>'
+        + '<dl>' + c.dl.map(function(kv){ return '<dt>' + kv[0] + '</dt><dd>' + kv[1] + '</dd>'; }).join("") + '</dl></div>';
+    }).join("");
+  }
+
+  /* ================= サービス別内訳 ================= */
+  function rollup(){
+    var html = "";
+    SERVICES.forEach(function(s){
+      var d = REVof(s.key);
+      var mp = d.plan[5], ma = d.act[5], mr = ma / mp * 100;
+      var yp = sum(d.plan), ya = sum(d.act), yr = ya / yp * 100;
+      html += '<tr><td><span class="svc"><span class="dot" style="background:' + s.color + '"></span>'
+        + '<span style="font-weight:500">' + s.name + '</span>'
+        + '<span class="svc-tag mono">' + s.tag + '</span></span></td>'
+        + '<td class="num muted">' + yen(mp) + '</td><td class="num">' + yen(ma) + '</td>'
+        + '<td class="num ' + tone(mr) + '" style="font-weight:600">' + pct(mr) + '</td>'
+        + '<td class="num muted gsep">' + yen(yp) + '</td><td class="num">' + yen(ya) + '</td>'
+        + '<td class="num ' + tone(yr) + '" style="font-weight:600">' + pct(yr) + '</td></tr>';
+    });
+    var t = REVof("total");
+    var tmp = t.plan[5], tma = t.act[5], tmr = tma / tmp * 100;
+    var typ = sum(t.plan), tya = sum(t.act), tyr = tya / typ * 100;
+    html += '<tr class="key"><td>全社</td>'
+      + '<td class="num">' + yen(tmp) + '</td><td class="num">' + yen(tma) + '</td>'
+      + '<td class="num ' + tone(tmr) + '">' + pct(tmr) + '</td>'
+      + '<td class="num gsep">' + yen(typ) + '</td><td class="num">' + yen(tya) + '</td>'
+      + '<td class="num ' + tone(tyr) + '">' + pct(tyr) + '</td></tr>';
+    document.getElementById("rollup").innerHTML = html;
+  }
+
+  /* ================= タブ ================= */
+  var tabs = document.querySelector(".tabs");
+  tabs.addEventListener("click", function(e){
+    var b = e.target.closest("button");
+    if(!b) return;
+    Array.prototype.forEach.call(tabs.querySelectorAll("button"), function(x){
+      var on = (x === b);
+      x.setAttribute("aria-selected", String(on));
+      document.getElementById("p-" + x.getAttribute("data-p")).hidden = !on;
+    });
+    window.scrollTo({ top: tabs.offsetTop - 70, behavior: "smooth" });
+  });
+
+  /* ================= 会計区分の切り替え ================= */
+  function renderRevenue(){
+    rollup();
+    headline("hl-total", "total", "全社売上");
+    monthChart("chart-total", "total", "var(--accent)");
+    SERVICES.forEach(function(s){
+      headline("hl-" + s.key, s.key, s.name);
+      monthChart("chart-" + s.key, s.key, s.color);
+    });
+    document.getElementById("acct-note").textContent =
+      (acct === "fin" ? "財務会計" : "管理会計");
+  }
+
+  var acctBox = document.getElementById("acct");
+  acctBox.addEventListener("click", function(e){
+    var b = e.target.closest("button");
+    if(!b) return;
+    Array.prototype.forEach.call(acctBox.querySelectorAll("button"), function(x){
+      x.setAttribute("aria-pressed", String(x === b));
+    });
+    acct = b.getAttribute("data-v");
+    renderRevenue();
+  });
+
+  /* ================= render ================= */
+  renderRevenue();
+
+  bars("d-lks-on", DAILY.lksOn);
+  bars("d-lks-kp", DAILY.lksKp);
+  bars("d-mny", DAILY.mny);
+  bars("d-pro", DAILY.pro);
+
+  steps("step-lks-on", STEP.lksOn);
+  steps("step-lks-kp", STEP.lksKp);
+  steps("step-mny", STEP.mny);
+  steps("step-pro", STEP.pro);
+
+  laneCard("lane-mny", LANE.mny);
+  laneCard("lane-pro", LANE.pro);
+  causes("cz-mny", CAUSE.mny);
+  causes("cz-pro", CAUSE.pro);
+})();
+</script>
+
+</body></html>
