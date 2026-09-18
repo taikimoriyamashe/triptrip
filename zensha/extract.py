@@ -707,8 +707,9 @@ def crosscheck_wide_yomi_last(wide_tables, revenue, months, ctx):
     for acct in ("fin", "mgmt"):
         tot = (t["data"].get((acct, "total")) or {}).get(last)
         if tot is None:
-            ctx.note("grs 年度末検算 %s: ワイド表（keiei block %d）に %s の合計行が無く検算できない"
-                     "（ダンプが途中で切れている表がある）。" % (acct, t["block"], acct))
+            ctx.note("grs 年度末検算 %s: ワイド表（keiei block %d）に %s の合計行が無いためこの表では検算できない"
+                     "（ダンプが途中で切れている）。代わりに「通期Σact 突合」で確認する。"
+                     % (acct, t["block"], acct))
             continue
         others, missing = 0, []
         for key in ("lks", "mny", "pro", "hjn"):
@@ -1635,13 +1636,22 @@ def build_sources(meta, target_month, ctx):
             ctx.note("sources: marke の name は target_month(%s) から組み立て →『%s』"
                      % (target_month, name))
             if not sid:
-                stale_id = True
-                ctx.note("警告: marke は月ごとにファイル（＝スプレッドシート ID）が変わりますが、"
-                         "raw/marke.meta.json が無く ID を確認できません。sources[marke].url は "
-                         "extract.py の既定値（%s 時点の ID %s）のままなので、"
-                         "『%s』というラベルで前月分のシートを開くリンクになっている可能性があります。"
-                         "ingest.py 経由で取り込むと meta から当月の ID が入ります。"
-                         % (src["name"], src["id"], name))
+                # 既定値の ID は既定名に焼き込まれた月のもの。その月が当月と同じなら既定値で正しい。
+                dm = _MARKE_TITLE_RE.match(text(src["name"]))
+                default_month = ("%04d-%02d" % (2000 + int(dm.group(1)), int(dm.group(2)))
+                                 if dm else None)
+                if default_month == target_month:
+                    ctx.note("sources: raw/marke.meta.json が無いため extract.py の既定 ID を使用。"
+                             "既定値は %s 分（= target_month と同じ）なのでリンク先は当月分のはず。"
+                             % target_month)
+                else:
+                    stale_id = True
+                    ctx.note("警告: marke は月ごとにファイル（＝スプレッドシート ID）が変わりますが、"
+                             "raw/marke.meta.json が無く当月の ID を確認できません。sources[marke].url は "
+                             "extract.py の既定値（%s 分の ID %s）のままなので、"
+                             "『%s』というラベルで前月分のシートを開くリンクになっている可能性があります。"
+                             "ingest.py 経由で取り込むと meta から当月の ID が入ります。"
+                             % (default_month or "不明", src["id"], name))
         sid = sid or src["id"]
         entry = {"name": name}
         label = m.get("label") or src.get("label")
@@ -1777,6 +1787,8 @@ def main(argv=None):
         crosscheck_wide_yomi_last(wide, revenue, months, ctx)
 
     month_summary = extract_month_summary(keiei, target_month, ctx)
+    if revenue is not None:
+        crosscheck_fy_landing(revenue, extract_fy_landing(keiei, target_month, ctx), months, ctx)
     if revenue is not None and month_summary:
         crosscheck_grs_target_month(revenue, month_summary, months, target_month, actual_until, ctx)
         crosscheck_month_summary(revenue, month_summary, months, target_month, ctx)

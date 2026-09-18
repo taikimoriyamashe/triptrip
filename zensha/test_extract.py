@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as _dt
+import io
 import json
 import os
 import re
@@ -224,7 +225,7 @@ def test_embedded_plan(r, orig):
     bad = []
     for acct in ("fin", "mgmt"):
         for key in SERVICE_KEYS:
-            if E.ORIG_PLAN[acct][key] != orig[acct][key]["plan"]:
+            if E.ORIG_PLAN["FY26"][acct][key] != orig[acct][key]["plan"]:
                 bad.append("%s.%s" % (acct, key))
     r.check(not bad, "(b) extract.py の ORIG_PLAN（不変条件3の基準）が原本 HTML と一致",
             "不一致: " + ", ".join(bad))
@@ -242,16 +243,111 @@ def test_contract_extras(r, doc):
             "追加: sources[0].label がある", repr(srcs[0].get("label")))
     y, m = int(doc["target_month"][:4]), int(doc["target_month"][5:7])
     want = "%d年%d月_マーケジスイ進捗管理表" % (y % 100, m)
+    r.check(not srcs[1].get("stale_id"),
+            "追加(A2): 当月分の raw を使っている通常実行では sources[1].stale_id が立たない",
+            repr(srcs[1]))
     r.check(srcs[1].get("name") == want,
             "追加: sources[1].name が target_month 由来（%s）" % want,
             "got=%r" % srcs[1].get("name"))
     log = "\n".join(doc["extract_log"])
+    r.check(any("mgmt.grs=¥208,485,280" in x for x in doc["extract_log"]),
+            "追加(B1): extract_log に mgmt.grs の通期Σact 突合（¥208,485,280 と一致）がある")
+    sites = doc["lks"]["kyoten"]["sites"]
+    r.check(all(s.get("as_of_month") for s in sites),
+            "追加(B4): sites[].as_of_month がある（拠点別CPA を読んだ表の目標月）",
+            repr(sites))
     for needle, label in (("ワイド表突合", "ワイド表との実績差異"),
+                          ("通期Σact 突合", "通期Σact の突合"),
                           ("grs 年度末検算", "grs 年度末の検算"),
                           ("グロスタ補正の当月検算", "グロスタ補正の当月検算"),
                           ("単月確認用 yomiA と revenue 当月 act", "単月確認用 yomiA と act の差"),
                           ("拠点実績の突合", "Σ日次 と KPIサマリ実績の突合")):
         r.check(needle in log, "追加: extract_log に %s が記録されている" % label)
+
+
+def _run_extract(raw_dir, extra_args=None):
+    """extract.main を一時ファイル出力で回して (rc, doc) を返す。"""
+    import tempfile
+    fd, tmp = tempfile.mkstemp(suffix=".json")
+    os.close(fd)
+    argv = ["--raw-dir", raw_dir, "--out", tmp] + list(extra_args or [])
+    err, out = io.StringIO(), io.StringIO()
+    old_err, old_out = sys.stderr, sys.stdout
+    sys.stderr, sys.stdout = err, out
+    try:
+        rc = E.main(argv)
+    finally:
+        sys.stderr, sys.stdout = old_err, old_out
+    doc = None
+    if rc == 0:
+        with open(tmp, encoding="utf-8") as fh:
+            doc = json.load(fh)
+    os.unlink(tmp)
+    return rc, doc, err.getvalue()
+
+
+def test_regression_cases(r, raw_dir):
+    """月替わり・年度替わりで毎朝の実行が止まらないことの実証（合成ケース）。"""
+    # A1: 実績確定月を 1 つ進める（実績確定月が当月になり fin.grs の実績 ¥0 が実績確定月に入る）
+    saved = E.extract_actual_until
+    E.extract_actual_until = lambda blocks, months, ctx: 6
+    try:
+        rc, doc, err = _run_extract(raw_dir)
+    finally:
+        E.extract_actual_until = saved
+    r.check(rc == 0, "(A1) actual_until_index=6（実績 ¥0 の月が実績確定月に入る）でも exit 0",
+            "rc=%s stderr=%s" % (rc, err.strip()[:400]))
+    if doc:
+        r.check(doc["revenue"]["fin"]["grs"]["act"][5] == 0,
+                "(A1) その合成ケースで fin.grs.act[5] が ¥0 として通る",
+                "got=%s" % doc["revenue"]["fin"]["grs"]["act"][5])
+        r.check(any("¥0" in x and "不変条件4 参考" in x for x in doc["extract_log"]),
+                "(A1) ¥0 の実績は非0終了ではなく extract_log に記録される")
+
+    # A3: 未登録年度（ORIG_PLAN に基準値が無い）で不変条件3 が警告に降格する
+    base = E.ORIG_PLAN.pop("FY26")
+    try:
+        rc, doc, err = _run_extract(raw_dir)
+    finally:
+        E.ORIG_PLAN["FY26"] = base
+    r.check(rc == 0, "(A3) 期初計画の基準値が未登録の年度でも exit 0（不変条件3 は警告に降格）",
+            "rc=%s stderr=%s" % (rc, err.strip()[:400]))
+    if doc:
+        r.check(any("基準値" in x and "スキップ" in x for x in doc["extract_log"]),
+                "(A3) スキップした旨が extract_log に残る")
+
+    # A2-1: meta 無しで月が進むと、marke のリンク先 ID が前月分である可能性を名指しで警告する
+    #       （10月の raw が無いので build_sources を単体で回す）
+    ctx = E.Ctx()
+    srcs = E.build_sources({}, "2026-10", ctx)
+    r.check(srcs[1].get("name") == "26年10月_マーケジスイ進捗管理表",
+            "(A2) 10月の target_month では sources[1].name が「26年10月_…」になる", repr(srcs[1]))
+    r.check(srcs[1].get("stale_id") is True,
+            "(A2) meta 無し＋月が進んだとき sources[1].stale_id が立つ", repr(srcs[1]))
+    r.check("前月分の可能性" in (srcs[1].get("label") or ""),
+            "(A2) sources[1].label に「リンク先は前月分の可能性」が付く", repr(srcs[1].get("label")))
+    r.check(any("前月分のシートを開くリンク" in x for x in ctx.log),
+            "(A2) extract_log に marke を名指しした警告が出る", repr(ctx.log[-1] if ctx.log else None))
+
+    # A2-2: meta はあるが前月分の title だったときも同じ扱い
+    ctx = E.Ctx()
+    srcs = E.build_sources({"marke": {"title": "26年9月_マーケジスイ進捗管理表", "id": "OLDID"}},
+                           "2026-10", ctx)
+    r.check(srcs[1].get("stale_id") is True,
+            "(A2) meta の title が前月分でも stale_id が立つ", repr(srcs[1]))
+
+    # A2-3: 当月分の ID を meta から確認できていれば立たない
+    ctx = E.Ctx()
+    srcs = E.build_sources({"marke": {"title": "26年10月_マーケジスイ進捗管理表", "id": "NEWID"}},
+                           "2026-10", ctx)
+    r.check(not srcs[1].get("stale_id"),
+            "(A2) 当月分の meta があれば stale_id は立たない", repr(srcs[1]))
+
+    # 翌月実行（raw は9月のまま）: --allow-stale で通り、無しなら非0終了
+    rc, doc, err = _run_extract(raw_dir, ["--today", "2026-10-05", "--allow-stale"])
+    r.check(rc == 0, "(A2) --today 2026-10-05 --allow-stale は exit 0", "rc=%s" % rc)
+    rc, _doc, err = _run_extract(raw_dir, ["--today", "2026-10-05"])
+    r.check(rc != 0, "(A2) --allow-stale 無しの翌月実行は非0終了（stale 検出）", "rc=%s" % rc)
 
 
 def test_plan_exact(r, doc, orig):
@@ -539,7 +635,7 @@ def main(argv=None):
     test_embedded_plan(r, orig)
     test_plan_exact(r, doc, orig)
     print("")
-    print("==== 契約 v1.3 の追加出力 ====")
+    print("==== 契約 v1.4 の追加出力 ====")
     test_contract_extras(r, doc)
     print("")
     print("==== (c) 実績確定月 act の原本一致（±0.5%） ====")
@@ -550,6 +646,9 @@ def main(argv=None):
     print("")
     print("==== (e) パーサ単体テスト ====")
     test_parser(r)
+    print("")
+    print("==== 月替わり・年度替わりの回帰（合成ケース） ====")
+    test_regression_cases(r, args.raw_dir)
 
     dump_summary(doc)
     print("")
