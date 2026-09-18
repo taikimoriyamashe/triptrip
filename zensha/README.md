@@ -3,9 +3,9 @@
 全社（SHElikes / SHEmoney / PROデザイナー / 法人 / グロースタジオ）の売上着地と SHElikes の成約KPIを、
 3つの Google スプレッドシートから毎朝自動で再生成し、Claude Artifact として再公開するダッシュボードの実装一式。
 
-- 公開URL（森山所有）: **（T3で確定後に追記）**
+- 公開URL（森山所有・非公開）: **https://claude.ai/artifact/9EaQMq5gPPWbQh7jrF4CqC**
 - 元になったページ: 「全社着地モニター」（他者所有・共有閲覧のみ。`reference/original-2026-09-08.html` に断面を保存）
-- 更新Routine: **（T3で確定後に追記）**。毎朝 JST にこのセッションを起こし、下記 runbook を実行する。
+- 更新Routine: **（作成後に追記）**。毎朝 JST にセッションを起こし、下記 runbook を実行する。
 
 ## データの流れ
 
