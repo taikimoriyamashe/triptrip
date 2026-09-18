@@ -102,8 +102,15 @@ Google Drive MCP `read_file_content` が返す fileContent（Markdown表。タ�
 7. step の p/y/a は全て数値。key 行がちょうど1つ。
 8. basis_date が JST の今日と一致（古い raw を誤って使わない）。
 
+
+### 抽出側が出す状態フラグ
+- `contract_version` … この契約の版（現行 "1.5"）。build.py は検査しない（前方互換）。
+- `dump_truncated` (bool) / `dump_truncated_files` (string[]) … Drive のダンプが行の途中で終わっている＝取得が打ち切られている。画面の注記に「要確認」として出す。必要な表が切断点の外に出ると抽出は「見つかりません」で止まる（fail-closed）。
+- `stale_allowed` (bool) … `--allow-stale` で生成した latest.json。true のとき test_extract の不変条件8（basis_date＝今日）は検査しない。
+- `lks.kyoten.sites[].as_of_month` … 必須。その CPA 目標を読んだ表の月。`target_month` と異なるとき画面は「（N月時点の表）」と付す。
+
 ## 手で持つ値（zensha/data/manual.json。build.py が latest.json と合成）
-- `decisions`: 経営判断が必要な事項（期限/見出し/本文/決定者）。
+- `decisions`: 経営判断が必要な事項。`due` は実日付 `YYYY-MM-DD`（トークン禁止）、期限が無いものは `due: null` + `due_label`（例「今月中」）。`basis_date` を過ぎた `due` は画面に「期限超過」と出て、build.py が stderr で催促する。
 - `field_notes`: 「現場で対応中（報告のみ）」の文。
 - `provisional`: SHEmoney / PRO の成約KPI（元JSの LANE/STEP/DAILY/CAUSE の mny/pro をそのまま格納。表示は「仮」バッジ付き）。
 - `notes`: 「この画面の前提と、まだ決まっていないこと」の箇条書き（決定済み/Phase タグ付き）。
