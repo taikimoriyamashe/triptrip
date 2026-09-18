@@ -36,20 +36,21 @@ Google Drive MCP `read_file_content` が返す fileContent（Markdown表。タ�
     "fin":  { "total": {"plan":[12], "act":[12]}, "lks": {...}, "mny": {...}, "pro": {...}, "hjn": {...}, "grs": {...} },
     "mgmt": { 同上 }
   },
-  // act[i] = i < actual_until_index ? 実績 : Aヨミ。null不可（欠損は Aヨミ→実績→0 の順でフォールバックし corrections に記録）。
+  // act[i] = i < actual_until_index ? 実績 : Aヨミ。null不可。Aヨミ欠損月は 直前月のAヨミ → 実績 → 期初計画 → 0 の順でフォールバックし revenue_corrections に記録
+  //（例: Aヨミ表の _グロスタ 行ズレ補正で 2027-03 が欠けるため直前月 Aヨミ を採用）。実績の出所は「売上マトリクス」ブロックを正とし、他表（実績確定月→ ワイド表）との食い違いは extract_log に記録する。
   // total.plan = シートの合計行、total.act = 5サービスの act の和（財務・管理とも。管理会計の合計行はグロスタを含まないため）。
   // 管理会計・財務会計とも Aヨミ表の _グロスタ 行は1列左に戻してから使う。
   "revenue_corrections": [ "…適用した補正を日本語1行ずつ…" ],
-  "month_summary": {           // keiei ブロック3（単月確認用）今月分。fin/mgmt × 6キー
+  "month_summary": {           // keiei ブロック3（単月確認用）今月分。fin/mgmt × 6キー。シートの値をそのまま格納（補正しない）。表示には使わず検算用（単月表示は revenue[target_month] を使う）
     "fin":  { "total": {"plan":414385176, "act":354487394, "yomiA":406123321, "yomiB":417009520}, "lks": {...}, … },
     "mgmt": { … }
   },
   "lks": {
-    "targets": { "online": 868, "kyoten": 148, "source": "単月確認用（keiei）…" },
+    "targets": { "online": 868, "kyoten": 148, "source": "keiei の目標表（オンライン: 売上目標/申込数目標/成約数目標 表の当月行、拠点: 拠点ALL 目標表の当月列）。marke KPIサマリの当月目標(995/147)ではなく keiei を正とする（原本注記どおり）" },
     "online": {
       "yomi": 896,           // KPIサマリ オンライン成約数 全体 最終成約数 Aヨミ
       "act":  477,           // 同 昨日までの実績
-      "daily": { "dates": ["9/1","9/2",…], "dow": ["火","水",…], "v": [29,25,…] },  // marke ブロック1「成約数 決済日起点」。data_through まで
+      "daily": { "dates": ["9/1","9/2",…], "dow": ["火","水",…], "v": [29,25,…] },  // marke ブロック1「成約数 決済日起点」。data_through まで。欠損日は null（0 と区別）
       "step": [               // 元JSの STEP.lksOn と同じ形。p=月計画, y=Aヨミ, a=昨日まで実績
         {"n":"申込","p":7612,"y":7827,"a":4477},
         {"n":"予約","p":7599,"y":7887,"a":5085},
@@ -59,18 +60,18 @@ Google Drive MCP `read_file_content` が返す fileContent（Markdown表。タ�
         {"n":"成約率","p":27.7,"y":26.7,"a":26.6,"unit":"%"},
         {"n":"CPA","p":23022,"y":22379,"a":22400,"unit":"¥","lowerBetter":true}
       ],
-      "cost": { "plan": 175244808, "act": 100284050, "yomi": 175154000 }
+      "cost": { "plan": 175244808, "act": 100284050, "yomi": 175154000 }   // 各値 null 可（シートに無い場合）
     },
     "kyoten": {
       "yomi": 112, "act": 49,
       "daily": { "dates": [...], "dow": [...], "v": [...] },   // 日次集計（梅田・福岡・横浜）の最終成約の合算
       "step": [ 申込, 参加, 成約(key), 参加率(sep), 成約率, CPA ],  // 元JS STEP.lksKp と同じ並び（予約なし）
-      "cost": { "plan": 26500000, "act": 13629650, "yomi": 26484640 },
+      "cost": { "plan": 26500000, "act": 13629656, "yomi": 26484640 },
       "sites": [ {"name":"梅田","cpa_prev":42730,"cpa_target":32000}, {"name":"福岡",…}, {"name":"横浜",…} ],  // kyoten ブロック3「CPA 9月目標/8月実績」
       "excluded_sites": ["名古屋"]
     }
   },
-  "sources": [ {"name":"FY26_経営モニタリング","url":"https://docs.google.com/spreadsheets/d/1oIz45k-…/edit"}, {…}, {…} ],
+  "sources": [ {"name":"FY26_経営モニタリング","label":"全社（単月確認用・通期着地見通し）","url":"https://docs.google.com/spreadsheets/d/1oIz45k-…/edit"}, {…}, {…} ],  // label は任意（画面のリンク文言。無ければ「元データ：{name}」）
   "extract_log": [ "どの表をどう特定したか、フォールバックしたか（人が読む用）" ]
 }
 ```
@@ -81,7 +82,7 @@ Google Drive MCP `read_file_content` が返す fileContent（Markdown表。タ�
 3. 期初計画（plan）は原本と一致: 例 fin.total.plan[0]==382595924、fin.lks.plan[0]==339439531、mgmt.total.plan[0]==385856895、fin.grs.plan[0]==20900000（原本 REV_ALL と全12ヶ月一致を要求）。
 4. 実績確定月までの act は原本と一致（fin.lks.act[0..4] == [336107464,345997228,341145176,356545162,360685637] は「シートの実績が更新され得る」ため厳密一致ではなく ±0.5% 以内を許容。ただし plan は厳密一致）。
 5. `actual_until_index` は 1..12、`target_month` は fy.months に含まれる。
-6. lks.online.daily.v の長さ == elapsed_days（data_through まで）。kyoten も同じ。
+6. lks.online.daily.v の長さ == elapsed_days（data_through まで）。kyoten も同じ。要素は数値または null（欠損日）。null は extract_log に記録。
 7. step の p/y/a は全て数値。key 行がちょうど1つ。
 8. basis_date が JST の今日と一致（古い raw を誤って使わない）。
 
@@ -91,3 +92,7 @@ Google Drive MCP `read_file_content` が返す fileContent（Markdown表。タ�
 - `provisional`: SHEmoney / PRO の成約KPI（元JSの LANE/STEP/DAILY/CAUSE の mny/pro をそのまま格納。表示は「仮」バッジ付き）。
 - `notes`: 「この画面の前提と、まだ決まっていないこと」の箇条書き（決定済み/Phase タグ付き）。
 - `updated_at`: manual.json を人が更新した日。
+
+## 改訂履歴
+- v1.2 (2026-09-18): sources[].label 任意、cost の各値 null 可、month_summary は検算用 を明記。
+- v1.1 (2026-09-18): daily.v の null 許容、Aヨミ欠損月のフォールバック順（直前月Aヨミ）、targets の出所（keiei を正）、実績の出所（売上マトリクスを正）、cost.act 例値修正、month_summary は無補正 を明記。
