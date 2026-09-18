@@ -32,9 +32,20 @@
 2. **抽出** — `python3 zensha/extract.py`。不変条件（契約参照）NG なら非0で止まる。**NGのときは公開しない**。
 3. **検証** — `python3 zensha/test_extract.py` と `node zensha/test_build.js`。
 4. **生成** — `python3 zensha/build.py`（→ `out/zensha.html`）。
-5. **公開** — Artifact ツールで `zensha/out/zensha.html` を **同じ file_path で再公開**（URL 維持。icon は初回のみ指定、以後省略）。
+5. **公開** — Artifact ツールで、まず `action:"read"` に公開URL（下記）を渡して現行版を読み、次に **`url` を指定して** `zensha/out/zensha.html` を publish する。
+   「同じ file_path で再公開すればURLが維持される」のは**同一会話内だけ**で、毎朝は別セッションになるため、必ず `url` を渡すこと。`url` を渡さない publish は別Artifactを増やす。`icon` は初回だけで以後は省略（アイコンを保つため）。
 6. **記録** — `git add zensha && git commit -m "全社着地モニター 日次更新 <YYYY-MM-DD>"` → `git push -u origin claude/awesome-ride-r36g1y`。
-7. **異常時のみ報告** — 抽出NG／テスト失敗／前日比で全社通期着地が ±5% 超動いた／Drive が読めない（BLOCKED:DRIVE_UNAVAILABLE）は要点だけ報告し、公開・コミットはしない。正常時は静かに完了。
+7. **異常時のみ報告** — 次のときだけ要点を報告し、公開もコミットもしない。正常時は静かに完了する。
+   - 抽出が非0（不変条件NG）、テストが FAIL
+   - Drive が読めない・権限エラー（`BLOCKED:DRIVE_UNAVAILABLE`）、当月のマーケジスイが見つからない（`BLOCKED:MARKE_NOT_FOUND`）
+   - 全社の通期着地見込みが前日から ±5% 超動いた。前日値は `git show HEAD:zensha/data/latest.json` から取る
+   - `extract_log` に前日に無かった「警告」が出た
+   手入力（manual.json）の鮮度警告と、期限切れの判断事項は、公開は通常どおり行ったうえで1行だけ報告に含める。
+
+### 異常時の見当
+- **「〜が見つかりません」で止まる** → Drive のダンプが途中で切れている可能性が高い。3本とも1MB前後で**行の途中で終わっている**（取得APIの上限）。月が進んで日次表の行が増えると、必要な表が切断点の外に出て突然止まる。その場合はシート全体ではなくタブ/範囲を絞って取得する方式への切り替えが要る。
+- **不変条件で止まる** → `extract_log` と stderr に理由が日本語で出る。シート側の構造変更（行の並べ替え・列の追加）が原因のことが多い。`EXTRACT_NOTES.md` の「壊れやすいところ」を参照。
+- **Routine が発火していない** → 一番起きやすい失敗なのに「何も起きない」ので気づきにくい。画面の「N日前のデータ」バッジが唯一の手掛かり。2日以上バッジが出ていたら Routine の状態を確認する。
 
 ### 月替わりの注意
 - `target_month` は **marke（マーケジスイ）の日次表の日付行**から決まる（JST の今日の月ではない）。したがって月初に marke がまだ前月版のままだと、その月を対象として処理される。extract.py はこれを検知して非0終了する（stale ガード）。前月を締めるときは `--today <前月末日>` を使う。
