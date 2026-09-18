@@ -59,7 +59,9 @@ function renderPage(html) {
   var byId = {};
   // クラス指定で引かれるノードは、HTML 側の出現数だけ用意する
   var classes = {};
-  [".js-span-note", ".js-mno", ".js-fy", ".js-asof"].forEach(function (sel) {
+  [".js-span-note", ".js-mno", ".js-fy", ".js-asof",
+    ".js-prov-note-mny", ".js-prov-note-pro",
+    ".js-prov-asof-mny", ".js-prov-asof-pro"].forEach(function (sel) {
     var cls = sel.slice(1);
     var n = (html.match(new RegExp(cls, "g")) || []).length;
     classes[sel] = [];
@@ -202,7 +204,7 @@ describe("描画 — 日次・段階テーブル・主因", function () {
   has("¥22,092", "オンライン CPA Aヨミ");
   has("41.8%", "オンライン 参加率 Aヨミ");
   // 主因
-  has("月計画868 → Aヨミ887（差 +19件 ＝ ①＋②）");
+  has("月計画868 → Aヨミ887（差 +19件 ≒ ①＋②）", "M1: ①+②=20 と差 19 がずれるので ≒");
   has("月計画148 → Aヨミ97（差 ▲51件 ＝ ①＋③）");
   has("+57件", "オンライン ①参加要因");
   has("▲37件", "オンライン ②転換要因");
@@ -218,18 +220,29 @@ describe("描画 — 日次・段階テーブル・主因", function () {
 describe("描画 — manual.json 由来", function () {
   if (!rendered) { ok(false, "描画できていない"); return; }
   has("梅田・横浜はCPA改善が進行中（梅田 8月¥42,730→9月目標¥32,000、横浜 ¥44,613→¥31,000）。");
-  has("福岡は増額前に構造改善を先行。");
+  has("福岡は増額前に構造改善を先行する方針");
   has("CPA ¥18,421 と目標¥23,022 を下回って推移。");
   has("拠点の広告費を増やすか、単価を直してから増やすか");
-  has("9/10まで"); has("営業役員 ＋ 集客役員");
-  has("手入力部分の最終更新: 2026-09-08");
+  has("9/10まで", "decisions の {{month}} が埋まる"); has("営業役員 ＋ 集客役員");
+  // C1(a): manual の本文がトークンから埋まり、トピックス03 と同じ数値になる
+  has("予算は¥26.5Mに対し消化¥5.8M（22%）", "C1: decisions[0] の広告費がトークン由来");
+  has("計画の1.64倍", "C1: decisions[0] のCPA倍率がトピックス03と一致");
+  has("オンラインは月目標に対し +19件（Aヨミ102.2%）", "C1: decisions[1] の件数・達成率");
+  has("SHElikes全体 1,016件 で見れば ▲32件", "C1: decisions[1] の全体差がトークン由来");
+  has("拠点単体は 65.5% のまま残る", "C1: decisions[1] の拠点達成率");
+  has("CPA ¥18,421 と目標¥23,022", "C1: field_notes のCPAがトークン由来");
+  has("参加率31.9%は月内の未開催予約", "C1: field_notes の参加率がトークン由来");
+  has("拠点の9/7まで実績は KPIサマリ25件／日次集計の合算22件。オンラインも184件／180件。", "C1: notes[5]");
+  has("（9/7 の翌日〜月末＝残23日）", "C1: notes[7] の残日数");
+  ok(rendered.text.indexOf("[未取得]") < 0, "C1: フィクスチャでは未解決トークンが無い");
+  has("手入力部分の最終更新: 2026-09-18");
   has("数値は毎朝の自動更新");
   ok(rendered.text.indexOf("本番では開くたびに読み直す") < 0, "削除した注記（2日前のデータ…）が残っていない");
   has("元データ：全社（単月確認用・通期着地見通し）");
   has("元データ：FY26_拠点モニタリング");
   // 仮KPI（SHEmoney / PRO）
-  has("月目標 210件 ／ 昨日まで実績 46件");
-  has("月目標 96件 ／ 昨日まで実績 22件");
+  has("月目標 210件 ／ 9/7 まで実績 46件");
+  has("月目標 96件 ／ 9/7 まで実績 22件");
   has("計画 7.0件/日"); has("必要 7.1件/日");
 });
 
@@ -407,7 +420,7 @@ describe("ギャップの主因", function () {
   eq(cOn[1].kind, "② 押し下げ", "②は押し下げ");
   eq(cOn[2].lab, "Aヨミとペースの差", "③は予測差");
   eq(cOn[2].v, "98件", "③の差は98件");
-  eq(L.causeSummary(onStep, cOn), "月計画868 → Aヨミ887（差 +19件 ＝ ①＋②）", "オンラインの見出し");
+  eq(L.causeSummary(onStep, cOn), "月計画868 → Aヨミ887（差 +19件 ≒ ①＋②）", "M1: 丸め差があるので ≒");
 
   var kpLane = L.laneModel({ target: 148, yomi: 97, act: 25, daily: [4, 3, 3, 1, 3, 5, 3], elapsed: 7, days: 30, remaining: 23 });
   var cKp = L.buildCauses("kyoten", kpStep, kpLane, { plan: 26500000, act: 5800000 });
@@ -415,7 +428,7 @@ describe("ギャップの主因", function () {
   eq(cKp[1].v, "1.64倍", "拠点②はCPA1.64倍");
   eq(cKp[2].kind, "③ 問題ではない所", "拠点③は問題ではない所");
   ok(cKp[1].p.indexOf("広告費は22%しか消化しておらず") >= 0, "広告費の消化率22%", cKp[1].p);
-  eq(L.causeSummary(kpStep, cKp), "月計画148 → Aヨミ97（差 ▲51件 ＝ ①＋③）", "拠点の見出し");
+  eq(L.causeSummary(kpStep, cKp), "月計画148 → Aヨミ97（差 ▲51件 ＝ ①＋③）", "M1: 一致するときは ＝");
 
   // 達成側に振れたとき言い回しが破綻しない
   var upStep = kpStep.map(function (r) { return Object.assign({}, r); });
@@ -508,6 +521,269 @@ describe("現場で対応中（拠点CPA文）", function () {
     "原本と同じ文");
   eq(L.siteCpaSentence([], "2026-09"), "", "対象拠点が無ければ空文字");
   ok(L.siteCpaSentence(sites, "2026-01").indexOf("12月¥42,730→1月目標") >= 0, "1月なら前月は12月");
+});
+
+
+/* ---------------------------------------------------------------- *
+ * 追加: C1 / C2 / I1〜I5 / M4 / M7 / M8
+ * ---------------------------------------------------------------- */
+function buildWith(mutate, mutateManual) {
+  var fx = JSON.parse(fs.readFileSync(fixture, "utf8"));
+  if (mutate) mutate(fx);
+  var m = JSON.parse(fs.readFileSync(path.join(HERE, "data", "manual.json"), "utf8"));
+  if (mutateManual) mutateManual(m);
+  var id = "zensha-case-" + process.pid + "-" + (buildWith._n = (buildWith._n || 0) + 1);
+  var df = path.join(os.tmpdir(), id + ".json");
+  var mf = path.join(os.tmpdir(), id + "-m.json");
+  var of = path.join(os.tmpdir(), id + ".html");
+  fs.writeFileSync(df, JSON.stringify(fx), "utf8");
+  fs.writeFileSync(mf, JSON.stringify(m), "utf8");
+  var r = cp.spawnSync("python3",
+    [path.join(HERE, "build.py"), "--data", df, "--manual", mf, "-o", of], { encoding: "utf8" });
+  var status = r.status, stderr = String(r.stderr || "");
+  var html = fs.existsSync(of) ? fs.readFileSync(of, "utf8") : "";
+  var warns = [];
+  var realWarn = console.warn;
+  console.warn = function (m2) { warns.push(String(m2)); };
+  var out = null;
+  try { if (html) out = renderPage(html); } finally { console.warn = realWarn; }
+  [df, mf, of].forEach(function (f) { try { fs.unlinkSync(f); } catch (e2) { /* noop */ } });
+  return { html: html, text: out ? out.text : "", status: status, stderr: stderr, warns: warns };
+}
+
+describe("C1 — 未解決トークンは [未取得] + console.warn", function () {
+  var warns = [];
+  var got = L.fillTokens("a {{nope}} b {{kyoten.spend_rate}}", { "kyoten.spend_rate": null },
+    function (m) { warns.push(m); });
+  eq(got, "a [未取得] b [未取得]", "未知トークンも null 値も [未取得]");
+  eq(warns.length, 2, "どちらも警告される");
+  ok(/未知のトークン/.test(warns[0]), "未知トークンの警告文", warns[0]);
+  ok(/latest\.json に無い/.test(warns[1]), "値が無いときの警告文", warns[1]);
+  eq(L.fillTokens("{{ month }}", { month: "9" }), "9", "前後の空白を許す");
+  eq(L.fillTokens("トークン無し", {}), "トークン無し", "トークンが無ければそのまま");
+
+  var c = buildWith(null, function (m) { m.notes.push({ text: "検証用 {{bogus.key}}", tag: null }); });
+  ok(c.text.indexOf("検証用 [未取得]") >= 0, "描画でも [未取得] になる");
+  ok(c.warns.some(function (w) { return /bogus\.key/.test(w); }), "console.warn が出る", c.warns.join(" / "));
+});
+
+describe("C1(c) — 手入力が古いと警告", function () {
+  eq(L.manualStaleWarning("2026-09-01", "2026-09-08", 7), "7日前の手入力です。判断事項の前提を確認してください", "7日でしきい値");
+  eq(L.manualStaleWarning("2026-09-02", "2026-09-08", 7), null, "6日ならまだ出さない");
+  eq(L.manualStaleWarning("2026-09-20", "2026-09-08", 7), null, "manual が新しい側なら出さない");
+  var c = buildWith(null, function (m) { m.updated_at = "2026-08-20"; });
+  eq(c.status, 0, "警告でも非0終了しない");
+  ok(/警告: manual\.json は \d+日前の手入力です/.test(c.stderr), "stderr に警告", c.stderr.slice(0, 160));
+  ok(/class="stale">\s*19日前の手入力です/.test(c.text), "画面にも警告バッジ", c.text.slice(0, 0));
+});
+
+describe("C2 — cost / CPA が null のとき 0 に潰さない", function () {
+  eq(L.spendRateOf({ plan: 100, act: null }), null, "act が null なら消化率は null");
+  eq(L.spendRateOf({ plan: 100, act: 0 }), 0, "act が 0 なら 0%");
+  eq(L.spendRateOf({ plan: null, act: 10 }), null, "plan が無ければ null");
+  eq(L.cpaRatio({ p: 100, y: null }), null, "CPA の Aヨミが無ければ null");
+  near(L.cpaRatio({ p: 100, y: 155 }), 1.55, 1e-9, "CPA 倍率");
+
+  var c = buildWith(function (fx) { fx.lks.kyoten.cost.act = null; });
+  ok(c.text.indexOf("消化額は未取得") >= 0, "トピックス03が「消化額は未取得」", c.text.indexOf("消化額は未取得"));
+  ok(c.text.indexOf("（0%）") < 0, "「（0%）」と断言しない");
+  ok(c.text.indexOf("¥0.0M") < 0, "「¥0.0M」と断言しない");
+  ok(c.text.indexOf("広告費の消化額は未取得。") >= 0, "主因カードも「消化額は未取得」");
+
+  var c2 = buildWith(function (fx) {
+    fx.lks.kyoten.step = fx.lks.kyoten.step.map(function (r) {
+      return r.n === "CPA" ? { n: "CPA", p: 32154, y: null, a: null, unit: "¥", lowerBetter: true } : r;
+    });
+  });
+  ok(c2.text.indexOf("申込CPAは未取得。") >= 0, "CPA が null なら倍率文を出さない");
+  ok(c2.text.indexOf("倍で、出せば出すほど") < 0, "倍率の断定文が消える");
+});
+
+describe("I1 — latest 由来の文字列をエスケープする", function () {
+  var payload = '<img src=x onerror="alert(1)">';
+  var c = buildWith(function (fx) {
+    fx.lks.kyoten.sites[0].name = payload;
+    fx.lks.kyoten.daily.dow[0] = payload;
+    fx.lks.kyoten.daily.dates[0] = payload;
+    fx.lks.online.step[0].n = payload;
+    fx.lks.online.daily.note = payload;
+    fx.lks.online.step_note = payload;
+    fx.sources[0].name = payload;
+    fx.sources[0].label = payload;
+    fx.sources[0].url = "javascript:alert(1)";
+  });
+  ok(c.status === 0, "ビルドは通る");
+  ok(c.text.indexOf("<img") < 0, "描画結果に <img が現れない");
+  ok(c.text.indexOf("onerror=\"alert(1)\"") < 0, "生の onerror 属性が現れない");
+  ok(c.text.indexOf("&lt;img") >= 0, "エスケープ済みで出ている");
+  ok(/href="#"/.test(c.text), "javascript: URL は # に落とす");
+  ok(c.text.indexOf('href="javascript:') < 0, "javascript: がそのまま href に入らない");
+  eq(L.safeUrl("HTTPS://a.example/x"), "HTTPS://a.example/x", "https は通す");
+  eq(L.safeUrl("data:text/html,x"), "#", "data: は落とす");
+  eq(L.safeUrl(null), "#", "null は落とす");
+  eq(L.esc('a&b<c>"d\'e'), "a&amp;b&lt;c&gt;&quot;d&#39;e", "esc は5文字を置換");
+});
+
+describe("I2 / I3 / M4 — topic01 の言い回し", function () {
+  var SV = [
+    { key: "lks", short: "SHElikes" }, { key: "mny", short: "SHEmoney" }, { key: "pro", short: "PRO" },
+    { key: "hjn", short: "法人" }, { key: "grs", short: "グロースタジオ" }
+  ];
+  function rev(plan, acts) {
+    var r = { total: { plan: [plan.total], act: [acts.total] } };
+    ["lks", "mny", "pro", "hjn", "grs"].forEach(function (k) {
+      r[k] = { plan: [plan[k]], act: [acts[k]] };
+    });
+    return r;
+  }
+  // I2: 全社は超過だが、単体で超過しているサービスが1つも無い
+  var noLead = L.topic01(rev(
+    { total: 1000, lks: 200, mny: 200, pro: 200, hjn: 200, grs: 200 },
+    { total: 1100, lks: 199, mny: 199, pro: 199, hjn: 199, grs: 199 }), SV);
+  ok(noLead.h.indexOf("上回る見通し") >= 0, "全社超過の見出し", noLead.h);
+  ok(noLead.p.indexOf("上回っているサービスは無い") >= 0, "I2: 未達サービスを牽引役にしない", noLead.p);
+  ok(noLead.p.indexOf("が牽引") < 0, "I2: 「が牽引」を出さない");
+  // I2: 超過サービスがあるときはそれだけを牽引役にする
+  var lead = L.topic01(rev(
+    { total: 1000, lks: 200, mny: 200, pro: 200, hjn: 200, grs: 200 },
+    { total: 1200, lks: 400, mny: 199, pro: 199, hjn: 199, grs: 199 }), SV);
+  ok(/SHElikes .*が牽引/.test(lead.p), "I2: 超過している SHElikes が牽引", lead.p);
+  ok(lead.p.indexOf("法人") < 0, "I2: 未達の法人は牽引役に入らない");
+  // M4: totalDiff === 0
+  var flat = L.topic01(rev(
+    { total: 1000, lks: 200, mny: 200, pro: 200, hjn: 200, grs: 200 },
+    { total: 1000, lks: 200, mny: 200, pro: 200, hjn: 200, grs: 200 }), SV);
+  ok(flat.h.indexOf("計画どおり") >= 0, "M4: 差ゼロは「計画どおり」", flat.h);
+  // I3: 「に収まっており」と「広がっている」が同時に出ない
+  function noContradiction(t) {
+    return !(t.p.indexOf("に収まっており") >= 0 && t.p.indexOf("広がっている") >= 0);
+  }
+  var spread = L.topic01(rev(
+    { total: 1000, lks: 200, mny: 200, pro: 200, hjn: 200, grs: 200 },
+    { total: 700, lks: 140, mny: 140, pro: 140, hjn: 140, grs: 140 }), SV);
+  ok(noContradiction(spread), "I3: 全サービス均等未達で自己矛盾しない", spread.p);
+  ok(spread.p.indexOf("広がっている") >= 0, "I3: 均等に未達なら「広がっている」", spread.p);
+  ok(spread.p.indexOf("も合計") >= 0, "I3: 残りも小さくない言い回し", spread.p);
+  var fx0 = JSON.parse(fs.readFileSync(fixture, "utf8"));
+  ok(noContradiction(L.topic01(fx0.revenue.fin, SV)), "I3: 原本データでも自己矛盾しない");
+});
+
+describe("M7 — 未達額順と達成率順で上位2社が分かれる", function () {
+  var SV = [
+    { key: "lks", short: "SHElikes" }, { key: "mny", short: "SHEmoney" }, { key: "pro", short: "PRO" },
+    { key: "hjn", short: "法人" }, { key: "grs", short: "グロースタジオ" }
+  ];
+  // 額では lks(▲300) と mny(▲200) が最大、達成率では hjn(10%) と pro(50%) が最低
+  var r = {
+    total: { plan: [2000], act: [1489] },
+    lks: { plan: [1000], act: [700] },   // ▲300 / 70.0%
+    mny: { plan: [800], act: [600] },    // ▲200 / 75.0%
+    pro: { plan: [100], act: [50] },     // ▲50  / 50.0%
+    hjn: { plan: [10], act: [1] },       // ▲9   / 10.0%
+    grs: { plan: [90], act: [138] }      // +48  / 153.3%
+  };
+  var t = L.topic01(r, SV);
+  ok(t.h.indexOf("SHElikes") >= 0 && t.h.indexOf("SHEmoney") >= 0,
+    "未達「額」の大きい2社を選ぶ（達成率の低い法人・PROではない）", t.h);
+  ok(t.h.indexOf("法人") < 0 && t.h.indexOf("PRO") < 0, "達成率順で選んでいない", t.h);
+  ok(t.p.indexOf("PRO・法人・グロースタジオ") >= 0, "残りはサービス定義順で並ぶ", t.p);
+});
+
+describe("I4 — 成約率がほぼ同水準のときは断言しない", function () {
+  eq(L.convStance({ a: 26.6, y: 26.7 }), "same", "0.1pt 差は same");
+  eq(L.convStance({ a: 26.7, y: 26.7 }), "same", "等号は same");
+  eq(L.convStance({ a: 26.1, y: 26.7 }), "below", "0.6pt 下は below");
+  eq(L.convStance({ a: 27.3, y: 26.7 }), "above", "0.6pt 上は above");
+  eq(L.convStance({ a: null, y: 26.7 }), "unknown", "欠損は unknown");
+
+  var onStep = [
+    { n: "申込", p: 7612, y: 7930, a: 2036 }, { n: "予約", p: 7599, y: 7983, a: 2644 },
+    { n: "参加", p: 3135, y: 3340, a: 843 }, { n: "成約", p: 868, y: 887, a: 184, key: true },
+    { n: "参加率", p: 41.3, y: 41.8, a: 31.9, unit: "%", sep: true },
+    { n: "成約率", p: 27.7, y: 26.6, a: 26.7, unit: "%" },
+    { n: "CPA", p: 23022, y: 22092, a: 18421, unit: "¥", lowerBetter: true }
+  ];
+  var lane = L.laneModel({ target: 868, yomi: 887, act: 184, daily: [30, 26, 25, 28, 30, 17, 24], elapsed: 7, days: 30, remaining: 23 });
+  lane.throughLabel = "9/7";
+  var cards = L.buildCauses("online", onStep, lane, null);
+  eq(cards[2].h, "実績の成約率はAヨミの前提とほぼ同水準", "fcCard の見出し");
+  ok(cards[2].p.indexOf("日次ペースの振れによるもの") >= 0, "fcCard の本文", cards[2].p);
+  ok(cards[2].p.indexOf("届いていない") < 0, "「届いていない」と断言しない");
+
+  var kpStepSame = [
+    { n: "申込", p: 824, y: 496, a: 109 }, { n: "参加", p: 399, y: 257, a: 51 },
+    { n: "成約", p: 148, y: 97, a: 25, key: true },
+    { n: "参加率", p: 48.4, y: 51.8, a: 46.8, unit: "%", sep: true },
+    { n: "成約率", p: 37.1, y: 37.7, a: 37.7, unit: "%" },
+    { n: "CPA", p: 32154, y: 52862, a: 53176, unit: "¥", lowerBetter: true }
+  ];
+  var kpLane = L.laneModel({ target: 148, yomi: 97, act: 25, daily: [4, 3, 3, 1, 3, 5, 3], elapsed: 7, days: 30, remaining: 23 });
+  var lks = L.laneModel({ target: 1016, yomi: 984, act: 209, pace: 896, elapsed: 7, days: 30, remaining: 23 });
+  var t4 = L.topic04(lks, lane, kpLane, onStep, kpStepSame);
+  ok(t4.p.indexOf("ほぼ同水準で、差は日次ペースの振れによるもの") >= 0, "topic04 も同水準の言い回し", t4.p);
+  ok(t4.p.indexOf("上回っていること") < 0, "等号で「上回っている」と言わない");
+});
+
+describe("I5 — 仮KPIは as_of で凍結", function () {
+  if (!rendered) { ok(false, "描画できていない"); return; }
+  has("2026-09-07 時点の仮置き。以降は更新していません", "仮パネルの時点注記");
+  has("9/7 時点の仮置き", "仮レーンのバッジ");
+  has("昨日 9/7 時点（仮）", "仮の段階テーブル見出し");
+  var c = buildWith(function (fx) {
+    fx.basis_date = "2026-09-25"; fx.data_through = "2026-09-24";
+    fx.elapsed_days = 24; fx.remaining_days = 6;
+    ["online", "kyoten"].forEach(function (k) {
+      var d = fx.lks[k].daily;
+      while (d.v.length < 24) { d.v.push(1); d.dates.push("9/" + (d.v.length)); d.dow.push("月"); }
+    });
+  });
+  ok(c.status === 0, "ライブ側だけ進めてビルドできる", c.stderr.slice(0, 200));
+  ok(c.text.indexOf("残23日で必要なペース") >= 0, "仮レーンは as_of の残23日のまま");
+  ok(c.text.indexOf("2026-09-07 時点の仮置き") >= 0, "仮パネルは 9/7 のまま");
+  ok(c.text.indexOf("経過24日 / 30日・残6日") >= 0, "ライブのヘッダは 24日に進む");
+});
+
+describe("M4 — 言い回しの境界", function () {
+  var kpStep = [
+    { n: "申込", p: 824, y: 824, a: 109 }, { n: "参加", p: 399, y: 399, a: 51 },
+    { n: "成約", p: 148, y: 148, a: 25, key: true },
+    { n: "参加率", p: 48.4, y: 48.4, a: 46.8, unit: "%", sep: true },
+    { n: "成約率", p: 37.1, y: 37.1, a: 37.1, unit: "%" },
+    { n: "CPA", p: 32154, y: 32154, a: 32154, unit: "¥", lowerBetter: true }
+  ];
+  var kpLane = L.laneModel({ target: 148, yomi: 148, act: 25, daily: [4], elapsed: 7, days: 30, remaining: 23 });
+  var c = L.buildCauses("kyoten", kpStep, kpLane, { plan: 26500000, act: 22525000 }); // 85%
+  eq(c[0].h, "申込は計画どおり", "M4: 申込が計画ちょうどなら「計画どおり」");
+  ok(c[1].p.indexOf("余っている") < 0, "M4: 85% 消化で「余っている」と言わない", c[1].p);
+  ok(c[1].p.indexOf("85%まで消化") >= 0, "M4: 消化率を出す", c[1].p);
+  eq(c[1].v, "1.00倍", "M4: 倍率は小数2桁");
+  ok(/計画の1\.00倍/.test(c[1].p), "M4: 本文の倍率も小数2桁", c[1].p);
+  var loose = L.buildCauses("kyoten", kpStep, kpLane, { plan: 26500000, act: 20000000 }); // 75%
+  ok(loose[1].p.indexOf("余っている") >= 0, "M4: 80%未満なら「余っている」", loose[1].p);
+  // recentPace: 末尾7日を取ってから null を除外
+  near(L.recentPace([99, 99, 1, 2, null, null, null, null, 3]), 2, 1e-9,
+    "M4: 末尾7日を取ってから null を除外（先頭の 99 は使わない）");
+  near(L.recentPace([99, 99, 99, 4, 4, 4, 4, 4, 4, 4]), 4, 1e-9,
+    "M4: 直近7日だけを見る");
+  eq(L.recentPace([5, 5, null, null, null, null, null, null, null]), null,
+    "M4: 直近7日が全欠損なら null");
+});
+
+describe("M8 — step_note と sources.label", function () {
+  if (!rendered) { ok(false, "描画できていない"); return; }
+  has("元データ：全社（単月確認用・通期着地見通し）", "M8: label があればリンク文言に使う");
+  has("元データ：26年9月_マーケジスイ進捗管理表", "M8: label が無ければ name");
+  var c = buildWith(function (fx) { fx.lks.online.step_note = "成約率の計画は 成約目標÷参加計画 で導出"; });
+  ok(c.text.indexOf("成約率の計画は 成約目標÷参加計画 で導出") >= 0, "M8: step_note を段階テーブル下に出す");
+});
+
+describe("M5 — カレンダー整合の不変条件", function () {
+  var c1 = buildWith(function (fx) { fx.lks.online.daily.v = fx.lks.online.daily.v.slice(0, 5); });
+  ok(c1.status !== 0, "daily.v の長さが elapsed_days と違えば非0", "status=" + c1.status);
+  ok(/daily\.v の長さ/.test(c1.stderr), "日本語エラー", c1.stderr.slice(0, 160));
+  var c2 = buildWith(function (fx) { fx.remaining_days = 22; });
+  ok(c2.status !== 0, "elapsed+remaining != days_in_month なら非0", "status=" + c2.status);
+  ok(/days_in_month/.test(c2.stderr), "日本語エラー", c2.stderr.slice(0, 160));
 });
 
 /* ---------------------------------------------------------------- */

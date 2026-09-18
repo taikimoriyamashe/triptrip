@@ -139,7 +139,7 @@
     }
   },
   "sources": [
-    {"name":"FY26_経営モニタリング","label":"元データ：全社（単月確認用・通期着地見通し）","url":"https://docs.google.com/spreadsheets/d/1oIz45k-Qkr8AY3v4zBQAiYHDxvg21nvVPSP5xX5q9pE/edit"},
+    {"name":"FY26_経営モニタリング","label":"全社（単月確認用・通期着地見通し）","url":"https://docs.google.com/spreadsheets/d/1oIz45k-Qkr8AY3v4zBQAiYHDxvg21nvVPSP5xX5q9pE/edit"},
     {"name":"26年9月_マーケジスイ進捗管理表","url":"https://docs.google.com/spreadsheets/d/1a6Aud7H-31gs64lDv2Iyww6DnS98wJcuoOssx6nGhJs/edit"},
     {"name":"FY26_拠点モニタリング","url":"https://docs.google.com/spreadsheets/d/11pv1YWcxOvJwJjhsNFZa9zGoy0GCn3bauNtSymMppcg/edit"}
   ],

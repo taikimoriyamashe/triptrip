@@ -383,6 +383,7 @@ td.gsep{border-left:1px solid var(--line2)}
             </thead>
             <tbody id="step-lks-on"></tbody>
           </table></div>
+          <div class="csub" id="step-note-on" style="margin:6px 2px 0"></div>
         </div>
         <div>
           <div class="colhead col-kp"><span class="dot" style="background:currentColor"></span><span class="txt">拠点</span></div>
@@ -393,6 +394,7 @@ td.gsep{border-left:1px solid var(--line2)}
             </thead>
             <tbody id="step-lks-kp"></tbody>
           </table></div>
+          <div class="csub" id="step-note-kp" style="margin:6px 2px 0"></div>
         </div>
       </div>
       <p class="sec-note" id="note-dayratio" style="margin:9px 2px 0"></p>
@@ -430,7 +432,7 @@ td.gsep{border-left:1px solid var(--line2)}
       <div class="lanes one" id="lane-mny"></div>
     </section>
     <section>
-      <div class="sec-head"><h2>日次の成約実績<span class="chip-prov">仮</span></h2></div>
+      <div class="sec-head"><h2>日次の成約実績<span class="chip-prov">仮</span></h2><span class="sec-note js-prov-note-mny"></span></div>
       <div class="two"><div class="card chart-card">
         <div class="legend" id="legend-mny"></div>
         <div id="d-mny"></div>
@@ -440,7 +442,7 @@ td.gsep{border-left:1px solid var(--line2)}
       <div class="sec-head"><h2>どこで減っているか<span class="chip-prov">仮</span></h2></div>
       <div class="two"><div class="card tbl-scroll"><table class="step">
         <thead>
-          <tr class="grp"><th></th><th colspan="4">月末の着地見通し（Aヨミ）</th><th colspan="2" class="gsep js-asof"></th></tr>
+          <tr class="grp"><th></th><th colspan="4">月末の着地見通し（Aヨミ）</th><th colspan="2" class="gsep js-prov-asof-mny"></th></tr>
           <tr><th>段階</th><th>月計画</th><th>Aヨミ</th><th>差分</th><th>達成率</th><th class="gsep">実績</th><th>日割計画差</th></tr>
         </thead>
         <tbody id="step-mny"></tbody>
@@ -470,7 +472,7 @@ td.gsep{border-left:1px solid var(--line2)}
       <div class="lanes one" id="lane-pro"></div>
     </section>
     <section>
-      <div class="sec-head"><h2>日次の成約実績<span class="chip-prov">仮</span></h2></div>
+      <div class="sec-head"><h2>日次の成約実績<span class="chip-prov">仮</span></h2><span class="sec-note js-prov-note-pro"></span></div>
       <div class="two"><div class="card chart-card">
         <div class="legend" id="legend-pro"></div>
         <div id="d-pro"></div>
@@ -480,7 +482,7 @@ td.gsep{border-left:1px solid var(--line2)}
       <div class="sec-head"><h2>どこで減っているか<span class="chip-prov">仮</span></h2></div>
       <div class="two"><div class="card tbl-scroll"><table class="step">
         <thead>
-          <tr class="grp"><th></th><th colspan="4">月末の着地見通し（Aヨミ）</th><th colspan="2" class="gsep js-asof"></th></tr>
+          <tr class="grp"><th></th><th colspan="4">月末の着地見通し（Aヨミ）</th><th colspan="2" class="gsep js-prov-asof-pro"></th></tr>
           <tr><th>段階</th><th>月計画</th><th>Aヨミ</th><th>差分</th><th>達成率</th><th class="gsep">実績</th><th>日割計画差</th></tr>
         </thead>
         <tbody id="step-pro"></tbody>
@@ -549,6 +551,12 @@ td.gsep{border-left:1px solid var(--line2)}
  *
  * 丸め・単位は原本 (reference/original-2026-09-08.html) に合わせる:
  *   億円2桁 / 百万円1桁 / %1桁 / 件は整数。
+ *
+ * 信頼境界:
+ *   - latest.json はスプレッドシート由来の「外部入力」。画面に出す文字列は必ず esc() を通す。
+ *     URL は safeUrl() で http(s) のみ許可する。
+ *   - manual.json は人が書く「信頼できる入力」。原本と同じく <b> などのマークアップを効かせたいので
+ *     innerHTML のまま扱う。ただし数値はベタ書きせず {{トークン}} で latest から埋める（fillTokens）。
  */
 var ZENSHA_LOGIC = (function () {
   "use strict";
@@ -557,6 +565,20 @@ var ZENSHA_LOGIC = (function () {
    * 1. フォーマット
    * ================================================================ */
   function isNum(v) { return typeof v === "number" && isFinite(v); }
+
+  /** latest.json 由来の文字列を HTML に入れる前に必ず通す。 */
+  function esc(s) {
+    if (s === null || s === undefined) return "";
+    return String(s)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+  /** http(s) 以外（javascript: data: など）は握りつぶして "#" にする。 */
+  function safeUrl(u) {
+    var s = String(u === null || u === undefined ? "" : u).trim();
+    return /^https?:\/\//i.test(s) ? s : "#";
+  }
+  var MISSING = "[未取得]";
   function n0(n) { return Math.round(n).toLocaleString("ja-JP"); }
   function yen(n) { return "¥" + Math.round(n).toLocaleString("ja-JP"); }
   function mil(n) { return (n / 1000000).toFixed(1); }                       // 百万円1桁
@@ -670,13 +692,17 @@ var ZENSHA_LOGIC = (function () {
     (v || []).forEach(function (x) { if (isNum(x)) { s += x; n++; } });
     return { sum: s, n: n, len: (v || []).length, avg: n > 0 ? s / n : null };
   }
-  /** 直近実績 = 直近7日平均（7日に満たなければ全日平均）。null は除外。 */
+  /**
+   * 直近実績 = 直近7日平均（7日に満たなければ全日平均）。
+   * 「末尾7日を取ってから null を除外」する（欠損日を遡って埋めない）。
+   * 直近7日が全て欠損なら null。
+   */
   function recentPace(v, win) {
     win = win || 7;
-    var a = (v || []).filter(isNum);
-    if (!a.length) return null;
-    var t = a.slice(Math.max(0, a.length - win));
-    return t.reduce(function (x, y) { return x + y; }, 0) / t.length;
+    var all = v || [];
+    var tail = all.slice(Math.max(0, all.length - win)).filter(isNum);
+    if (!tail.length) return null;
+    return tail.reduce(function (x, y) { return x + y; }, 0) / tail.length;
   }
 
   /**
@@ -760,6 +786,25 @@ var ZENSHA_LOGIC = (function () {
 
   var CIRCLED = ["①", "②", "③", "④"];
 
+  /** 広告費の消化率(%)。cost.act が null の月は null（0 に潰さない）。 */
+  function spendRateOf(cost) {
+    if (!cost || !isNum(cost.plan) || cost.plan === 0 || !isNum(cost.act)) return null;
+    return cost.act / cost.plan * 100;
+  }
+  /** 申込CPAの計画比（Aヨミ ÷ 計画）。片方でも欠ければ null。 */
+  function cpaRatio(cpa) {
+    if (!cpa || !isNum(cpa.p) || cpa.p === 0 || !isNum(cpa.y)) return null;
+    return cpa.y / cpa.p;
+  }
+  /** 実績成約率とAヨミ前提の関係。0.5pt 未満の差は「ほぼ同水準」扱い。 */
+  var CONV_EPS = 0.5;
+  function convStance(cv) {
+    if (!cv || !isNum(cv.a) || !isNum(cv.y)) return "unknown";
+    var d = cv.a - cv.y;
+    if (Math.abs(d) < CONV_EPS) return "same";
+    return d < 0 ? "below" : "above";
+  }
+
   /**
    * 主因カード3枚。kind="online" → [参加, 転換, 予測差] / kind="kyoten" → [参加, CPA, 転換]
    * cost = {plan, act} （拠点の広告費。無ければ CPA カードは広告費行を省く）
@@ -784,7 +829,7 @@ var ZENSHA_LOGIC = (function () {
         lab: "成約数への影響", v: signedN(imp.attend) + "件", tone: imp.attend >= 0 ? "g" : "b",
         h: ratioApply < 100
           ? "申込が計画の" + Math.round(ratioApply / 10) + "割しか集まっていない"
-          : "申込が計画を上回っている",
+          : (ratioApply === 100 ? "申込は計画どおり" : "申込が計画を上回っている"),
         p: (ap ? "申込" + n0(ap.p) + "→" + n0(ap.y) + "、" : "")
           + (at ? "参加" + n0(at.p) + "→" + n0(at.y) + "。" : "")
           + "ここが拠点の" + signedN(diff) + "件" + howMuch + "。",
@@ -799,8 +844,12 @@ var ZENSHA_LOGIC = (function () {
       var allUp = ups.length > 0 && ups.every(function (x) { return x.up; });
       var allDown = ups.length > 0 && ups.every(function (x) { return !x.up; });
       var names = ups.map(function (x) { return x.n; }).join("・");
-      var lead = ups.length === 0 ? ""
-        : (allUp ? names + "とも計画超で、" : (allDown ? names + "とも計画割れで、" : names + "は計画とまちまちで、"));
+      // 上流（申込・予約）と参加の向きが食い違うこともあるので、接続詞で言い分ける
+      var lead;
+      if (ups.length === 0) lead = "";
+      else if (allUp) lead = names + (imp.attend >= 0 ? "とも計画超で、" : "は計画超だが、");
+      else if (allDown) lead = names + (imp.attend < 0 ? "とも計画割れで、" : "は計画割れだが、");
+      else lead = names + "は計画とまちまちで、";
       attendCard = {
         kind: CIRCLED[0] + (imp.attend >= 0 ? " 押し上げ" : " 押し下げ"),
         lab: "成約数への影響", v: signedN(imp.attend) + "件", tone: imp.attend >= 0 ? "g" : "b",
@@ -846,41 +895,61 @@ var ZENSHA_LOGIC = (function () {
     /* --- CPA（拠点） --- */
     var cpaCard = null;
     if (kind === "kyoten" && cpa) {
-      var cr = cpa.p ? cpa.y / cpa.p : 1;
-      var spendRate = (cost && cost.plan) ? (cost.act || 0) / cost.plan * 100 : null;
-      var worseCpa = cr > 1;
-      var p1 = spendRate === null ? ""
-        : (spendRate < 90
-          ? "広告費は" + Math.round(spendRate) + "%しか消化しておらず予算は余っている。"
-          : "広告費は" + Math.round(spendRate) + "%まで消化しており予算の余りは少ない。");
-      var p2 = worseCpa
-        ? "ただし単価が計画の" + cr.toFixed(1) + "倍で、出せば出すほどCACが悪化する。"
-        : "単価は計画の" + cr.toFixed(1) + "倍に収まっており、増額の余地がある。";
+      var cr = cpaRatio(cpa);                 // null 可
+      var spendRate = spendRateOf(cost);      // null 可（cost.act が無い月）
+      var worseCpa = cr !== null && cr > 1;
+      var p1;
+      if (spendRate === null) {
+        p1 = "広告費の消化額は未取得。";
+      } else if (spendRate < 80) {
+        p1 = "広告費は" + pct0(spendRate) + "しか消化しておらず予算は余っている。";
+      } else {
+        p1 = "広告費は" + pct0(spendRate) + "まで消化しており予算の余りは少ない。";
+      }
+      var p2;
+      if (cr === null) p2 = "申込CPAが未取得のため、単価の判断はできない。";
+      else if (worseCpa) p2 = "ただし単価が計画の" + cr.toFixed(2) + "倍で、出せば出すほどCACが悪化する。";
+      else p2 = "単価は計画の" + cr.toFixed(2) + "倍に収まっており、増額の余地がある。";
       cpaCard = {
         kind: (worseCpa && imp.attend < 0) ? CIRCLED[1] + " ①が起きている原因" : CIRCLED[1] + " 申込単価",
-        lab: "申込CPA", v: cr.toFixed(2) + "倍", tone: cr > 1.05 ? "b" : (cr < 0.95 ? "g" : "w"),
-        h: worseCpa ? "同じ予算で申込が取れなくなっている" : "同じ予算で申込が多く取れている",
+        lab: "申込CPA", v: cr === null ? MISSING : (cr.toFixed(2) + "倍"),
+        tone: cr === null ? "w" : (cr > 1.05 ? "b" : (cr < 0.95 ? "g" : "w")),
+        h: cr === null ? "申込単価が取得できていない"
+          : (worseCpa ? "同じ予算で申込が取れなくなっている" : "同じ予算で申込が多く取れている"),
         p: p1 + p2,
-        dl: [["CPA", yen(cpa.p) + " → <b>" + yen(cpa.y) + "</b>"]]
+        dl: [["CPA", (isNum(cpa.p) ? yen(cpa.p) : MISSING) + " → <b>"
+          + (isNum(cpa.y) ? yen(cpa.y) : MISSING) + "</b>"]]
       };
-      if (cost && cost.plan) cpaCard.dl.push(["広告費", milM(cost.act || 0) + " / " + milM(cost.plan)]);
+      if (cost && isNum(cost.plan)) {
+        cpaCard.dl.push(["広告費", (isNum(cost.act) ? milM(cost.act) : MISSING) + " / " + milM(cost.plan)]);
+      }
     }
 
     /* --- 2つの予測が割れる理由（オンライン） --- */
     var fcCard = null;
     if (kind !== "kyoten") {
       var gap = lane.forecastGap === null ? 0 : lane.forecastGap;
+      var st = convStance(cv);
+      var fcH = st === "below" ? "実績の成約率が、Aヨミの前提に届いていない"
+        : (st === "above" ? "実績の成約率が、Aヨミの前提を上回っている"
+          : (st === "same" ? "実績の成約率はAヨミの前提とほぼ同水準"
+            : "実績の成約率が取得できていない"));
+      var fcP;
+      if (st === "same") {
+        fcP = "実績成約率" + cv.a.toFixed(1) + "% は Aヨミ前提の" + cv.y.toFixed(1)
+          + "% とほぼ同水準で、「Aヨミ" + n0(lane.yomi) + "」と「ペース" + n0(lane.pace)
+          + "」の差は日次ペースの振れによるもの。①②とは別軸の数字。";
+      } else if (st === "unknown") {
+        fcP = "「Aヨミ" + n0(lane.yomi) + "」と「ペース" + n0(lane.pace) + "」の開き。①②とは別軸の数字。";
+      } else {
+        fcP = "Aヨミは" + cv.y.toFixed(1) + "%を前提にしているが、" + (lane.throughLabel || "")
+          + "までの実績は" + cv.a.toFixed(1) + "%。この差が「Aヨミ" + n0(lane.yomi) + "」と「ペース"
+          + n0(lane.pace) + "」の開き。①②とは別軸の数字。";
+      }
       fcCard = {
         kind: CIRCLED[2] + " 2つの予測が割れる理由",
         lab: "Aヨミとペースの差", v: n0(Math.abs(gap)) + "件", tone: "w",
-        h: (cv && cv.a < cv.y) ? "実績の成約率が、Aヨミの前提に届いていない"
-          : "実績の成約率が、Aヨミの前提を上回っている",
-        p: cv
-          ? ("Aヨミは" + cv.y.toFixed(1) + "%を前提にしているが、" + (lane.throughLabel || "")
-            + "までの実績は" + cv.a.toFixed(1) + "%。この差が「Aヨミ" + n0(lane.yomi) + "」と「ペース"
-            + n0(lane.pace) + "」の開き。①②とは別軸の数字。")
-          : ("「Aヨミ" + n0(lane.yomi) + "」と「ペース" + n0(lane.pace) + "」の開き。①②とは別軸の数字。"),
-        dl: []
+        h: fcH, p: fcP, dl: []
       };
       if (cv && at && key) fcCard.dl.push(["実績", cv.a.toFixed(1) + "%（" + n0(key.a) + " / " + n0(at.a) + "）"]);
       if (cv) fcCard.dl.push(["Aヨミ前提", cv.y.toFixed(1) + "%"]);
@@ -897,16 +966,26 @@ var ZENSHA_LOGIC = (function () {
     return cards;
   }
 
-  /** 「月計画868 → Aヨミ887（差 +19件 ＝ ①＋②）」 */
+  /**
+   * 「月計画868 → Aヨミ887（差 +19件 ＝ ①＋②）」
+   * 各カードの件数は個別に丸めているので、和が実差と一致しないことがある。
+   * 一致するときだけ「＝」、ずれるときは「≒」にする。
+   */
   function causeSummary(step, cards) {
     var key = keyStep(step);
     if (!key) return "";
-    var idx = [];
-    cards.forEach(function (c, i) { if (c.lab === "成約数への影響") idx.push(CIRCLED[i]); });
+    var idx = [], impSum = 0;
+    cards.forEach(function (c, i) {
+      if (c.lab !== "成約数への影響") return;
+      idx.push(CIRCLED[i]);
+      var m = /^(\+|▲)([\d,]+)件$/.exec(c.v || "");
+      if (m) impSum += (m[1] === "▲" ? -1 : 1) * Number(m[2].replace(/,/g, ""));
+    });
     var d = key.y - key.p;
+    var rel = (impSum === d) ? " ＝ " : " ≒ ";
     return "月計画" + n0(key.p) + " → Aヨミ" + n0(key.y)
       + "（差 " + signedN(d) + "件"
-      + (idx.length ? " ＝ " + idx.join("＋") : "") + "）";
+      + (idx.length ? rel + idx.join("＋") : "") + "）";
   }
 
   /* ================================================================
@@ -927,13 +1006,27 @@ var ZENSHA_LOGIC = (function () {
     var totalDiff = ta - tp;
     var sorted = rows.slice().sort(function (a, b) { return a.diff - b.diff; });
 
-    if (totalDiff >= 0) {
-      var best = sorted.slice().reverse().slice(0, 2);
+    if (totalDiff === 0) {
+      return {
+        h: "通期は計画どおりの着地見通し",
+        p: "全社の通期着地は <b class=\"num\">" + pct(tp ? ta / tp * 100 : 0) + "</b>。"
+          + "サービス別では " + rows.map(function (r) {
+            return r.name + " <b class=\"num\">" + signedMilR(r.diff) + "</b>";
+          }).join("、") + "。"
+      };
+    }
+
+    if (totalDiff > 0) {
+      // 「牽引」と呼べるのは超過しているサービスだけ（未達サービスを牽引役にしない）
+      var best = sorted.slice().reverse().filter(function (r) { return r.diff > 0; }).slice(0, 2);
+      var lead = best.length
+        ? best.map(function (r) {
+          return r.name + " <b class=\"num\">" + signedMilR(r.diff) + "</b>（" + pct(r.rate) + "）";
+        }).join("、") + " が牽引。"
+        : "ただし単体で計画を上回っているサービスは無い。";
       return {
         h: "通期は計画を" + signedMilR(totalDiff).replace("+", "") + "上回る見通し",
-        p: best.map(function (r) {
-          return r.name + " <b class=\"num\">" + signedMilR(r.diff) + "</b>（" + pct(r.rate) + "）";
-        }).join("、") + " が牽引。全社の通期着地は <b class=\"num\">" + pct(tp ? ta / tp * 100 : 0) + "</b>。"
+        p: lead + "全社の通期着地は <b class=\"num\">" + pct(tp ? ta / tp * 100 : 0) + "</b>。"
       };
     }
 
@@ -950,10 +1043,21 @@ var ZENSHA_LOGIC = (function () {
     var restDiff = restRows.reduce(function (x, r) { return x + r.diff; }, 0);
     var share = totalDiff ? Math.round(top2Diff / totalDiff * 100) : 0;
     var restNames = restRows.map(function (r) { return r.name; }).join("・");
-    var restTxt = restDiff < 0
-      ? restNames + "の" + restRows.length + "サービスは合計でも <b class=\"num\">" + signedMilR(restDiff) + "</b> に収まっており、"
-      : restNames + "の" + restRows.length + "サービスは合計で <b class=\"num\">" + signedMilR(restDiff) + "</b> の超過で、";
-    var closing = Math.abs(restDiff) < Math.abs(top2Diff)
+    // restTxt と closing は同じ判定（残りが上位2社より小さいか）から作る。別々に判定すると
+    // 「合計でも…に収まっており」＋「未達は複数に広がっている」のような自己矛盾が出る。
+    var restSmall = Math.abs(restDiff) < Math.abs(top2Diff);
+    var restTxt;
+    if (restDiff > 0) {
+      restTxt = restNames + "の" + restRows.length + "サービスは合計で <b class=\"num\">"
+        + signedMilR(restDiff) + "</b> の超過で、";
+    } else if (restSmall) {
+      restTxt = restNames + "の" + restRows.length + "サービスは合計でも <b class=\"num\">"
+        + signedMilR(restDiff) + "</b> に収まっており、";
+    } else {
+      restTxt = restNames + "の" + restRows.length + "サービスも合計 <b class=\"num\">"
+        + signedMilR(restDiff) + "</b> と小さくなく、";
+    }
+    var closing = restSmall
       ? "<b>全社の未達は主力サービスの問題ではない。</b>"
       : "<b>未達は複数のサービスに広がっている。</b>";
     var names2 = top2.map(function (r) { return r.name; }).join("と");
@@ -1011,22 +1115,36 @@ var ZENSHA_LOGIC = (function () {
 
   function topic03(kpStep, cost) {
     var cpa = stepBy(kpStep, "CPA");
-    if (!cpa || !cost || !cost.plan) return null;
-    var cr = cpa.p ? cpa.y / cpa.p : 1;
-    var spendRate = (cost.act || 0) / cost.plan * 100;
-    var loose = spendRate < 90;
-    var h = cr > 1
-      ? "拠点の広告予算は" + (loose ? "余っているが" : "ほぼ使い切りで") + "、単価が" + cr.toFixed(2) + "倍"
-      : "拠点の広告単価は計画内（" + cr.toFixed(2) + "倍）、" + (loose ? "予算はまだ余っている" : "予算はほぼ消化");
-    var tail = cr > 1
-      ? "出せば申込は増えるが、そのぶん成約CACが悪化する。<b>増額の可否が今週の判断事項。</b>"
-      : "単価は計画内のため、<b>消化を早めれば申込を積み増せる。</b>";
-    return {
-      h: h,
-      p: "{M}月広告費は計画" + milM(cost.plan) + "に対し消化 <b class=\"num\">" + milM(cost.act || 0)
-        + "（" + pct0(spendRate) + "）</b>。申込CPAは計画" + yen(cpa.p) + "に対し <b class=\"num\">"
-        + yen(cpa.y) + "</b>。" + tail
-    };
+    if (!cpa || !cost || !isNum(cost.plan)) return null;
+    var cr = cpaRatio(cpa);                 // null 可
+    var spendRate = spendRateOf(cost);      // null 可（消化額が未取得の月）
+    var loose = spendRate !== null && spendRate < 80;
+    var tight = spendRate !== null && spendRate >= 80;
+
+    var h;
+    if (cr === null) {
+      h = "拠点の広告予算は" + (spendRate === null ? "消化額が未取得" : (loose ? "まだ余っている" : "ほぼ消化"));
+    } else if (cr > 1) {
+      h = "拠点の広告予算は" + (loose ? "余っているが" : (tight ? "ほぼ使い切りで" : "消化額が未取得だが"))
+        + "、単価が" + cr.toFixed(2) + "倍";
+    } else {
+      h = "拠点の広告単価は計画内（" + cr.toFixed(2) + "倍）、"
+        + (loose ? "予算はまだ余っている" : (tight ? "予算はほぼ消化" : "消化額は未取得"));
+    }
+
+    var spendTxt = spendRate === null
+      ? "{M}月広告費は計画" + milM(cost.plan) + "。<b>消化額は未取得</b>。"
+      : "{M}月広告費は計画" + milM(cost.plan) + "に対し消化 <b class=\"num\">" + milM(cost.act)
+      + "（" + pct0(spendRate) + "）</b>。";
+    var cpaTxt = cr === null
+      ? "申込CPAは未取得。"
+      : "申込CPAは計画" + yen(cpa.p) + "に対し <b class=\"num\">" + yen(cpa.y) + "</b>。";
+    var tail;
+    if (cr === null) tail = "<b>単価が出るまで増額の可否は判断できない。</b>";
+    else if (cr > 1) tail = "出せば申込は増えるが、そのぶん成約CACが悪化する。<b>増額の可否が今週の判断事項。</b>";
+    else tail = "単価は計画内のため、<b>消化を早めれば申込を積み増せる。</b>";
+
+    return { h: h, p: spendTxt + cpaTxt + tail };
   }
 
   function topic04(lane, onLane, kpLane, onStep, kpStep) {
@@ -1038,11 +1156,21 @@ var ZENSHA_LOGIC = (function () {
     var onGap = Math.abs(onLane.forecastGap || 0), kpGap = Math.abs(kpLane.forecastGap || 0);
     var src = onGap >= kpGap ? { name: "オンライン", step: onStep } : { name: "拠点", step: kpStep };
     var cv = stepBy(src.step, "成約率");
-    var why = cv
-      ? ("差の主因は" + src.name + "の実績成約率 <b class=\"num\">" + cv.a.toFixed(1)
-        + "%</b> が、Aヨミ前提の <b class=\"num\">" + cv.y.toFixed(1) + "%</b> に"
-        + (cv.a < cv.y ? "届いていないこと。" : "対して上振れていること。"))
-      : "";
+    var st = convStance(cv);
+    var why;
+    if (st === "below") {
+      why = "差の主因は" + src.name + "の実績成約率 <b class=\"num\">" + cv.a.toFixed(1)
+        + "%</b> が、Aヨミ前提の <b class=\"num\">" + cv.y.toFixed(1) + "%</b> に届いていないこと。";
+    } else if (st === "above") {
+      why = "差の主因は" + src.name + "の実績成約率 <b class=\"num\">" + cv.a.toFixed(1)
+        + "%</b> が、Aヨミ前提の <b class=\"num\">" + cv.y.toFixed(1) + "%</b> を上回っていること。";
+    } else if (st === "same") {
+      why = src.name + "の実績成約率 <b class=\"num\">" + cv.a.toFixed(1)
+        + "%</b> はAヨミ前提の <b class=\"num\">" + cv.y.toFixed(1)
+        + "%</b> とほぼ同水準で、差は日次ペースの振れによるもの。";
+    } else {
+      why = "";
+    }
     var h = (vy !== vp)
       ? "SHElikes は2つの予測が割れている"
       : (split
@@ -1082,14 +1210,127 @@ var ZENSHA_LOGIC = (function () {
     var rows = (sites || []).filter(function (s) { return isNum(s.cpa_prev) && isNum(s.cpa_target); });
     if (!rows.length) return "";
     var pm = prevMonthNo(targetMonth), tm = monthNo(targetMonth);
-    var names = rows.map(function (s) { return s.name; }).join("・");
+    // 拠点名は latest.json 由来なのでエスケープする（この戻り値は innerHTML に入る）
+    var names = rows.map(function (s) { return esc(s.name); }).join("・");
     var detail = rows.map(function (s, i) {
-      var head = s.name + " ";
+      var head = esc(s.name) + " ";
       var from = (i === 0 ? pm + "月" : "") + yen(s.cpa_prev);
       var to = (i === 0 ? tm + "月目標" : "") + yen(s.cpa_target);
       return head + from + "→" + to;
     }).join("、");
     return names + "はCPA改善が進行中（" + detail + "）。";
+  }
+
+  /* ================================================================
+   * 8.5 manual.json のテンプレートトークン
+   *   manual の本文に数値をベタ書きすると、翌朝の latest と食い違う。
+   *   {{token}} を latest から埋めることで、手入力の文と画面の数値を常に一致させる。
+   * ================================================================ */
+  function joinUnit(v, fmt, unit) {
+    return isNum(v) ? (fmt(v) + (unit || "")) : null;
+  }
+
+  /**
+   * トークン表を作る。値が null のキーは fillTokens 側で "[未取得]" になる。
+   *  o = {latest, onLane, kpLane, lksLane, onStep, kpStep}
+   */
+  function tokenCtx(o) {
+    var L = o.latest || {};
+    var on = o.onLane || {}, kp = o.kpLane || {}, lks = o.lksLane || {};
+    var onCPA = stepBy(o.onStep, "CPA"), kpCPA = stepBy(o.kpStep, "CPA");
+    var onJoin = stepBy(o.onStep, "参加率"), kpJoin = stepBy(o.kpStep, "参加率");
+    var onConv = stepBy(o.onStep, "成約率"), kpConv = stepBy(o.kpStep, "成約率");
+    var kpCost = ((L.lks || {}).kyoten || {}).cost;
+    var onCost = ((L.lks || {}).online || {}).cost;
+    var onDaily = dailyStats((((L.lks || {}).online || {}).daily || {}).v);
+    var kpDaily = dailyStats((((L.lks || {}).kyoten || {}).daily || {}).v);
+    var kpSpend = spendRateOf(kpCost), onSpend = spendRateOf(onCost);
+    var kpCr = cpaRatio(kpCPA), onCr = cpaRatio(onCPA);
+
+    var t = {
+      "month": isNum(monthNo(L.target_month)) ? String(monthNo(L.target_month)) : null,
+      "target_month": L.target_month || null,
+      "basis_date": L.basis_date || null,
+      "data_through": L.data_through ? md(L.data_through) : null,
+      "elapsed_days": isNum(L.elapsed_days) ? String(L.elapsed_days) : null,
+      "remaining_days": isNum(L.remaining_days) ? String(L.remaining_days) : null,
+      "days_in_month": isNum(L.days_in_month) ? String(L.days_in_month) : null,
+
+      "online.target": joinUnit(on.target, n0, "件"),
+      "online.yomi": joinUnit(on.yomi, n0, "件"),
+      "online.act": joinUnit(on.act, n0, "件"),
+      "online.pace": joinUnit(on.pace, n0, "件"),
+      "online.yomi_diff": isNum(on.yomiGap) ? (signedN(on.yomiGap) + "件") : null,
+      "online.yomi_rate": isNum(on.yomiRate) ? pct(on.yomiRate) : null,
+      "online.pace_rate": isNum(on.paceRate) ? pct(on.paceRate) : null,
+      "online.daily_sum": onDaily.n ? (n0(onDaily.sum) + "件") : null,
+      "online.cpa_plan": onCPA ? joinUnit(onCPA.p, yen, "") : null,
+      "online.cpa_act": onCPA ? joinUnit(onCPA.a, yen, "") : null,
+      "online.cpa_yomi": onCPA ? joinUnit(onCPA.y, yen, "") : null,
+      "online.cpa_ratio": onCr === null ? null : (onCr.toFixed(2) + "倍"),
+      "online.join_rate_act": onJoin ? joinUnit(onJoin.a, function (v) { return v.toFixed(1); }, "%") : null,
+      "online.conv_rate_act": onConv ? joinUnit(onConv.a, function (v) { return v.toFixed(1); }, "%") : null,
+      "online.conv_rate_yomi": onConv ? joinUnit(onConv.y, function (v) { return v.toFixed(1); }, "%") : null,
+      "online.cost.plan_M": onCost && isNum(onCost.plan) ? milM(onCost.plan) : null,
+      "online.cost.act_M": onCost && isNum(onCost.act) ? milM(onCost.act) : null,
+      "online.spend_rate": onSpend === null ? null : pct0(onSpend),
+
+      "kyoten.target": joinUnit(kp.target, n0, "件"),
+      "kyoten.yomi": joinUnit(kp.yomi, n0, "件"),
+      "kyoten.act": joinUnit(kp.act, n0, "件"),
+      "kyoten.pace": joinUnit(kp.pace, n0, "件"),
+      "kyoten.yomi_diff": isNum(kp.yomiGap) ? (signedN(kp.yomiGap) + "件") : null,
+      "kyoten.yomi_rate": isNum(kp.yomiRate) ? pct(kp.yomiRate) : null,
+      "kyoten.pace_rate": isNum(kp.paceRate) ? pct(kp.paceRate) : null,
+      "kyoten.daily_sum": kpDaily.n ? (n0(kpDaily.sum) + "件") : null,
+      "kyoten.cpa_plan": kpCPA ? joinUnit(kpCPA.p, yen, "") : null,
+      "kyoten.cpa_act": kpCPA ? joinUnit(kpCPA.a, yen, "") : null,
+      "kyoten.cpa_yomi": kpCPA ? joinUnit(kpCPA.y, yen, "") : null,
+      "kyoten.cpa_ratio": kpCr === null ? null : (kpCr.toFixed(2) + "倍"),
+      "kyoten.join_rate_act": kpJoin ? joinUnit(kpJoin.a, function (v) { return v.toFixed(1); }, "%") : null,
+      "kyoten.conv_rate_yomi": kpConv ? joinUnit(kpConv.y, function (v) { return v.toFixed(1); }, "%") : null,
+      "kyoten.conv_rate_plan": kpConv ? joinUnit(kpConv.p, function (v) { return v.toFixed(1); }, "%") : null,
+      "kyoten.cost.plan_M": kpCost && isNum(kpCost.plan) ? milM(kpCost.plan) : null,
+      "kyoten.cost.act_M": kpCost && isNum(kpCost.act) ? milM(kpCost.act) : null,
+      "kyoten.spend_rate": kpSpend === null ? null : pct0(kpSpend),
+
+      "lks.total_target": joinUnit(lks.target, n0, "件"),
+      "lks.total_yomi": joinUnit(lks.yomi, n0, "件"),
+      "lks.total_pace": joinUnit(lks.pace, n0, "件"),
+      "lks.total_yomi_diff": isNum(lks.yomiGap) ? (signedN(lks.yomiGap) + "件") : null,
+      "lks.total_yomi_rate": isNum(lks.yomiRate) ? pct(lks.yomiRate) : null
+    };
+    return t;
+  }
+
+  /**
+   * manual の本文中の {{token}} を埋める。
+   * 未定義トークン・null の値はどちらも "[未取得]" にし、console.warn で拾えるようにする。
+   */
+  function fillTokens(text, ctx, warn) {
+    if (typeof text !== "string") return text;
+    return text.replace(/\{\{\s*([A-Za-z0-9_.]+)\s*\}\}/g, function (m, k) {
+      var has = ctx && Object.prototype.hasOwnProperty.call(ctx, k);
+      var v = has ? ctx[k] : undefined;
+      if (v === undefined || v === null || v === "") {
+        var msg = has
+          ? ("manual.json のトークン {{" + k + "}} の値が latest.json に無い（[未取得] を表示）")
+          : ("manual.json に未知のトークン {{" + k + "}}（[未取得] を表示）");
+        if (typeof warn === "function") warn(msg);
+        else if (typeof console !== "undefined" && console.warn) console.warn(msg);
+        return MISSING;
+      }
+      return String(v);
+    });
+  }
+
+  /** manual.updated_at が basis_date から N日以上離れていたら警告文を返す。 */
+  function manualStaleWarning(updatedAt, basisDate, limitDays) {
+    var lim = limitDays === undefined ? 7 : limitDays;
+    if (!updatedAt || !basisDate) return null;
+    var n = daysDiff(basisDate, updatedAt);
+    if (n < lim) return null;
+    return n + "日前の手入力です。判断事項の前提を確認してください";
   }
 
   /* ================================================================
@@ -1102,6 +1343,9 @@ var ZENSHA_LOGIC = (function () {
   ];
 
   return {
+    esc: esc, safeUrl: safeUrl, MISSING: MISSING,
+    spendRateOf: spendRateOf, cpaRatio: cpaRatio, convStance: convStance, CONV_EPS: CONV_EPS,
+    tokenCtx: tokenCtx, fillTokens: fillTokens, manualStaleWarning: manualStaleWarning,
     isNum: isNum, n0: n0, yen: yen, mil: mil, milR: milR, oku: oku,
     pct: pct, pct0: pct0, milM: milM, signed: signed, signedN: signedN,
     signedMilR: signedMilR, sum: sum,
@@ -1123,7 +1367,7 @@ if (typeof module !== "undefined" && module.exports) { module.exports = ZENSHA_L
   var Z = ZENSHA_LOGIC;
 
   /* ===== データ（build.py が latest.json + manual.json を注入） ===== */
-  var DATA = {"latest":{"contract_version":"1","generated_at":"2026-09-08T09:00:00+09:00","basis_date":"2026-09-08","data_through":"2026-09-07","target_month":"2026-09","days_in_month":30,"elapsed_days":7,"remaining_days":23,"fy":{"label":"FY26","months":["2026-04","2026-05","2026-06","2026-07","2026-08","2026-09","2026-10","2026-11","2026-12","2027-01","2027-02","2027-03"]},"actual_until_index":5,"revenue":{"fin":{"total":{"plan":[382595924,385250273,387443907,393910701,399368961,414385176,418067536,436844273,455390590,469095523,490456164,500026193],"act":[369552040,372480111,374441268,388016139,394879364,399413635,410218839,412242734,435346951,445836397,422288234,472668395]},"lks":{"plan":[339439531,343200086,345630985,350133512,355646518,360720325,368367082,381267571,391253553,401381594,414518761,426447820],"act":[336107464,345997228,341145176,356545162,360685637,354646527,370833169,372585164,396178261,405605607,383392622,431874046]},"mny":{"plan":[4378598,4506316,4526850,4528604,4609130,6710971,4871534,4644022,4870957,5024529,4988683,7017117],"act":[4203344,4470075,4354158,4619550,4611056,6824942,4784345,4836185,4651405,4803504,4709527,6763164]},"pro":{"plan":[9979988,9860288,10394663,10728113,10078313,10703880,11878920,12682680,13366080,13739400,13398720,12405240],"act":[7739234,8875475,8670759,9080741,10501785,11418000,12698000,13092000,13436000,13646000,13136000,12162000]},"hjn":{"plan":[7897807,5683583,3791409,5320472,4735000,10850000,5450000,8650000,15200000,15950000,22450000,17956016],"act":[9324998,5683583,3791409,5320472,5115286,3277866,2903325,2729385,2081285,2781285,2050085,2869185]},"grs":{"plan":[20900000,22000000,23100000,23200000,24300000,25400000,27500000,29600000,30700000,33000000,35100000,36200000],"act":[12177000,7453750,16479766,12450214,13965600,23246300,19000000,19000000,19000000,19000000,19000000,19000000]}},"mgmt":{"total":{"plan":[385856895,399069476,397102469,414401208,436404254,449387933,460143875,475222724,465599199,490593815,503603874,515982313],"act":[382570844,390756373,418389794,419875819,436019739,423540015,448457045,451690244,442338486,464492859,444210369,485700522]},"lks":{"plan":[342927730,357339837,356171150,370877592,390936684,393401522,408322001,418523282,399892022,426596166,432000751,444786060],"act":[346340638,363073449,373854706,379017071,397562781,382726382,408474754,412918193,403073335,429204623,410507818,448392986]},"mny":{"plan":[4298858,4213556,4207410,4315644,4462570,7496411,4591874,4577442,4711177,5663649,4669123,7656237],"act":[4838928,4062421,6040899,4579196,5235232,7526467,4148266,3442666,3383866,4306951,3452466,6238351]},"pro":{"plan":[9832500,9832500,9832500,10687500,11970000,12240000,14280000,13872000,15096000,9384000,9384000,9384000],"act":[8559280,9051920,15431200,11243280,16717440,12000000,14000000,13600000,14800000,9200000,9200000,9200000]},"hjn":{"plan":[7897807,5683583,3791409,5320472,4735000,10850000,5450000,8650000,15200000,15950000,22450000,17956016],"act":[9314998,5683583,3852909,5386972,5115286,4355166,2834025,2729385,2081285,2781285,2050085,2869185]},"grs":{"plan":[20900000,22000000,23100000,23200000,24300000,25400000,27500000,29600000,30700000,33000000,35100000,36200000],"act":[13517000,8885000,19210080,19649300,11389000,16932000,19000000,19000000,19000000,19000000,19000000,19000000]}}},"revenue_corrections":["原本 HTML の REV_ALL をそのまま転記（財務・管理とも）。管理会計の _グロスタ 1ヶ月ズレ補正と 合計＝5サービス和への組み直しは原本の時点で適用済み。","fin.total.act[9]（2027-01）はシート合計 445,836,397 に対し 5サービス和 445,836,396。1円差は原本のまま残している（契約の許容誤差1円以内）。"],"month_summary":{"fin":{"total":{"plan":414385176,"act":399413635,"yomiA":399413635,"yomiB":null},"lks":{"plan":360720325,"act":354646527,"yomiA":354646527,"yomiB":null},"mny":{"plan":6710971,"act":6824942,"yomiA":6824942,"yomiB":null},"pro":{"plan":10703880,"act":11418000,"yomiA":11418000,"yomiB":null},"hjn":{"plan":10850000,"act":3277866,"yomiA":3277866,"yomiB":null},"grs":{"plan":25400000,"act":23246300,"yomiA":23246300,"yomiB":null}},"mgmt":{"total":{"plan":449387933,"act":423540015,"yomiA":423540015,"yomiB":null},"lks":{"plan":393401522,"act":382726382,"yomiA":382726382,"yomiB":null},"mny":{"plan":7496411,"act":7526467,"yomiA":7526467,"yomiB":null},"pro":{"plan":12240000,"act":12000000,"yomiA":12000000,"yomiB":null},"hjn":{"plan":10850000,"act":4355166,"yomiA":4355166,"yomiB":null},"grs":{"plan":25400000,"act":16932000,"yomiA":16932000,"yomiB":null}}},"lks":{"targets":{"online":868,"kyoten":148,"source":"原本の「月目標 868件 / 148件」（単月確認用＝拠点148件を正とする）"},"online":{"yomi":887,"act":184,"daily":{"dates":["9/1","9/2","9/3","9/4","9/5","9/6","9/7"],"dow":["火","水","木","金","土","日","月"],"v":[30,26,25,28,30,17,24]},"step":[{"n":"申込","p":7612,"y":7930,"a":2036},{"n":"予約","p":7599,"y":7983,"a":2644},{"n":"参加","p":3135,"y":3340,"a":843},{"n":"成約","p":868,"y":887,"a":184,"key":true},{"n":"参加率","p":41.3,"y":41.8,"a":31.9,"unit":"%","sep":true},{"n":"成約率","p":27.7,"y":26.6,"a":21.8,"unit":"%"},{"n":"CPA","p":23022,"y":22092,"a":18421,"unit":"¥","lowerBetter":true}],"cost":{"plan":null,"act":null,"yomi":null}},"kyoten":{"yomi":97,"act":25,"daily":{"dates":["9/1","9/2","9/3","9/4","9/5","9/6","9/7"],"dow":["火","水","木","金","土","日","月"],"v":[4,3,3,1,3,5,3]},"step":[{"n":"申込","p":824,"y":496,"a":109},{"n":"参加","p":399,"y":257,"a":51},{"n":"成約","p":148,"y":97,"a":25,"key":true},{"n":"参加率","p":48.4,"y":51.8,"a":46.8,"unit":"%","sep":true},{"n":"成約率","p":37.1,"y":37.7,"a":49.0,"unit":"%"},{"n":"CPA","p":32154,"y":52862,"a":53176,"unit":"¥","lowerBetter":true}],"cost":{"plan":26500000,"act":5800000,"yomi":null},"sites":[{"name":"梅田","cpa_prev":42730,"cpa_target":32000},{"name":"福岡","cpa_prev":null,"cpa_target":null},{"name":"横浜","cpa_prev":44613,"cpa_target":31000}],"excluded_sites":["名古屋"]}},"sources":[{"name":"FY26_経営モニタリング","label":"元データ：全社（単月確認用・通期着地見通し）","url":"https://docs.google.com/spreadsheets/d/1oIz45k-Qkr8AY3v4zBQAiYHDxvg21nvVPSP5xX5q9pE/edit"},{"name":"26年9月_マーケジスイ進捗管理表","url":"https://docs.google.com/spreadsheets/d/1a6Aud7H-31gs64lDv2Iyww6DnS98wJcuoOssx6nGhJs/edit"},{"name":"FY26_拠点モニタリング","url":"https://docs.google.com/spreadsheets/d/11pv1YWcxOvJwJjhsNFZa9zGoy0GCn3bauNtSymMppcg/edit"}],"extract_log":["手組みのフィクスチャ。原本 reference/original-2026-09-08.html の REV_ALL / STEP / DAILY / 固定文からの転記で、extract.py の出力ではない。","lks.online.cost は原本に記載が無いため null。lks.kyoten.cost は原本の注記（計画¥26.5M・消化¥5.8M／22%）から plan 26,500,000 / act 5,800,000。","lks.kyoten.sites の 福岡 は原本に CPA の記載が無いため cpa_prev / cpa_target とも null（CPA改善の文からも自動的に外れる）。","month_summary は原本が持たないため revenue の対象月（index 5）から機械的に写した参考値。yomiB は不明のため null。テンプレートはこの値を使っていない。"]},"manual":{"updated_at":"2026-09-08","decisions":[{"due":"9/10まで","urgent":true,"title":"拠点の広告費を増やすか、単価を直してから増やすか","body":"予算は¥26.5Mに対し消化¥5.8M（22%）で余っている。ただしCPAは計画の1.64倍。\n             「増額する」「単価改善を待つ」「拠点間で配分を変える」の3択。","owner":"営業役員 ＋ 集客役員"},{"due":"9/12まで","urgent":false,"title":"オンラインの超過分を、拠点の不足に振り替えるか","body":"オンラインは+19件の超過見込み。SHElikes全体1,016件で見れば▲32件に収まるが、拠点単体は65.5%のまま残る。","owner":"戦略推進会議"},{"due":"今月中","urgent":false,"title":"法人・グロースタジオの通期▲¥207百万をどう織り込むか","body":"法人は通期38.7%、グロースタジオは60.4%。どちらも月次のブレではなく通期の構造的な未達。\n             目標修正か、下期の積み増し計画か。","owner":"戦略推進会議"}],"field_notes":{"kyoten":{"label":"拠点","suffix":"福岡は増額前に構造改善を先行。名古屋はクローズ／休止のため集計対象外。"},"lines":[{"label":"オンライン","text":"CPA ¥18,421 と目標¥23,022 を下回って推移。参加率31.9%は月内の未開催予約を含むため、月末に向けて上がる。"}]},"notes":[{"text":"<b>数値は毎朝の自動更新<\/b>（3つのスプレッドシート → latest.json → 再生成）。この注記・経営判断が必要な事項・現場で対応中・SHEmoney/PROの仮KPIだけが手入力（manual.json）です。","tag":"決定済み"},{"text":"<b>管理会計は2ヶ所を補正して表示しています<\/b>。①シートの「_グロスタ」行が1ヶ月ぶん右にズレている（先頭の¥7,851,000は2026/3の値）ため、1つ左に戻しました。実績4〜8月と完全に一致します。②管理会計の「合計」行はグロースタジオを含んでいない（合計＝LKS＋MNY＋プロデ＋法人でぴったり一致）ため、この画面では<b>合計＝5サービスの和<\/b>で組み直しています。元シート側の修正が要るか確認したい箇所です。","tag":null},{"text":"<b>財務会計のグロースタジオは差分で算出<\/b>しています（全社 − 他4サービス）。各月で検算は合いますが、直接の行を確認したいところです。","tag":null},{"text":"<b>SHEmoney・PROデザイナーの成約KPIは仮の数字<\/b>です。売上のみ実データ。法人・グロースタジオは枠だけです。","tag":null},{"text":"<b>名古屋は「クローズ／休止＝該当なし」で確定<\/b>。集計にも警告表示にも含めません。拠点は梅田・福岡・横浜の3拠点のみで見ています。","tag":"決定済み"},{"text":"<b>実績の数え方がシートで2通りある<\/b>。拠点の9/7まで実績は KPIサマリ25件／日次集計の合算22件。オンラインも184件／180件。判定＝KPIサマリ、日次グラフ＝日次集計で分けています。","tag":null},{"text":"<b>拠点の月目標が3通りある<\/b>。単月確認用148件／拠点モニタリングの拠点別合計136件／日次集計シートの合計152件。この画面は<b>148件を正<\/b>としています。","tag":null},{"text":"<b>残日数はカレンダーどおりに数えます<\/b>。9/8〜9/30 の <b>23日<\/b>。シート側の「残日数24」は使いません。","tag":"決定済み"},{"text":"<b>平均成約単価が未取得<\/b>のため「成約▲32件が売上でいくらか」を換算できていません。","tag":"Phase 0"},{"text":"<b>シフト充足・採用充足・インセンティブ<\/b>は元データが別系統のため未搭載。","tag":"Phase 1"}],"provisional":{"mny":{"lane":{"name":"SHEmoney","target":210,"yomi":195,"pace":197,"act":46,"plan":7.0,"need":7.1,"recent":6.6,"note":"参加率は計画どおりだが、参加→成約が0.8pt低下している想定。"},"daily":{"v":[7,6,8,5,7,6,7],"plan":7.0,"need":7.1,"color":"#8A6BA8","needColor":"var(--warn)"},"step":[{"n":"申込","p":1400,"y":1320,"a":310},{"n":"予約","p":1380,"y":1300,"a":300},{"n":"参加","p":620,"y":590,"a":138},{"n":"成約","p":210,"y":195,"a":46,"key":true},{"n":"参加率","p":44.9,"y":45.4,"a":46.0,"unit":"%","sep":true},{"n":"成約率","p":33.9,"y":33.1,"a":33.3,"unit":"%"},{"n":"CPA","p":12000,"y":12400,"a":11800,"unit":"¥","lowerBetter":true}],"cause":[{"kind":"① 押し下げ","lab":"成約数への影響","v":"▲15件","tone":"b","h":"参加 → 成約の転換率が想定を下回る","p":"参加は計画どおり集まる見込みだが、成約率が0.8pt低い前提。","dl":[["成約率","33.9% → 33.1%"],["参加","620 → 590"]]},{"kind":"② 押し下げ","lab":"成約数への影響","v":"▲5件","tone":"b","h":"申込が計画をわずかに下回る","p":"CPAが計画比3%高く、同じ予算で取れる申込が減る前提。","dl":[["申込","1,400 → 1,320"],["CPA","¥12,000 → ¥12,400"]]},{"kind":"③ 2つの予測が割れる理由","lab":"Aヨミとペースの差","v":"2件","tone":"w","h":"実績ペースとAヨミがほぼ一致","p":"日次実績が安定しているため、どちらの見方でも着地はほぼ同じ。","dl":[["Aヨミ","195件"],["ペース","197件"]]}]},"pro":{"lane":{"name":"PROデザイナー","target":96,"yomi":102,"pace":94,"act":22,"plan":3.2,"need":3.2,"recent":3.1,"note":"申込が計画超で参加も増える想定。転換率はわずかに低下。"},"daily":{"v":[3,4,2,3,4,3,3],"plan":3.2,"need":3.2,"color":"#C08A3E","needColor":"var(--warn)"},"step":[{"n":"申込","p":520,"y":560,"a":128},{"n":"予約","p":510,"y":550,"a":124},{"n":"参加","p":240,"y":258,"a":58},{"n":"成約","p":96,"y":102,"a":22,"key":true},{"n":"参加率","p":47.1,"y":46.9,"a":46.8,"unit":"%","sep":true},{"n":"成約率","p":40.0,"y":39.5,"a":37.9,"unit":"%"},{"n":"CPA","p":28000,"y":26500,"a":27200,"unit":"¥","lowerBetter":true}],"cause":[{"kind":"① 押し上げ","lab":"成約数への影響","v":"+10件","tone":"g","h":"申込・参加が計画を上回る","p":"CPAが計画より安く、同じ予算で申込が多く取れる前提。","dl":[["参加","240 → 258"],["CPA","¥28,000 → ¥26,500"]]},{"kind":"② 押し下げ","lab":"成約数への影響","v":"▲4件","tone":"b","h":"参加 → 成約の転換率がわずかに低下","p":"増えた参加のぶん、転換率が0.5pt下がる前提。","dl":[["成約率","40.0% → 39.5%"]]},{"kind":"③ 2つの予測が割れる理由","lab":"Aヨミとペースの差","v":"8件","tone":"w","h":"実績ペースはAヨミにやや届かない","p":"9/7までの実績成約率37.9%が、Aヨミ前提の39.5%を下回っているため。","dl":[["Aヨミ","102件"],["ペース","94件"]]}]}}}};
+  var DATA = {"latest":{"contract_version":"1","generated_at":"2026-09-18T10:18:18+09:00","basis_date":"2026-09-18","data_through":"2026-09-17","target_month":"2026-09","days_in_month":30,"elapsed_days":17,"remaining_days":13,"fy":{"label":"FY26","months":["2026-04","2026-05","2026-06","2026-07","2026-08","2026-09","2026-10","2026-11","2026-12","2027-01","2027-02","2027-03"]},"actual_until_index":5,"revenue":{"fin":{"total":{"plan":[382595924,385250273,387443907,393910701,399368961,414385176,418067536,436844273,455390590,469095523,490456164,500026193],"act":[369507856,372443421,374441614,388941980,395702525,406430277,416600281,417682737,441101989,451824712,427999003,478789144]},"lks":{"plan":[339439531,343200086,345630985,350133512,355646518,360720325,368367082,381267571,391253553,401381594,414518761,426447820],"act":[336063280,345960538,341145522,357471003,361508798,359073215,376314563,377758859,401687071,411347695,388825997,437824704]},"mny":{"plan":[4378598,4506316,4526850,4528604,4609130,6710971,4871534,4644022,4870957,5024529,4988683,7017117],"act":[4203344,4470075,4354158,4619550,4611056,6797249,4756653,4808493,4640533,4792632,4698621,6764055]},"pro":{"plan":[9979988,9860288,10394663,10728113,10078313,10703880,11878920,12682680,13366080,13739400,13398720,12405240],"act":[7739234,8875475,8670759,9080741,10501785,11418000,12698000,13092000,13436000,13646000,13136000,12162000]},"hjn":{"plan":[7897807,5683583,3791409,5320472,4735000,10850000,5450000,8650000,15200000,15950000,22450000,17956016],"act":[9324998,5683583,3791409,5320472,5115286,5241513,3831065,3023385,2338385,3038385,2338385,3038385]},"grs":{"plan":[20900000,22000000,23100000,23200000,24300000,25400000,27500000,29600000,30700000,33000000,35100000,36200000],"act":[12177000,7453750,16479766,12450214,13965600,23900300,19000000,19000000,19000000,19000000,19000000,19000000]}},"mgmt":{"total":{"plan":[385856895,399069476,397102469,414401208,436404254,449387933,460143875,475222724,465599199,490593815,503603874,515982313],"act":[380693668,390729540,417627105,419878323,437715851,434813265,452582138,455103614,445987110,468384561,448003640,489722695]},"lks":{"plan":[342927730,357339837,356171150,370877592,390936684,393401522,408322001,418523282,399892022,426596166,432000751,444786060],"act":[346313805,363046616,373827873,379019575,395669993,391699747,411668547,416037563,406464859,432829425,414012789,452226359]},"mny":{"plan":[4298858,4213556,4207410,4315644,4462570,7496411,4591874,4577442,4711177,5663649,4669123,7656237],"act":[4838928,4062421,5881179,4579196,5235232,7544665,4363866,3442666,3383866,4316751,3452466,6257951]},"pro":{"plan":[9832500,9832500,9832500,10687500,11970000,12240000,14280000,13872000,15096000,9384000,9384000,9384000],"act":[8559280,9051920,15431200,11243280,16717440,12000000,14000000,13600000,14800000,9200000,9200000,9200000]},"hjn":{"plan":[7897807,5683583,3791409,5320472,4735000,10850000,5450000,8650000,15200000,15950000,22450000,17956016],"act":[7464655,5683583,3276773,5386972,4915286,5522853,3549725,3023385,2338385,3038385,2338385,3038385]},"grs":{"plan":[20900000,22000000,23100000,23200000,24300000,25400000,27500000,29600000,30700000,33000000,35100000,36200000],"act":[13517000,8885000,19210080,19649300,15177900,18046000,19000000,19000000,19000000,19000000,19000000,19000000]}}},"revenue_corrections":["Ａヨミ表 fin.grs は 1 列右にズレていたため 1 列左へ戻した（先頭 ¥7,851,000 は 2026-03 の値。一致数 shift0=0 → shift1=5 / 参照5ヶ月）。末尾 2027-03 は Ａヨミ側に値が無いためフォールバック。","Ａヨミ表 mgmt.grs は 1 列右にズレていたため 1 列左へ戻した（先頭 ¥7,851,000 は 2026-03 の値。一致数 shift0=0 → shift1=5 / 参照5ヶ月）。末尾 2027-03 は Ａヨミ側に値が無いためフォールバック。","fin.grs 2027-03: Ａヨミ が空のため『直前月Ａヨミ』の値 ¥19,000,000 を採用（CONTRACT v1.3 のフォールバック順 Ａヨミ → 直前月Ａヨミ → 実績 → 期初計画 → 0）。","fin.total.act はシートの合計行ではなく 5 サービスの和を採用（差異月: 2026-09, 2026-10, 2026-11, 2026-12, 2027-01, 2027-02, 2027-03）。","mgmt.grs 2027-03: Ａヨミ が空のため『直前月Ａヨミ』の値 ¥19,000,000 を採用（CONTRACT v1.3 のフォールバック順 Ａヨミ → 直前月Ａヨミ → 実績 → 期初計画 → 0）。","mgmt.total.act はシートの合計行ではなく 5 サービスの和を採用（差異月: 2026-09, 2026-10, 2026-11, 2026-12, 2027-01, 2027-02, 2027-03）。"],"month_summary":{"fin":{"total":{"plan":414385176,"act":354487394,"yomiA":406123321,"yomiB":417009520},"lks":{"plan":360720325,"act":336539677,"yomiA":358723215,"yomiB":360455845},"mny":{"plan":6710971,"act":6028673,"yomiA":8497249,"yomiB":6900818},"pro":{"plan":10703880,"act":9461044,"yomiA":9461044,"yomiB":9461044},"hjn":{"plan":10850000,"act":2458000,"yomiA":5541513,"yomiB":14941513},"grs":{"plan":25400000,"act":0,"yomiA":23900300,"yomiB":25250300}},"mgmt":{"total":{"plan":453587933,"act":346275902,"yomiA":446240375,"yomiB":485795579},"lks":{"plan":393401522,"act":327335684,"yomiA":403026857,"yomiB":428371316},"mny":{"plan":7496411,"act":5644618,"yomiA":7544665,"yomiB":8225410},"pro":{"plan":12240000,"act":10145600,"yomiA":12000000,"yomiB":14400000},"hjn":{"plan":10850000,"act":2558000,"yomiA":5622853,"yomiB":15022853},"grs":{"plan":29600000,"act":592000,"yomiA":18046000,"yomiB":19776000}}},"lks":{"targets":{"online":868,"kyoten":148,"source":"online=keiei「Month …成約数目標」表の『当月』行（block 28）／kyoten=keiei「拠点ALL」目標表の 2026-09 列 体験レッスン成約数（block 15、原本注記どおり『単月確認用 148 件を正』）"},"online":{"yomi":896,"act":477,"daily":{"dates":["9/1","9/2","9/3","9/4","9/5","9/6","9/7","9/8","9/9","9/10","9/11","9/12","9/13","9/14","9/15","9/16","9/17"],"dow":["火","水","木","金","土","日","月","火","水","木","金","土","日","月","火","水","木"],"v":[29,25,25,22,28,16,22,18,26,15,23,47,39,33,36,29,35]},"step":[{"n":"申込","p":7612,"y":7827,"a":4477},{"n":"予約","p":7599,"y":7887,"a":5085},{"n":"参加","p":3420,"y":3360,"a":1797},{"n":"成約","p":868,"y":896,"a":477,"key":true},{"n":"参加率","p":45,"y":42.6,"a":35.34,"unit":"%","sep":true},{"n":"成約率","p":25.38,"y":26.67,"a":26.55,"unit":"%"},{"n":"CPA","p":23022,"y":22379,"a":22400,"unit":"¥","lowerBetter":true}],"step_note":"オンラインの月計画(p)は出所が混在: 成約 868 件は keiei の月目標、申込・予約・参加・参加率・CPA は marke「ALLユーザ」の目標行（成約 995 件前提の目標）、成約率 25.4% は 成約p 868 ÷ 参加p 3,420 の導出値。","cost":{"plan":175244808,"act":100284050,"yomi":175154000}},"kyoten":{"yomi":112,"act":49,"daily":{"dates":["9/1","9/2","9/3","9/4","9/5","9/6","9/7","9/8","9/9","9/10","9/11","9/12","9/13","9/14","9/15","9/16","9/17"],"dow":["火","水","木","金","土","日","月","火","水","木","金","土","日","月","火","水","木"],"v":[3,2,2,1,2,6,4,4,6,3,2,3,2,1,5,2,1]},"step":[{"n":"申込","p":824,"y":530,"a":250},{"n":"参加","p":399,"y":292,"a":114},{"n":"成約","p":148,"y":112,"a":49,"key":true},{"n":"参加率","p":48.37,"y":76.93,"a":52.29,"unit":"%","sep":true},{"n":"成約率","p":37.12,"y":38.31,"a":42.98,"unit":"%"},{"n":"CPA","p":32154,"y":49971,"a":54519,"unit":"¥","lowerBetter":true}],"cost":{"plan":26500000,"act":13629656,"yomi":26484640},"sites":[{"name":"梅田","cpa_prev":42730,"cpa_target":32000},{"name":"福岡","cpa_prev":72582,"cpa_target":60000},{"name":"横浜","cpa_prev":44613,"cpa_target":31000}],"excluded_sites":["名古屋"]}},"sources":[{"name":"FY26_経営モニタリング","label":"全社（単月確認用・通期着地見通し）","url":"https://docs.google.com/spreadsheets/d/1oIz45k-Qkr8AY3v4zBQAiYHDxvg21nvVPSP5xX5q9pE/edit"},{"name":"26年9月_マーケジスイ進捗管理表","url":"https://docs.google.com/spreadsheets/d/1a6Aud7H-31gs64lDv2Iyww6DnS98wJcuoOssx6nGhJs/edit"},{"name":"FY26_拠点モニタリング","url":"https://docs.google.com/spreadsheets/d/11pv1YWcxOvJwJjhsNFZa9zGoy0GCn3bauNtSymMppcg/edit"}],"extract_log":["読み込み: raw/keiei.md（94 ブロック）","警告: raw/keiei.meta.json がありません。sources は extract.py の既定値で埋めます（ingest.py 経由で取り込むと meta が作られます）。","読み込み: raw/marke.md（63 ブロック）","警告: raw/marke.meta.json がありません。sources は extract.py の既定値で埋めます（ingest.py 経由で取り込むと meta が作られます）。","読み込み: raw/kyoten.md（87 ブロック）","警告: raw/kyoten.meta.json がありません。sources は extract.py の既定値で埋めます（ingest.py 経由で取り込むと meta が作られます）。","target_month=2026-09 ← marke の日次表の日付行（30 個の日付）で判定。","鮮度チェック: keiei の 計算日_as_of=2026-09-18 は basis_date と一致。","actual_until_index=5 ← keiei block 4 の「実績確定月→ 2026-08」","売上マトリクス: keiei block 2 を『財務会計売上/管理会計売上 + _LKS.._グロスタ + YYYY-MM 12列』の見出しで特定。","売上マトリクス: 期初計画=表行1 / 実績=表行32 / Ａヨミ=表行47（種別見出し行で判定）","ワイド表突合（keiei block 6）: 売上マトリクスの実績と食い違う 10 件 → mgmt.total 2026-04: 売上マトリクス=¥380,693,668 / ワイド表=¥382,544,011 ／ mgmt.total 2026-06: 売上マトリクス=¥417,627,105 / ワイド表=¥426,736,303 ／ mgmt.total 2026-07: 売上マトリクス=¥419,878,323 / ワイド表=¥430,685,190 ／ mgmt.total 2026-08: 売上マトリクス=¥437,715,851 / ワイド表=¥450,930,125 ／ mgmt.lks 2026-06: 売上マトリクス=¥373,827,873 / ワイド表=¥382,360,935 ／ mgmt.lks 2026-07: 売上マトリクス=¥379,019,575 / ワイド表=¥389,826,442 ／ mgmt.lks 2026-08: 売上マトリクス=¥395,669,993 / ワイド表=¥408,684,267 ／ mgmt.hjn 2026-04: 売上マトリクス=¥7,464,655 / ワイド表=¥9,314,998 ／ mgmt.hjn 2026-06: 売上マトリクス=¥3,276,773 / ワイド表=¥3,852,909 ／ mgmt.hjn 2026-08: 売上マトリクス=¥4,915,286 / ワイド表=¥5,115,286","grs 年度末検算 fin 2027-03（keiei block 4 のワイド表 合計 ¥478,789,145 − 他4サービス ¥459,789,144 = ¥19,000,001 / latest.json の fin.grs.act[11] = ¥19,000,000 → 一致）","grs 年度末検算 mgmt: ワイド表（keiei block 4）に mgmt の合計行が無く検算できない（ダンプが途中で切れている表がある）。","month_summary: keiei block 3 の『今月→ 2026-09』表（見出し 期初計画/実績/Aヨミ/Bヨミ × [merged] 2026-09 列群）から取得。","グロスタ補正の当月検算 fin: grs.act[2026-09]=¥23,900,300 は単月確認用の当月Ａヨミと一致。","グロスタ補正の当月検算 mgmt: grs.act[2026-09]=¥18,046,000 は単月確認用の当月Ａヨミと一致。","単月確認用 yomiA と revenue 当月 act の差（8 件。単月確認用はシートのまま格納、表示には revenue を使う）: fin.total: 単月確認用yomiA=¥406,123,321 / revenue.act[2026-09]=¥406,430,277（差 ¥306,956） ／ fin.lks: 単月確認用yomiA=¥358,723,215 / revenue.act[2026-09]=¥359,073,215（差 ¥350,000） ／ fin.mny: 単月確認用yomiA=¥8,497,249 / revenue.act[2026-09]=¥6,797,249（差 ¥-1,700,000） ／ fin.pro: 単月確認用yomiA=¥9,461,044 / revenue.act[2026-09]=¥11,418,000（差 ¥1,956,956） ／ fin.hjn: 単月確認用yomiA=¥5,541,513 / revenue.act[2026-09]=¥5,241,513（差 ¥-300,000） ／ mgmt.total: 単月確認用yomiA=¥446,240,375 / revenue.act[2026-09]=¥434,813,265（差 ¥-11,427,110） ／ mgmt.lks: 単月確認用yomiA=¥403,026,857 / revenue.act[2026-09]=¥391,699,747（差 ¥-11,327,110） ／ mgmt.hjn: 単月確認用yomiA=¥5,622,853 / revenue.act[2026-09]=¥5,522,853（差 ¥-100,000）","注意: month_summary.mgmt.total.plan=¥453,587,933 が売上マトリクスの期初計画 ¥449,387,933 と不一致（単月確認用シート側の参照ズレ。month_summary はシートのまま格納）。","注意: month_summary.mgmt.grs.plan=¥29,600,000 が売上マトリクスの期初計画 ¥25,400,000 と不一致（単月確認用シート側の参照ズレ。month_summary はシートのまま格納）。","KPIサマリ: marke block 2（見出し「当月目標/昨日までの実績/Aヨミ/Bヨミ」＋「オンライン成約数」「拠点成約数」「オンライン各KPI」「拠点各KPI」）から取得。","オンライン期初目標: marke block 0 の「ALLユーザ」見出し行＋『目標』行から取得（COST/体験レッスン申込数(DB)/申込CPA(DB)/予約数/参加率/参加数/成約率/成約数）。","拠点の月目標: keiei block 15 の「拠点ALL」目標表（受入定員数/申し込み数/COST（広告のみ）/申込CPA(広告費のみ)/参加率/参加人数/成約率/体験レッスン成約数）の 2026-09 列から取得。","オンライン月目標 868 ← keiei block 28 の「Month …成約数目標」表『当月』行（同行 申込数目標=7,324 / 売上目標=¥356,991,811）。","lks.online.daily: marke block 1 の「成約数 / 決済日起点」行を日付行で列対応させて取得。","拠点日次 梅田: kyoten block 20 の「最終_全体成約数」行を日付行で列対応させて取得。","拠点日次 福岡: kyoten block 21 の「最終_全体成約数」行を日付行で列対応させて取得。","拠点日次 横浜: kyoten block 22 の「最終_全体成約数」行を日付行で列対応させて取得。","拠点別CPA: kyoten block 3 の「CPA / 9月目標 / 8月実績」表から取得。","拠点の月目標: 単月確認用（keiei 拠点ALL 目標）148 件を正とした。marke KPIサマリの当月目標は 147 件で不一致（原本注記どおり 148 を採用）。","オンラインの月目標: keiei「成約数目標（当月）」868 件を正とした。marke KPIサマリの当月目標は 995 件で不一致。","lks.online.step の p: 参加 p は marke の 995 前提の目標、成約率 p は 868÷3,420 で導出（CONTRACT v1.3 の決定どおり）。","lks.online.step_note = 「オンラインの月計画(p)は出所が混在: 成約 868 件は keiei の月目標、申込・予約・参加・参加率・CPA は marke「ALLユーザ」の目標行（成約 995 件前提の目標）、成約率 25.4% は 成約p 868 ÷ 参加p 3,420 の導出値。」","拠点実績の突合: 日次集計(梅田・福岡・横浜)の合算 49 件 と KPIサマリ『昨日までの実績』 49 件 → 一致","オンライン実績の突合: 日次(決済日起点)の合算 468 件 と KPIサマリ『昨日までの実績』 477 件 → 不一致（判定=KPIサマリ / グラフ=日次集計）","lks.kyoten.step の p: keiei「拠点ALL」目標表の当月列（申込/参加人数/体験レッスン成約数/参加率/成約率/申込CPA）。y・a は marke KPIサマリの Aヨミ / 昨日までの実績。","sources: marke の name は target_month(2026-09) から組み立て →『26年9月_マーケジスイ進捗管理表』"]},"manual":{"_readme":"人が保守する部分。数値はベタ書きせず {{トークン}} で書くこと（build 時に latest.json から埋まる）。使えるトークンは logic.js の tokenCtx() を参照。未知のトークン／latest に無い値は画面に [未取得] と出て console.warn が出る。provisional は実データが繋がるまでの仮置きで、as_of で時点を凍結して表示する。","updated_at":"2026-09-18","decisions":[{"due":"{{month}}/10まで","urgent":true,"title":"拠点の広告費を増やすか、単価を直してから増やすか","body":"予算は{{kyoten.cost.plan_M}}に対し消化{{kyoten.cost.act_M}}（{{kyoten.spend_rate}}）。ただし申込CPAは計画{{kyoten.cpa_plan}}に対しAヨミ{{kyoten.cpa_yomi}}＝計画の{{kyoten.cpa_ratio}}。\n             「増額する」「単価改善を待つ」「拠点間で配分を変える」の3択。","owner":"営業役員 ＋ 集客役員"},{"due":"{{month}}/12まで","urgent":false,"title":"オンラインの超過分を、拠点の不足に振り替えるか","body":"オンラインは月目標に対し {{online.yomi_diff}}（Aヨミ{{online.yomi_rate}}）。SHElikes全体 {{lks.total_target}} で見れば {{lks.total_yomi_diff}} に収まるが、拠点単体は {{kyoten.yomi_rate}} のまま残る。","owner":"戦略推進会議"},{"due":"今月中","urgent":false,"title":"法人・グロースタジオの通期未達をどう織り込むか","body":"どちらも月次のブレではなく通期の構造的な未達（金額と達成率は上の「今月のトピックス 01」を参照）。\n             目標修正か、下期の積み増し計画か。","owner":"戦略推進会議"}],"field_notes":{"kyoten":{"label":"拠点","suffix":"名古屋はクローズ／休止のため集計対象外。","extra":{"as_of":"2026-09-08","text":"福岡は増額前に構造改善を先行する方針（{{month}}月のCPA目標は入っているが、増額はまだ保留）。"}},"lines":[{"label":"オンライン","text":"CPA {{online.cpa_act}} と目標{{online.cpa_plan}} を下回って推移。参加率{{online.join_rate_act}}は月内の未開催予約を含むため、月末に向けて上がる。"}]},"notes":[{"text":"<b>数値は毎朝の自動更新<\/b>（3つのスプレッドシート → latest.json → 再生成）。この注記・経営判断が必要な事項・現場で対応中・SHEmoney/PROの仮KPIだけが手入力（manual.json）で、本文中の数値は latest.json から差し込んでいます。","tag":"決定済み"},{"text":"<b>管理会計は2ヶ所を補正して表示しています<\/b>。①シートの「_グロスタ」行が1ヶ月ぶん右にズレている（先頭の¥7,851,000は2026/3の値）ため、1つ左に戻しました。②管理会計の「合計」行はグロースタジオを含んでいない（合計＝LKS＋MNY＋プロデ＋法人でぴったり一致）ため、この画面では<b>合計＝5サービスの和<\/b>で組み直しています。元シート側の修正が要るか確認したい箇所です。","tag":null},{"text":"<b>財務会計のグロースタジオは差分で算出<\/b>しています（全社 − 他4サービス）。各月で検算は合いますが、直接の行を確認したいところです。","tag":null},{"text":"<b>SHEmoney・PROデザイナーの成約KPIは仮の数字<\/b>です。売上のみ実データ。仮KPIは更新しておらず、各パネルに表示している時点のまま凍結しています。法人・グロースタジオは枠だけです。","tag":null},{"text":"<b>名古屋は「クローズ／休止＝該当なし」で確定<\/b>。集計にも警告表示にも含めません。拠点は梅田・福岡・横浜の3拠点のみで見ています。","tag":"決定済み"},{"text":"<b>実績の数え方がシートで2通りある<\/b>。拠点の{{data_through}}まで実績は KPIサマリ{{kyoten.act}}／日次集計の合算{{kyoten.daily_sum}}。オンラインも{{online.act}}／{{online.daily_sum}}。判定＝KPIサマリ、日次グラフ＝日次集計で分けています。","tag":null},{"text":"<b>拠点の月目標が3通りある<\/b>。単月確認用{{kyoten.target}}／拠点モニタリングの拠点別合計136件／日次集計シートの合計152件。この画面は<b>単月確認用を正<\/b>としています。","tag":null},{"text":"<b>残日数はカレンダーどおりに数えます<\/b>（{{data_through}} の翌日〜月末＝残{{remaining_days}}日）。シート側の「残日数」は使いません。","tag":"決定済み"},{"text":"<b>平均成約単価が未取得<\/b>のため「成約 {{lks.total_yomi_diff}} が売上でいくらか」を換算できていません。","tag":"Phase 0"},{"text":"<b>シフト充足・採用充足・インセンティブ<\/b>は元データが別系統のため未搭載。","tag":"Phase 1"}],"provisional":{"as_of":{"data_through":"2026-09-07","elapsed":7,"remaining":23,"days_in_month":30},"mny":{"lane":{"name":"SHEmoney","target":210,"yomi":195,"pace":197,"act":46,"plan":7.0,"need":7.1,"recent":6.6,"note":"参加率は計画どおりだが、参加→成約が0.8pt低下している想定。"},"daily":{"dates":["9/1","9/2","9/3","9/4","9/5","9/6","9/7"],"dow":["火","水","木","金","土","日","月"],"v":[7,6,8,5,7,6,7],"plan":7.0,"need":7.1,"color":"#8A6BA8","needColor":"var(--warn)"},"step":[{"n":"申込","p":1400,"y":1320,"a":310},{"n":"予約","p":1380,"y":1300,"a":300},{"n":"参加","p":620,"y":590,"a":138},{"n":"成約","p":210,"y":195,"a":46,"key":true},{"n":"参加率","p":44.9,"y":45.4,"a":46.0,"unit":"%","sep":true},{"n":"成約率","p":33.9,"y":33.1,"a":33.3,"unit":"%"},{"n":"CPA","p":12000,"y":12400,"a":11800,"unit":"¥","lowerBetter":true}],"cause":[{"kind":"① 押し下げ","lab":"成約数への影響","v":"▲15件","tone":"b","h":"参加 → 成約の転換率が想定を下回る","p":"参加は計画どおり集まる見込みだが、成約率が0.8pt低い前提。","dl":[["成約率","33.9% → 33.1%"],["参加","620 → 590"]]},{"kind":"② 押し下げ","lab":"成約数への影響","v":"▲5件","tone":"b","h":"申込が計画をわずかに下回る","p":"CPAが計画比3%高く、同じ予算で取れる申込が減る前提。","dl":[["申込","1,400 → 1,320"],["CPA","¥12,000 → ¥12,400"]]},{"kind":"③ 2つの予測が割れる理由","lab":"Aヨミとペースの差","v":"2件","tone":"w","h":"実績ペースとAヨミがほぼ一致","p":"日次実績が安定しているため、どちらの見方でも着地はほぼ同じ。","dl":[["Aヨミ","195件"],["ペース","197件"]]}]},"pro":{"lane":{"name":"PROデザイナー","target":96,"yomi":102,"pace":94,"act":22,"plan":3.2,"need":3.2,"recent":3.1,"note":"申込が計画超で参加も増える想定。転換率はわずかに低下。"},"daily":{"dates":["9/1","9/2","9/3","9/4","9/5","9/6","9/7"],"dow":["火","水","木","金","土","日","月"],"v":[3,4,2,3,4,3,3],"plan":3.2,"need":3.2,"color":"#C08A3E","needColor":"var(--warn)"},"step":[{"n":"申込","p":520,"y":560,"a":128},{"n":"予約","p":510,"y":550,"a":124},{"n":"参加","p":240,"y":258,"a":58},{"n":"成約","p":96,"y":102,"a":22,"key":true},{"n":"参加率","p":47.1,"y":46.9,"a":46.8,"unit":"%","sep":true},{"n":"成約率","p":40.0,"y":39.5,"a":37.9,"unit":"%"},{"n":"CPA","p":28000,"y":26500,"a":27200,"unit":"¥","lowerBetter":true}],"cause":[{"kind":"① 押し上げ","lab":"成約数への影響","v":"+10件","tone":"g","h":"申込・参加が計画を上回る","p":"CPAが計画より安く、同じ予算で申込が多く取れる前提。","dl":[["参加","240 → 258"],["CPA","¥28,000 → ¥26,500"]]},{"kind":"② 押し下げ","lab":"成約数への影響","v":"▲4件","tone":"b","h":"参加 → 成約の転換率がわずかに低下","p":"増えた参加のぶん、転換率が0.5pt下がる前提。","dl":[["成約率","40.0% → 39.5%"]]},{"kind":"③ 2つの予測が割れる理由","lab":"Aヨミとペースの差","v":"8件","tone":"w","h":"実績ペースはAヨミにやや届かない","p":"9/7までの実績成約率37.9%が、Aヨミ前提の39.5%を下回っているため。","dl":[["Aヨミ","102件"],["ペース","94件"]]}]}}}};
 
   var L = DATA.latest || {};
   var M = DATA.manual || {};
@@ -1167,7 +1411,8 @@ if (typeof module !== "undefined" && module.exports) { module.exports = ZENSHA_L
                              pace:(onLane.pace||0)+(kpLane.pace||0),
                              elapsed:ELAPSED, days:DAYS, remaining:REMAIN});
 
-  var SITE_NAMES = (KP.sites||[]).map(function(s){ return s.name; });
+  var esc = Z.esc;
+  var SITE_NAMES = (KP.sites||[]).map(function(s){ return esc(s.name); });
 
   function toneVar(t){ return t === "g" ? "var(--good)" : (t === "w" ? "var(--warn)" : "var(--bad)"); }
 
@@ -1175,11 +1420,13 @@ if (typeof module !== "undefined" && module.exports) { module.exports = ZENSHA_L
     { id:"on", name:"オンライン", dotVar:"var(--lane-on)", col:"col-on", lane:onLane, step:ON.step||[],
       daily:ON.daily||{v:[]}, cost:ON.cost, kind:"online", barId:"d-lks-on",
       barLabel:"日次成約数",
-      csub:(ON.daily&&ON.daily.note) || "系列は「成約数（決済日起点）」" },
+      csub:(ON.daily&&ON.daily.note) ? esc(ON.daily.note) : "系列は「成約数（決済日起点）」",
+      stepNote:(ON.step_note ? esc(ON.step_note) : "") },
     { id:"kp", name:"拠点", dotVar:"var(--lane-kp)", col:"col-kp", lane:kpLane, step:KP.step||[],
       daily:KP.daily||{v:[]}, cost:KP.cost, kind:"kyoten", barId:"d-lks-kp",
       barLabel:"日次成約数" + (SITE_NAMES.length ? "（" + SITE_NAMES.join("＋") + "）" : ""),
-      csub:(KP.daily&&KP.daily.note) || ("系列は 日次集計_（" + SITE_NAMES.join("・") + "）の最終成約") }
+      csub:(KP.daily&&KP.daily.note) ? esc(KP.daily.note) : ("系列は 日次集計_（" + SITE_NAMES.join("・") + "）の最終成約"),
+      stepNote:(KP.step_note ? esc(KP.step_note) : "") }
   ];
 
   /* ================= helpers（原本と同じ丸め） ================= */
@@ -1228,8 +1475,8 @@ if (typeof module !== "undefined" && module.exports) { module.exports = ZENSHA_L
 
     // 元データリンク
     setHTML("src", (L.sources||[]).map(function(s){
-      return '<a href="' + s.url + '" target="_blank" rel="noopener">'
-        + (s.label || ("元データ：" + s.name)) + '</a>';
+      return '<a href="' + esc(Z.safeUrl(s.url)) + '" target="_blank" rel="noopener">'
+        + "元データ：" + esc(s.label || s.name) + '</a>';
     }).join(""));
   }
 
@@ -1374,9 +1621,9 @@ if (typeof module !== "undefined" && module.exports) { module.exports = ZENSHA_L
            + ' font-family="IBM Plex Mono, monospace">—</text>';
       }
       s += '<text x="' + cx.toFixed(1) + '" y="' + (T + ih + 14) + '" text-anchor="middle" font-size="9"'
-         + ' fill="var(--ink3)" font-family="IBM Plex Mono, monospace">' + (dates[i] || "") + '</text>'
+         + ' fill="var(--ink3)" font-family="IBM Plex Mono, monospace">' + esc(dates[i] || "") + '</text>'
          + '<text x="' + cx.toFixed(1) + '" y="' + (T + ih + 25) + '" text-anchor="middle" font-size="8.5"'
-         + ' fill="' + (weekend ? "var(--ink2)" : "var(--ink3)") + '">' + (dow[i] || "") + '</text>';
+         + ' fill="' + (weekend ? "var(--ink2)" : "var(--ink3)") + '">' + esc(dow[i] || "") + '</text>';
     });
     s += '<line x1="' + Lp + '" y1="' + (T+ih) + '" x2="' + (W-R) + '" y2="' + (T+ih)
        + '" stroke="var(--line2)" stroke-width="1"/></svg>';
@@ -1384,15 +1631,16 @@ if (typeof module !== "undefined" && module.exports) { module.exports = ZENSHA_L
   }
 
   /* ================= 段階テーブル ================= */
-  function steps(id, rows){
+  function steps(id, rows, dayRatio){
     var node = el(id); if(!node) return;
+    var ratio = Z.isNum(dayRatio) ? dayRatio : DAY_RATIO;
     node.innerHTML = (rows||[]).map(function(r){
-      var c = Z.stepRow(r, DAY_RATIO);
+      var c = Z.stepRow(r, ratio);
       var pace = c.isRate
         ? '<td class="num muted">―</td>'
         : '<td class="num ' + c.gapTone + '">' + c.gapText + '</td>';
       return '<tr class="' + (r.key ? "key " : "") + (r.sep ? "sep" : "") + '">'
-        + '<td>' + r.n + '</td>'
+        + '<td>' + esc(r.n) + '</td>'
         + '<td class="num muted">' + c.p + '</td>'
         + '<td class="num">' + c.y + '</td>'
         + '<td class="num ' + c.diffTone + '">' + c.diffText + '</td>'
@@ -1461,16 +1709,20 @@ if (typeof module !== "undefined" && module.exports) { module.exports = ZENSHA_L
   }
 
   /* ================= 仮レーン（SHEmoney / PRO） ================= */
-  function provLaneCard(id, c){
+  function provLaneCard(id, c, pElapsed, pDays, pRemain, asOfLabel){
     var node = el(id); if(!node) return;
     var ry = c.yomi / c.target * 100, rp = c.pace / c.target * 100;
     var worst = Math.min(ry, rp);
     var v = verdict(worst);
-    var ptd = Z.planToDate(c.target, ELAPSED, DAYS);
+    var elapsed = Z.isNum(pElapsed) ? pElapsed : ELAPSED;
+    var days = Z.isNum(pDays) ? pDays : DAYS;
+    var remain = Z.isNum(pRemain) ? pRemain : REMAIN;
+    var ptd = Z.planToDate(c.target, elapsed, days);
     var behind = c.act - ptd;
     node.innerHTML =
       '<div class="lane ' + v.cls + '">'
       + '<div class="lane-head"><h2>' + c.name + '</h2>'
+      + (asOfLabel ? '<span class="badge2">' + asOfLabel + ' 時点の仮置き</span>' : '')
       + '<span class="badge">' + v.main + '</span>'
       + (v.sub ? '<span class="badge2">' + v.sub + '</span>' : '')
       + '<span class="target num">月目標 ' + c.target + '件</span></div>'
@@ -1490,9 +1742,10 @@ if (typeof module !== "undefined" && module.exports) { module.exports = ZENSHA_L
       +   '<div class="lf"><h4>日付の進みに対して</h4>'
       +     '<div class="statbig num ' + (behind >= 0 ? "g" : "b") + '">' + (behind >= 0 ? "+" : "▲")
       +       Math.abs(behind) + '<small>件 ' + (behind >= 0 ? "先行" : "遅れ") + '</small></div>'
-      +     '<div class="statsub num">日割計画 <b>' + ptd + '件</b> ／ 実績 <b>' + c.act + '件</b></div>'
+      +     '<div class="statsub num">日割計画 <b>' + ptd + '件</b> ／ 実績 <b>' + c.act + '件</b>'
+      +       (asOfLabel ? '（' + asOfLabel + ' 時点）' : '') + '</div>'
       +     '<div class="statsub">' + c.note + '</div></div>'
-      +   '<div class="lf"><h4>残' + REMAIN + '日で必要なペース</h4>'
+      +   '<div class="lf"><h4>残' + remain + '日で必要なペース</h4>'
       +     '<div class="statbig num ' + tone(worst) + '">' + c.need.toFixed(1) + '<small>件/日</small></div>'
       +     '<div class="statsub num">計画ペース <b>' + c.plan.toFixed(1) + '</b> ／ 直近実績 <b>' + c.recent.toFixed(1) + '</b></div>'
       +     '<div class="statsub">必要ペースは直近の <b class="num">' + (c.need / c.recent).toFixed(2) + '倍</b></div></div>'
@@ -1550,56 +1803,95 @@ if (typeof module !== "undefined" && module.exports) { module.exports = ZENSHA_L
   }
 
   /* ================= 手入力パート ================= */
+  // manual.json は信頼できる入力（<b> 等を効かせるため innerHTML）。ただし数値は
+  // ベタ書きせず {{トークン}} で latest から埋めるので、翌朝のデータとズレない。
+  var TOK = Z.tokenCtx({ latest:L, onLane:onLane, kpLane:kpLane, lksLane:lksLane,
+                         onStep:ON.step||[], kpStep:KP.step||[] });
+  function fill(t){ return Z.fillTokens(t, TOK); }
+
   function renderManual(){
     setHTML("decisions", (M.decisions||[]).map(function(d){
       return '<div class="card dec-item">'
-        + '<span class="when' + (d.urgent ? "" : " later") + '">' + d.due + '</span>'
-        + '<div><h3>' + d.title + '</h3><p>' + d.body + '</p></div>'
-        + '<span class="dec-own">' + d.owner + '</span></div>';
+        + '<span class="when' + (d.urgent ? "" : " later") + '">' + fill(d.due) + '</span>'
+        + '<div><h3>' + fill(d.title) + '</h3><p>' + fill(d.body) + '</p></div>'
+        + '<span class="dec-own">' + fill(d.owner) + '</span></div>';
     }).join(""));
 
     var fn = M.field_notes || {};
     var parts = [];
     var kySent = Z.siteCpaSentence(KP.sites, L.target_month);
     if(kySent || (fn.kyoten && fn.kyoten.suffix)){
-      parts.push('<b>' + ((fn.kyoten && fn.kyoten.label) || "拠点") + '</b>：'
-        + kySent + ((fn.kyoten && fn.kyoten.suffix) || ""));
+      parts.push('<b>' + esc((fn.kyoten && fn.kyoten.label) || "拠点") + '</b>：'
+        + kySent + fill((fn.kyoten && fn.kyoten.suffix) || ""));
     }
-    (fn.lines||[]).forEach(function(x){ parts.push('<b>' + x.label + '</b>：' + x.text); });
+    if(fn.kyoten && fn.kyoten.extra && fn.kyoten.extra.text){
+      parts.push('<b>' + esc(fn.kyoten.label || "拠点") + '</b>'
+        + (fn.kyoten.extra.as_of ? '<span class="muted">（' + esc(fn.kyoten.extra.as_of) + ' 時点）</span>' : "")
+        + '：' + fill(fn.kyoten.extra.text));
+    }
+    (fn.lines||[]).forEach(function(x){
+      parts.push('<b>' + esc(x.label) + '</b>'
+        + (x.as_of ? '<span class="muted">（' + esc(x.as_of) + ' 時点）</span>' : "")
+        + '：' + fill(x.text));
+    });
     setHTML("field-notes", parts.join("<br>\n"));
 
     setHTML("notes", (M.notes||[]).map(function(x){
-      return '<li>' + x.text + (x.tag ? ' <span class="pending">' + x.tag + '</span>' : '') + '</li>';
+      return '<li>' + fill(x.text) + (x.tag ? ' <span class="pending">' + esc(x.tag) + '</span>' : '') + '</li>';
     }).join(""));
 
-    setText("manual-updated", M.updated_at ? ("手入力部分の最終更新: " + M.updated_at) : "");
+    // 手入力の鮮度。basis_date から7日以上離れていたら警告の見た目にする。
+    var warn = Z.manualStaleWarning(M.updated_at, L.basis_date, 7);
+    var upd = el("manual-updated");
+    if(upd){
+      upd.innerHTML = (M.updated_at ? ("手入力部分の最終更新: " + esc(M.updated_at)) : "")
+        + (warn ? ' <span class="stale">' + esc(warn) + '</span>' : "");
+    }
 
+    renderProvisional();
+  }
+
+  /* ---- 仮KPI（SHEmoney / PRO）: manual の as_of で凍結して描画する ---- */
+  function renderProvisional(){
     var prov = M.provisional || {};
+    var A = prov.as_of || {};
+    var asOfLabel = A.data_through ? Z.md(A.data_through) : null;
+    var pDays = Z.isNum(A.days_in_month) ? A.days_in_month : DAYS;
+    var pElapsed = Z.isNum(A.elapsed) ? A.elapsed : ELAPSED;
+    var pRemain = Z.isNum(A.remaining) ? A.remaining : REMAIN;
+    var asOfNote = asOfLabel
+      ? "（" + (A.data_through || asOfLabel) + " 時点の仮置き。以降は更新していません）"
+      : "（仮置き。基準日は未設定）";
+
+    eachClass(".js-prov-note-mny", function(n){ n.textContent = asOfNote; });
+    eachClass(".js-prov-note-pro", function(n){ n.textContent = asOfNote; });
+
     ["mny","pro"].forEach(function(k){
       var pv = prov[k];
       if(!pv) return;
       if(pv.lane){
-        provLaneCard("lane-" + k, pv.lane);
+        provLaneCard("lane-" + k, pv.lane, pElapsed, pDays, pRemain, asOfLabel);
         setText("note-" + k + "-lane",
-          "月目標 " + n0(pv.lane.target) + "件 ／ 昨日まで実績 " + n0(pv.lane.act) + "件");
+          "月目標 " + n0(pv.lane.target) + "件 ／ " + (asOfLabel || "基準日未設定") + " まで実績 "
+          + n0(pv.lane.act) + "件" + asOfNote);
       }
       if(pv.daily){
-        var dts = (ON.daily && ON.daily.dates) || [];
-        var dws = (ON.daily && ON.daily.dow) || [];
-        var cfg = {
+        bars("d-" + k, {
           v: pv.daily.v, plan: pv.daily.plan, need: pv.daily.need,
           color: pv.daily.color, needColor: pv.daily.needColor || "var(--warn)",
-          dates: dts.slice(0, pv.daily.v.length), dow: dws.slice(0, pv.daily.v.length)
-        };
-        bars("d-" + k, cfg);
+          dates: pv.daily.dates || [], dow: pv.daily.dow || []
+        });
         setHTML("legend-" + k,
-          '<span><i class="lk-bar" style="background:' + pv.daily.color + '"></i>日次成約数</span>'
+          '<span><i class="lk-bar" style="background:' + esc(pv.daily.color) + '"></i>日次成約数</span>'
           + '<span class="muted"><i class="lk-line" style="border-top-style:solid"></i>計画 '
           + pv.daily.plan.toFixed(1) + '件/日</span>'
           + '<span class="w"><i class="lk-line"></i>必要 ' + pv.daily.need.toFixed(1) + '件/日</span>');
       }
-      if(pv.step) steps("step-" + k, pv.step);
+      if(pv.step) steps("step-" + k, pv.step, pElapsed / pDays);
       if(pv.cause) causes("cz-" + k, pv.cause);
+      eachClass(".js-prov-asof-" + k, function(n){
+        n.textContent = asOfLabel ? ("昨日 " + asOfLabel + " 時点（仮）") : "（仮）";
+      });
     });
   }
 
@@ -1635,6 +1927,7 @@ if (typeof module !== "undefined" && module.exports) { module.exports = ZENSHA_L
         color: cfg.dotVar, needColor: toneVar(cfg.lane.tone)
       });
       steps("step-lks-" + cfg.id, cfg.step);
+      setHTML("step-note-" + cfg.id, cfg.stepNote || "");
     });
 
     setHTML("cause-lks", LANES.map(function(cfg){

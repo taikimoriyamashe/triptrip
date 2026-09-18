@@ -135,6 +135,30 @@ def check_latest(d: dict, path: str) -> None:
     if not isinstance(d.get("sources"), list) or not d["sources"]:
         die("latest.json の sources が空です（%s）" % path)
 
+    # 契約の不変条件6（日次の長さ）とカレンダーの整合
+    for k in ("online", "kyoten"):
+        v = ((lks.get(k) or {}).get("daily") or {}).get("v") or []
+        if len(v) != d["elapsed_days"]:
+            die("latest.json の lks.%s.daily.v の長さ %d が elapsed_days %s と一致しません（%s）"
+                % (k, len(v), d["elapsed_days"], path))
+    if d["elapsed_days"] + d["remaining_days"] != d["days_in_month"]:
+        die("latest.json の elapsed_days %s ＋ remaining_days %s が days_in_month %s になりません（%s）"
+            % (d["elapsed_days"], d["remaining_days"], d["days_in_month"], path))
+
+
+MANUAL_STALE_DAYS = 7
+
+
+def manual_stale_days(updated_at, basis_date):
+    """basis_date − updated_at の日数。どちらか欠けたら None。"""
+    import datetime
+    try:
+        a = datetime.date.fromisoformat(str(basis_date))
+        b = datetime.date.fromisoformat(str(updated_at))
+    except (TypeError, ValueError):
+        return None
+    return (a - b).days
+
 
 def check_manual(m: dict, path: str) -> None:
     for k in ("decisions", "notes", "updated_at"):
@@ -178,8 +202,10 @@ def main(argv=None) -> int:
 
     if PH_LOGIC in html or PH_DATA in html:
         die("プレースホルダが残っています（注入内容に混ざっていないか確認してください）")
-    if html.count("<script") != 1 or html.count("</script>") != 1:
-        die("生成HTMLの <script> が1組ではありません（注入内容が script を閉じている可能性）")
+    # 注入内容が <script> を閉じていないか。エスケープ後は素の "</script" は1つだけのはず。
+    if html.count("</script") != 1:
+        die("生成HTMLに未エスケープの </script が %d 箇所あります（注入内容が script を閉じています）"
+            % html.count("</script"))
 
     out_dir = os.path.dirname(os.path.abspath(args.out))
     if out_dir and not os.path.isdir(out_dir):
@@ -187,8 +213,17 @@ def main(argv=None) -> int:
     with open(args.out, "w", encoding="utf-8") as f:
         f.write(html)
 
+    # 手入力の鮮度（非0終了はしない。画面にも同じ警告が出る）
+    stale = manual_stale_days(manual.get("updated_at"), latest.get("basis_date"))
+    if stale is not None and stale >= MANUAL_STALE_DAYS:
+        print("警告: manual.json は %d日前の手入力です（updated_at %s / basis_date %s）。"
+              "判断事項の前提を確認してください。"
+              % (stale, manual.get("updated_at"), latest.get("basis_date")), file=sys.stderr)
+
     print("  data     : %s" % args.data)
-    print("  manual   : %s（最終更新 %s）" % (args.manual, manual.get("updated_at")))
+    print("  manual   : %s（最終更新 %s%s）"
+          % (args.manual, manual.get("updated_at"),
+             "・%d日前" % stale if stale is not None and stale >= MANUAL_STALE_DAYS else ""))
     print("  基準日   : %s（実績 %s まで） / %s 経過%s日・残%s日"
           % (latest["basis_date"], latest["data_through"], latest["target_month"],
              latest["elapsed_days"], latest["remaining_days"]))
