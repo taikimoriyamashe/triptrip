@@ -239,10 +239,18 @@ latest.json の `Σ revenue[*][*].act` を全 12 系列で突合して `extract_
     meta の `title` の年月が `target_month` と違えば `extract_log` に警告（name は target_month 由来の値を使う）。
   - meta が無ければ既定値で埋め、`extract_log` に警告を残す。
     **現在の `zensha/raw/*.md` は ingest.py を経由せず配置されているため、この警告が 3 本出る**（想定どおり）。
-  - **marke は ID も月ごとに変わる**。meta から当月の ID を確認できない（meta 無し／title の年月が違う）ときは、
+  - **marke は ID も月ごとに変わる**。meta から当月の ID を確認できないときは、
     「『26年10月_…』というラベルで前月分のシートを開くリンクになっている可能性」を marke を名指しで警告し、
     その source に **`stale_id: true`** を立て、`label` に **「（リンク先は前月分の可能性）」** を付ける。
-    非0終了はしない（`test_extract.py` の A2 で実証）。
+    非0終了はしない（`test_extract.py` の A2 で `build_sources` を単体検証）。
+    判定は次のとおり（既定 ID が当月分なら誤警告しない）:
+
+    | meta | 既定 ID の月 vs target_month | stale_id |
+    |---|---|---|
+    | 無し | 同じ（例: 9月の raw を 9月に実行） | 立たない |
+    | 無し | 違う（例: 10月に実行） | **立つ** |
+    | あり・title の年月が target_month と違う | — | **立つ** |
+    | あり・title の年月が target_month と同じ | — | 立たない |
 
 ---
 
