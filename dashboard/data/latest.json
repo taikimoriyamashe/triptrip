@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-09-22T08:11:38+09:00",
-  "basis_date": "2026-09-22",
+  "generated_at": "2026-09-23T08:10:57+09:00",
+  "basis_date": "2026-09-23",
   "target_month": "2026-09",
   "queries": {
     "q1_official_monthly": {
@@ -109,80 +109,80 @@
         },
         {
           "year_month": "2026-09",
-          "lks": 341303118,
-          "mny": 4173772,
-          "pd": 9461044
+          "lks": 341929985,
+          "mny": 4202311,
+          "pd": 9515384
         },
         {
           "year_month": "2026-10",
-          "lks": 260252048,
-          "mny": 1482001,
+          "lks": 262388542,
+          "mny": 1506713,
           "pd": 8632031
         },
         {
           "year_month": "2026-11",
-          "lks": 209275504,
-          "mny": 629198,
+          "lks": 209692527,
+          "mny": 640899,
           "pd": 9077282
         },
         {
           "year_month": "2026-12",
-          "lks": 197352479,
-          "mny": 259547,
+          "lks": 197752872,
+          "mny": 271638,
           "pd": 8899159
         },
         {
           "year_month": "2027-01",
-          "lks": 179728956,
-          "mny": -71058,
+          "lks": 180136163,
+          "mny": -58967,
           "pd": 6794139
         },
         {
           "year_month": "2027-02",
-          "lks": 145951548,
-          "mny": -397932,
+          "lks": 146316632,
+          "mny": -387011,
           "pd": 4255192
         },
         {
           "year_month": "2027-03",
-          "lks": 143685676,
-          "mny": -682755,
+          "lks": 144100974,
+          "mny": -678401,
           "pd": 1794192
         },
         {
           "year_month": "2027-04",
-          "lks": 121654316,
-          "mny": -816448,
+          "lks": 122039804,
+          "mny": -827958,
           "pd": 165816
         },
         {
           "year_month": "2027-05",
-          "lks": 105671043,
-          "mny": -883116,
+          "lks": 106074230,
+          "mny": -895010,
           "pd": 0
         },
         {
           "year_month": "2027-06",
-          "lks": 80711878,
-          "mny": -802580,
+          "lks": 81107063,
+          "mny": -814090,
           "pd": 0
         },
         {
           "year_month": "2027-07",
-          "lks": 58744517,
-          "mny": -825436,
+          "lks": 59162277,
+          "mny": -837330,
           "pd": 0
         },
         {
           "year_month": "2027-08",
-          "lks": 32231797,
-          "mny": -663748,
+          "lks": 32643053,
+          "mny": -675642,
           "pd": 0
         },
         {
           "year_month": "2027-09",
-          "lks": 7911094,
-          "mny": -462608,
+          "lks": 8240567,
+          "mny": -470665,
           "pd": 0
         }
       ]
@@ -192,50 +192,50 @@
         {
           "plan_name": "スタンダードプラン",
           "payment_type": "一括",
-          "fa_per_day_cur": 476.047576717225,
+          "fa_per_day_cur": 477.1074815017813,
           "fa_per_day_prev": 466.856652360515,
-          "n_window": 661,
-          "window_days": 2927,
-          "n_lag": 119,
-          "lag_days": 2035
+          "n_window": 586,
+          "window_days": 2321,
+          "n_lag": 121,
+          "lag_days": 2027
         },
         {
           "plan_name": "ライトプラン",
           "payment_type": "一括",
-          "fa_per_day_cur": 326.2589699643168,
+          "fa_per_day_cur": 326.80183307873904,
           "fa_per_day_prev": 324.8771131498471,
-          "n_window": 370,
-          "window_days": 1652,
-          "n_lag": 23,
-          "lag_days": 434
+          "n_window": 323,
+          "window_days": 1275,
+          "n_lag": 24,
+          "lag_days": 443
         },
         {
           "plan_name": "レギュラープラン",
           "payment_type": "一括",
-          "fa_per_day_cur": 1091.1335273331947,
+          "fa_per_day_cur": 1111.4969421936303,
           "fa_per_day_prev": 1311.6041900822731,
-          "n_window": 42,
-          "window_days": 176,
-          "n_lag": 69,
-          "lag_days": 1469
+          "n_window": 39,
+          "window_days": 149,
+          "n_lag": 71,
+          "lag_days": 1486
         },
         {
           "plan_name": "レギュラープラン",
           "payment_type": "分割",
-          "fa_per_day_cur": 821.0062922516901,
+          "fa_per_day_cur": 830.7247479942399,
           "fa_per_day_prev": 1234.2264750521722,
-          "n_window": 104,
-          "window_days": 505,
-          "n_lag": 198,
-          "lag_days": 4098
+          "n_window": 95,
+          "window_days": 424,
+          "n_lag": 207,
+          "lag_days": 4179
         },
         {
           "plan_name": "卒業生プラン",
           "payment_type": "一括",
-          "fa_per_day_cur": 164.48701633705932,
+          "fa_per_day_cur": 164.50552063869543,
           "fa_per_day_prev": 156.88376913265307,
-          "n_window": 84,
-          "window_days": 366,
+          "n_window": 80,
+          "window_days": 334,
           "n_lag": 3,
           "lag_days": 53
         }
@@ -245,13 +245,13 @@
       "rows": [
         {
           "service_key": "money",
-          "fa_per_day_cur": 708.0484557055669,
+          "fa_per_day_cur": 707.1970923813029,
           "fa_per_day_prev": 772.303997312731,
-          "n_window": 27,
-          "window_days": 114,
-          "n_lag": 1,
-          "lag_days": 24,
-          "n_active_cur": 256,
+          "n_window": 25,
+          "window_days": 97,
+          "n_lag": 2,
+          "lag_days": 33,
+          "n_active_cur": 257,
           "n_active_prev": 260
         },
         {
@@ -271,18 +271,18 @@
       "rows": [
         {
           "channel": "オンライン",
-          "n_users": 33414,
-          "booked_fa": 310663749
+          "n_users": 33425,
+          "booked_fa": 311210505
         },
         {
           "channel": "拠点",
-          "n_users": 3834,
-          "booked_fa": 23640185
+          "n_users": 3842,
+          "booked_fa": 23692976
         },
         {
           "channel": "分類不能",
-          "n_users": 11298,
-          "booked_fa": 6955815
+          "n_users": 11297,
+          "booked_fa": 6983135
         },
         {
           "channel": "成約記録なし",
@@ -714,7 +714,7 @@
           "dom": 5,
           "n_all": 32,
           "n_valid": 28,
-          "booked_fa_valid": 542550
+          "booked_fa_valid": 548906
         },
         {
           "channel": "オンライン",
@@ -727,7 +727,7 @@
           "channel": "オンライン",
           "dom": 7,
           "n_all": 26,
-          "n_valid": 22,
+          "n_valid": 21,
           "booked_fa_valid": 407985
         },
         {
@@ -748,7 +748,7 @@
           "channel": "オンライン",
           "dom": 10,
           "n_all": 19,
-          "n_valid": 15,
+          "n_valid": 14,
           "booked_fa_valid": 221347
         },
         {
@@ -763,28 +763,28 @@
           "dom": 12,
           "n_all": 54,
           "n_valid": 46,
-          "booked_fa_valid": 422802
+          "booked_fa_valid": 429952
         },
         {
           "channel": "オンライン",
           "dom": 13,
           "n_all": 44,
-          "n_valid": 38,
-          "booked_fa_valid": 408338
+          "n_valid": 36,
+          "booked_fa_valid": 378692
         },
         {
           "channel": "オンライン",
           "dom": 14,
           "n_all": 36,
-          "n_valid": 33,
+          "n_valid": 32,
           "booked_fa_valid": 301871
         },
         {
           "channel": "オンライン",
           "dom": 15,
           "n_all": 38,
-          "n_valid": 35,
-          "booked_fa_valid": 255868
+          "n_valid": 33,
+          "booked_fa_valid": 243610
         },
         {
           "channel": "オンライン",
@@ -797,36 +797,50 @@
           "channel": "オンライン",
           "dom": 17,
           "n_all": 34,
-          "n_valid": 33,
-          "booked_fa_valid": 226578
+          "n_valid": 30,
+          "booked_fa_valid": 201946
         },
         {
           "channel": "オンライン",
           "dom": 18,
           "n_all": 35,
-          "n_valid": 35,
-          "booked_fa_valid": 237328
+          "n_valid": 34,
+          "booked_fa_valid": 235301
         },
         {
           "channel": "オンライン",
           "dom": 19,
           "n_all": 32,
-          "n_valid": 32,
-          "booked_fa_valid": 213958
+          "n_valid": 30,
+          "booked_fa_valid": 198194
         },
         {
           "channel": "オンライン",
           "dom": 20,
           "n_all": 32,
-          "n_valid": 32,
-          "booked_fa_valid": 131276
+          "n_valid": 30,
+          "booked_fa_valid": 137632
         },
         {
           "channel": "オンライン",
           "dom": 21,
           "n_all": 32,
           "n_valid": 32,
-          "booked_fa_valid": 154795
+          "booked_fa_valid": 169096
+        },
+        {
+          "channel": "オンライン",
+          "dom": 22,
+          "n_all": 24,
+          "n_valid": 24,
+          "booked_fa_valid": 87701
+        },
+        {
+          "channel": "オンライン",
+          "dom": 23,
+          "n_all": 1,
+          "n_valid": 1,
+          "booked_fa_valid": 811
         },
         {
           "channel": "分類不能",
@@ -1008,7 +1022,14 @@
           "dom": 21,
           "n_all": 6,
           "n_valid": 6,
-          "booked_fa_valid": 21157
+          "booked_fa_valid": 27513
+        },
+        {
+          "channel": "拠点",
+          "dom": 22,
+          "n_all": 8,
+          "n_valid": 8,
+          "booked_fa_valid": 15844
         }
       ]
     },
@@ -1020,7 +1041,7 @@
           "plan_sutara": 153.0,
           "src_regular": "実績",
           "src_sutara": "実績",
-          "as_of": "2026-09-22"
+          "as_of": "2026-09-23"
         },
         {
           "month": "2026-09",
@@ -1028,7 +1049,7 @@
           "plan_sutara": 212.0,
           "src_regular": "ヨミ",
           "src_sutara": "ヨミ",
-          "as_of": "2026-09-22"
+          "as_of": "2026-09-23"
         },
         {
           "month": "2026-10",
@@ -1036,7 +1057,7 @@
           "plan_sutara": 205.0,
           "src_regular": "ヨミ",
           "src_sutara": "ヨミ",
-          "as_of": "2026-09-22"
+          "as_of": "2026-09-23"
         }
       ]
     },
@@ -1044,38 +1065,38 @@
       "rows": [
         {
           "month": "2026-09",
-          "yomi_total": 334898374.62614954,
-          "as_of": "2026-09-22"
+          "yomi_total": 334902317.93853164,
+          "as_of": "2026-09-23"
         },
         {
           "month": "2026-10",
-          "yomi_total": 349498581.41882104,
-          "as_of": "2026-09-22"
+          "yomi_total": 349506434.6583922,
+          "as_of": "2026-09-23"
         },
         {
           "month": "2026-11",
-          "yomi_total": 346749148.73294985,
-          "as_of": "2026-09-22"
+          "yomi_total": 346760584.54141486,
+          "as_of": "2026-09-23"
         },
         {
           "month": "2026-12",
-          "yomi_total": 366738663.26652646,
-          "as_of": "2026-09-22"
+          "yomi_total": 366753226.6832038,
+          "as_of": "2026-09-23"
         },
         {
           "month": "2027-01",
-          "yomi_total": 372837305.8433223,
-          "as_of": "2026-09-22"
+          "yomi_total": 372854201.92806536,
+          "as_of": "2026-09-23"
         },
         {
           "month": "2027-02",
-          "yomi_total": 346781710.45172006,
-          "as_of": "2026-09-22"
+          "yomi_total": 346799047.634665,
+          "as_of": "2026-09-23"
         },
         {
           "month": "2027-03",
-          "yomi_total": 392969310.8237523,
-          "as_of": "2026-09-22"
+          "yomi_total": 392991072.67947656,
+          "as_of": "2026-09-23"
         }
       ]
     }
@@ -1104,11 +1125,11 @@
   "meta": {
     "bytes_processed": {
       "q1_official_monthly": 3267,
-      "q2_lks_pending": 962518048,
-      "q3_mny_pd_pending": 1447747677,
-      "q4_lks_channel_booked": 883952938,
-      "q5_conv_profile": 883952938,
-      "q6_conv_actuals": 883952938,
+      "q2_lks_pending": 962632082,
+      "q3_mny_pd_pending": 1447926545,
+      "q4_lks_channel_booked": 884024580,
+      "q5_conv_profile": 884024580,
+      "q6_conv_actuals": 884024580,
       "q7_conv_plan": 16820,
       "q8_yomi": 2744
     }
